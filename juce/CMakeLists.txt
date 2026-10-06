@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(HachiShifterNext VERSION 0.2.0 LANGUAGES C CXX)
+# Public version changes require an explicit user request; small updates use docs/updates.md.
+project(HachiShifterNext VERSION 0.2.3 LANGUAGES C CXX)
+
+option(HACHI_ENABLE_ASAN "Enable AddressSanitizer for native crash diagnosis" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,8 +15,108 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
     GIT_TAG 8.0.8
     GIT_SHALLOW TRUE
+    # Populate first; apply the native helper-tool compatibility patch before
+    # adding JUCE. This directory intentionally does not contain CMakeLists.txt.
+    SOURCE_SUBDIR hachi-deferred-configure
 )
 FetchContent_MakeAvailable(JUCE)
+# JUCE's helper-tool bootstrap starts a second CMake configure. On native
+# Windows that child must receive this same Clang-CL/xwin toolchain; otherwise
+# it silently picks MSYS2 cc.exe/c++.exe and JUCE rejects it as MinGW.
+if(WIN32 AND CMAKE_TOOLCHAIN_FILE)
+    get_filename_component(HACHI_TOOLCHAIN_FILE_ABS
+        "${CMAKE_TOOLCHAIN_FILE}" ABSOLUTE)
+    set(HACHI_JUCEAIDE_FILE
+        "${juce_SOURCE_DIR}/extras/Build/juceaide/CMakeLists.txt")
+    file(READ "${HACHI_JUCEAIDE_FILE}" HACHI_JUCEAIDE_SOURCE)
+    if(NOT HACHI_JUCEAIDE_SOURCE MATCHES "HachiShifter passes the native toolchain")
+        string(REPLACE
+            "\"-DCMAKE_BUILD_TYPE=Custom\""
+            "\"-DCMAKE_BUILD_TYPE=Custom\"\n            \"-DCMAKE_TOOLCHAIN_FILE=${HACHI_TOOLCHAIN_FILE_ABS}\" # HachiShifter passes the native toolchain"
+            HACHI_JUCEAIDE_SOURCE "${HACHI_JUCEAIDE_SOURCE}")
+        file(WRITE "${HACHI_JUCEAIDE_FILE}" "${HACHI_JUCEAIDE_SOURCE}")
+    endif()
+endif()
+# Clang-CL 22 no longer accepts JUCE 8.0.8's pointer-to-array to
+# initializer_list conversion in AudioPluginInstance. Use JUCE's existing
+# array conversion helper explicitly; this is ABI-neutral and also works with
+# MSVC and older Clang-CL releases.
+if(WIN32)
+    set(HACHI_AUDIO_PLUGIN_FILE
+        "${juce_SOURCE_DIR}/modules/juce_audio_processors/processors/juce_AudioPluginInstance.h")
+    file(READ "${HACHI_AUDIO_PLUGIN_FILE}" HACHI_AUDIO_PLUGIN_SOURCE)
+    if(NOT HACHI_AUDIO_PLUGIN_SOURCE MATCHES "HachiShifter array-layout compatibility")
+        string(REPLACE
+            "AudioPluginInstance (const short channelLayoutList[numLayouts][2]) : AudioProcessor (channelLayoutList) {}"
+            "AudioPluginInstance (const short (&channelLayoutList)[numLayouts][2]) : AudioProcessor (channelLayoutList) {} // HachiShifter array-layout compatibility"
+            HACHI_AUDIO_PLUGIN_SOURCE "${HACHI_AUDIO_PLUGIN_SOURCE}")
+        file(WRITE "${HACHI_AUDIO_PLUGIN_FILE}" "${HACHI_AUDIO_PLUGIN_SOURCE}")
+    endif()
+    set(HACHI_AUDIO_PROCESSOR_FILE
+        "${juce_SOURCE_DIR}/modules/juce_audio_processors/processors/juce_AudioProcessor.h")
+    file(READ "${HACHI_AUDIO_PROCESSOR_FILE}" HACHI_AUDIO_PROCESSOR_SOURCE)
+    if(NOT HACHI_AUDIO_PROCESSOR_SOURCE MATCHES "HachiShifter array-layout constructor")
+        string(REPLACE
+            "    AudioProcessor (const BusesProperties& ioLayouts);"
+            "    AudioProcessor (const BusesProperties& ioLayouts);\n    // HachiShifter array-layout constructor\n    template <size_t numLayouts>\n    AudioProcessor (const short (&layouts)[numLayouts][2])\n        : AudioProcessor (busesPropertiesFromLayoutArray (layoutListToArray (layouts))) {}"
+            HACHI_AUDIO_PROCESSOR_SOURCE "${HACHI_AUDIO_PROCESSOR_SOURCE}")
+        file(WRITE "${HACHI_AUDIO_PROCESSOR_FILE}" "${HACHI_AUDIO_PROCESSOR_SOURCE}")
+    endif()
+endif()
+add_subdirectory("${juce_SOURCE_DIR}" "${juce_BINARY_DIR}" EXCLUDE_FROM_ALL)
+
+# JUCE 8.0.8 creates Windows peers with Direct2D before application code can
+# choose an engine. Start with software rendering to avoid driver-dependent
+# hangs during DocumentWindow construction (reproduced with Wine/WSLg).
+if(WIN32)
+    set(HACHI_WINDOWING_FILE "${juce_SOURCE_DIR}/modules/juce_gui_basics/native/juce_Windowing_windows.cpp")
+    file(READ "${HACHI_WINDOWING_FILE}" HACHI_WINDOWING_SOURCE)
+    string(REPLACE
+        "new HWNDComponentPeer { *this, styleFlags, (HWND) parentHWND, false, 1 }"
+        "new HWNDComponentPeer { *this, styleFlags, (HWND) parentHWND, false, 0 }"
+        HACHI_WINDOWING_SOURCE "${HACHI_WINDOWING_SOURCE}")
+    if(NOT HACHI_WINDOWING_SOURCE MATCHES "parentHWND, false, 0")
+        message(FATAL_ERROR "JUCE Windows software-peer patch no longer matches")
+    endif()
+    # Restore the original site in caches patched by older releases, then
+    # subscribe only Direct2D peers. Software fallback must not wait on DXGI.
+    string(REPLACE
+        "(void) currentMonitor; // HachiShifter software rendering: no DXGI wait thread"
+        "VBlankDispatcher::getInstance()->updateDisplay (*this, currentMonitor);"
+        HACHI_WINDOWING_SOURCE "${HACHI_WINDOWING_SOURCE}")
+    if(NOT HACHI_WINDOWING_SOURCE MATCHES "HachiShifter selective VBlank")
+        string(REPLACE
+            "VBlankDispatcher::getInstance()->updateDisplay (*this, currentMonitor);"
+            "if (renderContext != nullptr && getCurrentRenderingEngine() != 0) VBlankDispatcher::getInstance()->updateDisplay (*this, currentMonitor); // HachiShifter selective VBlank"
+            HACHI_WINDOWING_SOURCE "${HACHI_WINDOWING_SOURCE}")
+    endif()
+    if(NOT HACHI_WINDOWING_SOURCE MATCHES "HachiShifter engine refresh")
+        string(REPLACE
+            "renderContext = contextDescriptors[e].construct (*this);"
+            "renderContext = contextDescriptors[e].construct (*this);\n        if (e == 0) { if (auto* dispatcher = VBlankDispatcher::getInstanceWithoutCreating()) dispatcher->removeListener (*this); }\n        else updateCurrentMonitorAndRefreshVBlankDispatcher (ForceRefreshDispatcher::yes); // HachiShifter engine refresh"
+            HACHI_WINDOWING_SOURCE "${HACHI_WINDOWING_SOURCE}")
+    endif()
+    if(NOT HACHI_WINDOWING_SOURCE MATCHES "HachiShifter selective VBlank" OR
+       NOT HACHI_WINDOWING_SOURCE MATCHES "HachiShifter engine refresh")
+        message(FATAL_ERROR "JUCE rendering engine scheduling patch no longer matches")
+    endif()
+    # The peer-level onVBlank used to flush GDI's deferred repaint queue.
+    # Without DXGI notifications, enqueue WM_PAINT directly. Windows still
+    # coalesces invalid rectangles; do not synchronously paint from callbacks.
+    string(REPLACE
+        "deferredRepaints.add (area);"
+        "auto invalidRect = D2DUtilities::toRECT (area); InvalidateRect (peer.getHWND(), &invalidRect, FALSE); // HachiShifter WM_PAINT scheduling"
+        HACHI_WINDOWING_SOURCE "${HACHI_WINDOWING_SOURCE}")
+    if(NOT HACHI_WINDOWING_SOURCE MATCHES "HachiShifter WM_PAINT scheduling")
+        message(FATAL_ERROR "JUCE GDI repaint patch no longer matches")
+    endif()
+    file(WRITE "${HACHI_WINDOWING_FILE}" "${HACHI_WINDOWING_SOURCE}")
+    set(HACHI_VBLANK_FILE "${juce_SOURCE_DIR}/modules/juce_gui_basics/native/juce_VBlank_windows.cpp")
+    file(READ "${HACHI_VBLANK_FILE}" HACHI_VBLANK_SOURCE)
+    string(REPLACE "for (;;)" "while (! threadShouldExit())"
+        HACHI_VBLANK_SOURCE "${HACHI_VBLANK_SOURCE}")
+    file(WRITE "${HACHI_VBLANK_FILE}" "${HACHI_VBLANK_SOURCE}")
+endif()
 
 # GAME, FCPE and NSF-HiFiGAN use the official ONNX Runtime C++ API.  The runtime is part of
 # the application package, while the considerably larger model files remain in
@@ -87,14 +190,41 @@ juce_add_gui_app(HachiShifterNext
     NEEDS_WEB_BROWSER FALSE
 )
 
+# This JUCE revision tracks the icon, but omits Info.txt from the generated
+# Windows resource dependencies. Keep Explorer's EXE version in sync on updates.
+if(WIN32)
+    get_target_property(HACHI_JUCE_CODE HachiShifterNext JUCE_GENERATED_SOURCES_DIRECTORY)
+    get_target_property(HACHI_JUCE_INFO HachiShifterNext JUCE_INFO_FILE)
+    add_custom_command(OUTPUT "${HACHI_JUCE_CODE}/HachiShifterNext_resources.rc"
+        APPEND DEPENDS "${HACHI_JUCE_INFO}")
+endif()
+
+juce_add_binary_data(NoteDanceAssets
+    NAMESPACE NoteDanceData
+    HEADER_NAME NoteDanceData.h
+    SOURCES
+        resources/note-dance/danceF1.png
+        resources/note-dance/danceEight.png
+        resources/note-dance/danceF2.png
+        resources/note-dance/danceQ.png
+)
+target_link_libraries(HachiShifterNext PRIVATE NoteDanceAssets)
+
 target_sources(HachiShifterNext PRIVATE
     src/Main.cpp
     src/MainComponent.cpp
+    src/Hamood.cpp
+    src/MainComponentHamood.cpp
+    src/MainComponentMcp.cpp
+    src/backend/LiveMcpBridge.cpp
+    src/MainComponentDiffSinger.cpp
     src/MainComponent.h
     src/AudioEngine.cpp
     src/AudioEngine.h
     src/ProjectModel.cpp
     src/ProjectModel.h
+    src/Pinyin.cpp
+    src/Pinyin.h
     src/PianoRollComponent.cpp
     src/PianoRollComponent.h
     src/TrackListComponent.cpp
@@ -105,9 +235,14 @@ target_sources(HachiShifterNext PRIVATE
     src/Theme.h
     src/I18n.cpp
     src/I18n.h
+    src/Pinyin.cpp
+    src/Pinyin.h
+    src/PinyinTable.inc
     src/SettingsComponent.cpp
     src/SettingsComponent.h
     src/SampleSettings.cpp
+    src/VoicebankSettingsComponent.cpp
+    src/OtoWaveformEditorComponent.cpp
     src/SampleSettings.h
     src/AssetManagerComponent.cpp
     src/AssetManagerComponent.h
@@ -116,19 +251,28 @@ target_sources(HachiShifterNext PRIVATE
     src/backend/Mld3Renderer.cpp
     src/backend/Mld3Renderer.h
     src/backend/MelodyneImporter.cpp
+    src/backend/MelodyneProvider.cpp
+    src/backend/UstImporter.cpp
     src/backend/MelodyneImporter.h
+    src/backend/MelodyneProvider.h
     src/backend/McpServer.cpp
     src/backend/McpServer.h
     src/backend/RenderService.cpp
     src/backend/RenderService.h
+    src/backend/UtauRenderer.cpp
+    src/backend/DiffSingerRenderer.cpp
+    src/backend/DiffSingerRenderer.h
+    src/backend/UtauRenderer.h
+    src/backend/UtauOtoOverride.h
+    src/backend/AmplitudeEnvelopeCurve.h
     src/backend/WorldRenderer.cpp
     src/backend/WorldRenderer.h
+    src/backend/AudioFileReader.cpp
+    src/backend/AudioFileReader.h
     src/backend/NativeAnalyzer.cpp
     src/backend/NativeAnalyzer.h
     src/backend/AnalysisService.cpp
     src/backend/AnalysisService.h
-    src/backend/AudioFileReader.cpp
-    src/backend/AudioFileReader.h
     src/backend/GameAnalyzer.cpp
     src/backend/GameAnalyzer.h
     src/backend/FcpeAnalyzer.cpp
@@ -146,7 +290,10 @@ target_sources(HachiShifterNext PRIVATE
 # legacy v5 COMCTL32 first and aborts at startup with "ordinal 345 not found".
 # Keep the manifest as an explicit PE resource because the cross linker runs
 # with /manifest:no and therefore does not invoke mt.exe implicitly.
-if(WIN32)
+# The explicit manifest resource is only required by the xwin cross build.
+# Native Visual Studio builds already receive JUCE's manifest; adding this
+# resource there produces a duplicate MANIFEST:1 and fails with CVT1100.
+if(WIN32 AND CMAKE_TOOLCHAIN_FILE MATCHES "windows-msvc-xwin\\.cmake$")
     target_sources(HachiShifterNext PRIVATE
         resources/windows/HachiShifterNext.rc
         resources/windows/HachiShifterNext.manifest
@@ -161,11 +308,21 @@ target_compile_definitions(HachiShifterNext PRIVATE
     JUCE_USE_CURL=0
     JUCE_WEB_BROWSER=0
     JUCE_MODAL_LOOPS_PERMITTED=0
+    JUCE_PLUGINHOST_VST3=1
 )
 
 target_include_directories(HachiShifterNext PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/signalsmith-stretch"
 )
+
+if(MSVC)
+    # The combined diagnostic entry point contains both upstream and local
+    # smoke fixtures. Reserve sufficient main-thread stack for its MSVC frame.
+    target_link_options(HachiShifterNext PRIVATE /STACK:8388608)
+    # Avoid relying on the newer constexpr mutex ABI during startup when an
+    # older compatible VC runtime (including Wine's implementation) is loaded.
+    target_compile_definitions(HachiShifterNext PRIVATE _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
+endif()
 
 target_link_libraries(HachiShifterNext PRIVATE
     juce::juce_audio_formats
@@ -173,8 +330,8 @@ target_link_libraries(HachiShifterNext PRIVATE
     juce::juce_dsp
     juce::juce_gui_extra
     juce::juce_data_structures
+    juce::juce_cryptography
     juce::juce_recommended_config_flags
-    juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
     world::core
     llsm
@@ -210,6 +367,25 @@ else()
     target_compile_definitions(HachiShifterNext PRIVATE HACHI_HAS_ONNX_ANALYSIS=0 HACHI_HAS_ORT_DML=0)
 endif()
 
+add_custom_command(TARGET HachiShifterNext POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:HachiShifterNext>/engines/diffsinger"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/bridge.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/expressions.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/variance_retake.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/compatibility.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/runtime.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/inference.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/timing.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/pronunciation.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/english_g2p.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/requirements.txt"
+        "$<TARGET_FILE_DIR:HachiShifterNext>/engines/diffsinger")
+add_custom_command(TARGET HachiShifterNext POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/pronunciation-data"
+        "$<TARGET_FILE_DIR:HachiShifterNext>/engines/diffsinger/pronunciation-data")
+
 # UTAU voicebanks commonly store oto.ini in CP932/Shift-JIS.  iconv is part of
 # libc on Linux and a system library on macOS; Windows uses MultiByteToWideChar.
 if(NOT WIN32)
@@ -222,6 +398,15 @@ endif()
 
 if(MSVC)
     target_compile_options(HachiShifterNext PRIVATE /utf-8 /W4)
+    if(HACHI_ENABLE_ASAN)
+        target_compile_options(HachiShifterNext PRIVATE /fsanitize=address /Zi /GL-)
+        target_link_options(HachiShifterNext PRIVATE /INCREMENTAL:NO)
+    endif()
+    # Keep a linker address map beside native builds.  It is small, is not
+    # packaged with the application, and makes field crash addresses from
+    # Windows Event Viewer actionable even for optimised Release binaries.
+    target_link_options(HachiShifterNext PRIVATE
+        "/MAP:${CMAKE_BINARY_DIR}/HachiShifterNext-$<CONFIG>.map")
 else()
     target_compile_options(HachiShifterNext PRIVATE -Wall -Wextra -Wpedantic)
 endif()

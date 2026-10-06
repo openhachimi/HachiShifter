@@ -15,14 +15,26 @@ juce::Colour Palette::grid        { 0xff373737 };
 juce::Colour Palette::beatGrid    { 0xff4a4a4a };
 juce::Colour Palette::accent      { 0xff7f69ca };
 juce::Colour Palette::accentLight { 0xffcbcbfa };
-juce::Colour Palette::noteFill    { 0xfff4c000 };
-juce::Colour Palette::noteLight   { 0xffcbcbfa };
-juce::Colour Palette::noteEdge    { 0xff7f69ca };
+// Shared UTAU/Melodyne editor palette.  Yellow is reserved for warnings and
+// exceptional handles; ordinary notes use the blue-green treatment from the
+// migrated UTAU editor.
+juce::Colour Palette::noteFill    { 0xff269b9b };
+juce::Colour Palette::noteLight   { 0xff8be0d5 };
+juce::Colour Palette::noteEdge    { 0xff4fc3b5 };
 juce::Colour Palette::pitchLine   { 0xfff4f4f4 };
 juce::Colour Palette::playhead    { 0xfff05a5a };
 juce::Colour Palette::text        { 0xffd0d0d0 };
 juce::Colour Palette::textMuted   { 0xff909090 };
 juce::Colour Palette::scrollThumb { 0xff555555 };
+
+juce::Colour Palette::trackColour(std::size_t index)
+{
+    static const juce::Colour colours[] {
+        juce::Colour(0xff7f69ca), juce::Colour(0xffcbcbfa), juce::Colour(0xfff4c000),
+        juce::Colour(0xff9b8bdd), juce::Colour(0xffdedcff), juce::Colour(0xffffd94f)
+    };
+    return colours[index % 6];
+}
 
 void Palette::applyTheme(const juce::String& theme, juce::Colour accentColour,
                          juce::Colour accentLightColour, juce::Colour noteColour)
@@ -45,9 +57,12 @@ void Palette::applyTheme(const juce::String& theme, juce::Colour accentColour,
     pitchLine = light ? juce::Colour(0xff242424) : juce::Colour(0xfff4f4f4);
     accent = accentColour;
     accentLight = accentLightColour;
-    noteFill = noteColour;
-    noteLight = accentLightColour;
-    noteEdge = accentColour;
+    // Keep note colours tied to the shared editor style.  Older preference
+    // files may contain the retired yellow note colour, so do not reapply it.
+    juce::ignoreUnused(noteColour);
+    noteFill = light ? juce::Colour(0xff43aaa0) : juce::Colour(0xff269b9b);
+    noteLight = light ? juce::Colour(0xff16736e) : juce::Colour(0xff8be0d5);
+    noteEdge = light ? juce::Colour(0xff2c817b) : juce::Colour(0xff4fc3b5);
 }
 
 HachiLookAndFeel::HachiLookAndFeel()
@@ -60,13 +75,30 @@ void HachiLookAndFeel::refreshColours()
     setColour(juce::ResizableWindow::backgroundColourId, Palette::background);
     setColour(juce::Label::textColourId, Palette::text);
     setColour(juce::TextButton::textColourOffId, Palette::text);
+    // Text drawn on a toggled-on (accent) button must contrast with the accent,
+    // not follow the panel colour: in light mode panel is near-white and washed
+    // out against a light accent.  contrasting() picks black or white per accent.
+    setColour(juce::TextButton::textColourOnId, Palette::accent.contrasting(0.85f));
     setColour(juce::ComboBox::backgroundColourId, Palette::base);
     setColour(juce::ComboBox::textColourId, Palette::text);
     setColour(juce::ComboBox::outlineColourId, Palette::border);
+    setColour(juce::ComboBox::arrowColourId, Palette::text);
+    // Text editors were left on the JUCE default (white field, black text),
+    // which reads as an out-of-theme box in either mode.  Tie them to the
+    // Palette so they follow dark/light like everything else.
+    setColour(juce::TextEditor::backgroundColourId, Palette::base);
+    setColour(juce::TextEditor::textColourId, Palette::text);
+    setColour(juce::TextEditor::highlightedTextColourId, Palette::text);
+    setColour(juce::TextEditor::highlightColourId, Palette::accent.withAlpha(0.35f));
+    setColour(juce::TextEditor::outlineColourId, Palette::border);
+    setColour(juce::TextEditor::focusedOutlineColourId, Palette::accent);
+    setColour(juce::CaretComponent::caretColourId, Palette::text);
     setColour(juce::PopupMenu::backgroundColourId, Palette::panelRaised);
     setColour(juce::PopupMenu::textColourId, Palette::text);
     setColour(juce::PopupMenu::highlightedBackgroundColourId, Palette::accent);
-    setColour(juce::PopupMenu::highlightedTextColourId, Palette::panel);
+    // Highlighted menu text must contrast with the accent highlight, not the
+    // panel (near-white in light mode → invisible on a light accent).
+    setColour(juce::PopupMenu::highlightedTextColourId, Palette::accent.contrasting(0.85f));
     setColour(juce::ScrollBar::backgroundColourId, Palette::base);
     setColour(juce::ScrollBar::trackColourId, Palette::base);
     setColour(juce::ScrollBar::thumbColourId, Palette::scrollThumb);
@@ -86,6 +118,18 @@ void HachiLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& but
 void HachiLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button, bool, bool)
 {
     const auto id = button.getComponentID();
+    if (button.getButtonText() == "+" || button.getButtonText() == "-")
+    {
+        // Draw zoom symbols geometrically so narrow buttons never ellipsize.
+        const auto bounds = button.getLocalBounds().toFloat();
+        const auto centre = bounds.getCentre();
+        const auto radius = juce::jmin(6.0f, juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.25f);
+        g.setColour(Palette::text.withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.4f));
+        g.drawLine(centre.x - radius, centre.y, centre.x + radius, centre.y, 1.8f);
+        if (button.getButtonText() == "+")
+            g.drawLine(centre.x, centre.y - radius, centre.x, centre.y + radius, 1.8f);
+        return;
+    }
     if (!id.startsWith("icon."))
     {
         LookAndFeel_V4::drawButtonText(g, button, false, false);
@@ -93,14 +137,42 @@ void HachiLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& butto
     }
 
     auto bounds = button.getLocalBounds().toFloat().reduced(6.0f);
-    g.setColour(button.getToggleState() ? Palette::panel : Palette::text);
-    juce::Path path;
-    const auto svgIcon = [&bounds](const juce::String& data)
+    // Original SVG artwork on a shared 24px grid. Cache parsing; tint a copy
+    // so active/disabled buttons cannot change another button's cached image.
+    static const auto toolIcons = []
     {
-        auto p = juce::Drawable::parseSVGPath(data);
-        p.scaleToFit(bounds.getX(), bounds.getY(), bounds.getWidth(), bounds.getHeight(), true);
-        return p;
-    };
+        std::array<std::unique_ptr<juce::Drawable>, 6> icons;
+        const std::array<const char*, 6> shapes {{
+            "<path d='M5 3 L5 19 L9 15 L13 22 L16 20 L12 13 L19 13 Z'/>",
+            "<path d='M4 20 L5 15 L16 4 Q18 2 20 4 Q22 6 20 8 L9 19 Z M5 15 L9 19 M14 6 L18 10 M4 20 L8 19'/>",
+            "<path d='M5 19 L19 5'/><rect x='2' y='16' width='5' height='5'/><rect x='17' y='2' width='5' height='5'/>",
+            "<path d='M4 18 C9 18 11 6 20 6'/><circle cx='4' cy='18' r='2'/><circle cx='12' cy='12' r='2'/><circle cx='20' cy='6' r='2'/>",
+            "<path d='M14 3 A6 6 0 0 0 11 12 L3 20 L6 23 L14 15 A6 6 0 0 0 21 7 L17 11 L13 7 L17 3 Z'/>",
+            "<path d='M9 15 L15 9 M8 12 L5 15 A3 3 0 0 0 9 19 L12 16 M12 8 L15 5 A3 3 0 0 1 19 9 L16 12'/>"
+        }};
+        for (std::size_t index = 0; index < icons.size(); ++index)
+        {
+            const auto svg = juce::String("<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g fill='none' stroke='#000000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>")
+                + shapes[index] + "</g></svg>";
+            if (const auto xml = juce::parseXML(svg))
+                icons[index] = juce::Drawable::createFromSVG(*xml);
+        }
+        return icons;
+    }();
+    const std::array<const char*, 6> toolIds {{ "icon.pointer", "icon.draw",
+        "icon.line", "icon.points", "icon.wrench", "icon.connect" }};
+    for (std::size_t index = 0; index < toolIds.size(); ++index)
+        if (id == toolIds[index] && toolIcons[index])
+        {
+            auto icon = toolIcons[index]->createCopy();
+            icon->replaceColour(juce::Colours::black,
+                button.getToggleState() ? Palette::accent.contrasting(0.85f) : Palette::text);
+            icon->drawWithin(g, button.getLocalBounds().toFloat().reduced(4.0f),
+                juce::RectanglePlacement::centred, button.isEnabled() ? 1.0f : 0.4f);
+            return;
+        }
+    g.setColour(button.getToggleState() ? Palette::accent.contrasting(0.85f) : Palette::text);
+    juce::Path path;
     if (id == "icon.play")
         path.addTriangle(bounds.getX() + 2.0f, bounds.getY(), bounds.getRight(), bounds.getCentreY(),
                          bounds.getX() + 2.0f, bounds.getBottom());
@@ -125,36 +197,76 @@ void HachiLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& butto
         path.addRectangle(bounds.reduced(4.0f).withTrimmedTop(9.0f));
     }
     else if (id == "icon.pointer")
-        path = svgIcon("M3.29227 0.048984C3.47033 -0.032338 3.67946 -0.00228214 3.8274 0.125891L12.8587 7.95026C13.0134 8.08432 13.0708 8.29916 13.0035 8.49251C12.9362 8.68586 12.7578 8.81866 12.5533 8.82768L9.21887 8.97474L11.1504 13.2187C11.2648 13.47 11.1538 13.7664 10.9026 13.8808L8.75024 14.8613C8.499 14.9758 8.20255 14.8649 8.08802 14.6137L6.15339 10.3703L3.86279 12.7855C3.72196 12.934 3.50487 12.9817 3.31479 12.9059C3.1247 12.8301 3 12.6461 3 12.4414V0.503792C3 0.308048 3.11422 0.130306 3.29227 0.048984ZM4 1.59852V11.1877L5.93799 9.14425C6.05238 9.02363 6.21924 8.96776 6.38319 8.99516C6.54715 9.02256 6.68677 9.12965 6.75573 9.2809L8.79056 13.7441L10.0332 13.178L8.00195 8.71497C7.93313 8.56376 7.94391 8.38824 8.03072 8.24659C8.11753 8.10494 8.26903 8.01566 8.435 8.00834L11.2549 7.88397L4 1.59852Z");
+    {
+        // Cursor arrow with a straight top edge and angular tip.
+        path.startNewSubPath(bounds.getX() + 1.5f, bounds.getY() + 1.5f);
+        path.lineTo(bounds.getX() + 1.5f, bounds.getBottom() - 4.5f);
+        path.lineTo(bounds.getX() + 6.0f, bounds.getBottom() - 9.0f);
+        path.lineTo(bounds.getX() + 9.0f, bounds.getBottom() - 1.5f);
+        path.lineTo(bounds.getX() + 11.5f, bounds.getBottom() - 4.0f);
+        path.lineTo(bounds.getX() + 8.5f, bounds.getBottom() - 11.0f);
+        path.lineTo(bounds.getRight() - 2.5f, bounds.getBottom() - 9.5f);
+        path.closeSubPath();
+    }
     else if (id == "icon.draw")
-        path = svgIcon("M11.8536 1.14645C11.6583 0.951184 11.3417 0.951184 11.1465 1.14645L3.71455 8.57836C3.62459 8.66832 3.55263 8.77461 3.50251 8.89155L2.04044 12.303C1.9599 12.491 2.00189 12.709 2.14646 12.8536C2.29103 12.9981 2.50905 13.0401 2.69697 12.9596L6.10847 11.4975C6.2254 11.4474 6.3317 11.3754 6.42166 11.2855L13.8536 3.85355C14.0488 3.65829 14.0488 3.34171 13.8536 3.14645L11.8536 1.14645ZM4.42166 9.28547L11.5 2.20711L12.7929 3.5L5.71455 10.5784L4.21924 11.2192L3.78081 10.7808L4.42166 9.28547Z");
+    {
+        // Pencil: diagonal body, pointed tip, visible lead.
+        path.startNewSubPath(bounds.getX() + 1.5f, bounds.getBottom() - 3.0f);
+        path.lineTo(bounds.getX() + 2.5f, bounds.getBottom() - 6.0f);
+        path.lineTo(bounds.getRight() - 2.5f, bounds.getY() + 2.0f);
+        path.lineTo(bounds.getRight() - 4.5f, bounds.getY() + 0.5f);
+        path.lineTo(bounds.getX() + 5.5f, bounds.getBottom() - 7.5f);
+        path.lineTo(bounds.getX() + 3.0f, bounds.getBottom() - 5.0f);
+        path.lineTo(bounds.getX() + 1.5f, bounds.getBottom() - 3.0f);
+        path.closeSubPath();
+    }
     else if (id == "icon.line")
-        path = svgIcon("M1.5 7.5C3 7.5 3 3.5 4.5 3.5C6 3.5 6 11.5 7.5 11.5C9 11.5 9 3.5 10.5 3.5C12 3.5 12 7.5 13.5 7.5");
+    {
+        // Diagonal line with small start/end caps like a straight-line tool.
+        path.startNewSubPath(bounds.getX() + 1.0f, bounds.getBottom() - 1.0f);
+        path.lineTo(bounds.getRight() - 1.0f, bounds.getY() + 1.0f);
+    }
+    else if (id == "icon.points")
+    {
+        path.startNewSubPath(bounds.getX() + 1.0f, bounds.getBottom() - 2.0f);
+        path.lineTo(bounds.getCentreX(), bounds.getCentreY() + 1.0f);
+        path.lineTo(bounds.getRight() - 1.0f, bounds.getY() + 2.0f);
+        g.strokePath(path, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved));
+        g.fillEllipse(bounds.getX() - 1.0f, bounds.getBottom() - 4.0f, 4.0f, 4.0f);
+        g.fillEllipse(bounds.getCentreX() - 2.0f, bounds.getCentreY() - 1.0f, 4.0f, 4.0f);
+        g.fillEllipse(bounds.getRight() - 3.0f, bounds.getY(), 4.0f, 4.0f);
+        return;
+    }
     else if (id == "icon.wrench")
-        path = svgIcon("M9.1 2.1a3.1 3.1 0 0 0-3.8 3.8L2.1 9.1a1.55 1.55 0 1 0 2.2 2.2l3.2-3.2a3.1 3.1 0 0 0 3.8-3.8L9.5 6.1 7.9 4.5 9.1 2.1Z");
+    {
+        // Open-end wrench: C-shaped jaw and shaft with an angled end.
+        path.startNewSubPath(bounds.getX() + 2.0f, bounds.getCentreY() - 3.5f);
+        path.lineTo(bounds.getX() + 2.0f, bounds.getY() + 2.0f);
+        path.lineTo(bounds.getX() + 6.5f, bounds.getY() + 2.0f);
+        path.lineTo(bounds.getX() + 6.5f, bounds.getCentreY() - 4.0f);
+        path.closeSubPath();
+        path.startNewSubPath(bounds.getX() + 2.0f, bounds.getCentreY() + 3.5f);
+        path.lineTo(bounds.getX() + 2.0f, bounds.getBottom() - 2.0f);
+        path.lineTo(bounds.getX() + 6.5f, bounds.getBottom() - 2.0f);
+        path.lineTo(bounds.getX() + 6.5f, bounds.getCentreY() + 4.0f);
+        path.closeSubPath();
+        path.startNewSubPath(bounds.getX() + 6.0f, bounds.getCentreY() + 4.0f);
+        path.lineTo(bounds.getRight() - 1.0f, bounds.getCentreY() - 2.0f);
+    }
+    else if (id == "icon.collapse" || id == "icon.expand")
+    {
+        // A chevron pointing the way the arrangement will go.
+        const auto rise = id == "icon.collapse" ? -3.0f : 3.0f;
+        path.startNewSubPath(bounds.getX() + 1.0f, bounds.getCentreY() - rise);
+        path.lineTo(bounds.getCentreX(), bounds.getCentreY() + rise);
+        path.lineTo(bounds.getRight() - 1.0f, bounds.getCentreY() - rise);
+    }
     else if (id == "icon.connect")
     {
-        const auto mode = static_cast<int>(button.getProperties().getWithDefault("connectMode", 0));
         path.addEllipse(bounds.getX(), bounds.getCentreY() - 3.0f, 6.0f, 6.0f);
         path.addEllipse(bounds.getRight() - 6.0f, bounds.getCentreY() - 3.0f, 6.0f, 6.0f);
-        if (mode == 2) // full split: broken line
-        {
-            path.startNewSubPath(bounds.getX() + 5.0f, bounds.getCentreY());
-            path.lineTo(bounds.getCentreX() - 2.0f, bounds.getCentreY());
-            path.startNewSubPath(bounds.getCentreX() + 2.0f, bounds.getCentreY());
-            path.lineTo(bounds.getRight() - 5.0f, bounds.getCentreY());
-        }
-        else if (mode == 1) // glide split: curved line
-        {
-            path.startNewSubPath(bounds.getX() + 4.0f, bounds.getCentreY());
-            path.quadraticTo(bounds.getCentreX(), bounds.getCentreY() - 5.0f,
-                             bounds.getRight() - 4.0f, bounds.getCentreY());
-        }
-        else // merge: straight line
-        {
-            path.startNewSubPath(bounds.getX() + 5.0f, bounds.getCentreY());
-            path.lineTo(bounds.getRight() - 5.0f, bounds.getCentreY());
-        }
+        path.startNewSubPath(bounds.getX() + 5.0f, bounds.getCentreY());
+        path.lineTo(bounds.getRight() - 5.0f, bounds.getCentreY());
     }
     else
     {
@@ -162,14 +274,12 @@ void HachiLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& butto
         g.drawText(id == "icon.audio" ? "A+" : "M+", button.getLocalBounds(), juce::Justification::centred);
         return;
     }
-    if (id == "icon.line" || id == "icon.wrench" || id == "icon.connect")
+    if (id == "icon.line" || id == "icon.wrench" || id == "icon.connect"
+        || id == "icon.collapse" || id == "icon.expand")
         g.strokePath(path, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved,
                                                 juce::PathStrokeType::rounded));
     else
-    {
-        path.setUsingNonZeroWinding(false);
         g.fillPath(path);
-    }
 }
 
 void HachiLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool,
@@ -180,9 +290,14 @@ void HachiLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bo
     g.fillRoundedRectangle(bounds.reduced(1.0f), 4.0f);
     g.setColour(Palette::border);
     g.drawRoundedRectangle(bounds.reduced(1.0f), 4.0f, 1.0f);
+    drawDropdownArrow(g, { 0, 0, width, height });
+}
+
+void HachiLookAndFeel::drawDropdownArrow(juce::Graphics& g, juce::Rectangle<int> bounds)
+{
     g.setColour(Palette::accentLight);
-    const auto x = static_cast<float>(width - 14);
-    const auto y = static_cast<float>(height) * 0.5f;
+    const auto x = static_cast<float>(bounds.getRight() - 14);
+    const auto y = static_cast<float>(bounds.getCentreY());
     juce::Path arrow;
     arrow.startNewSubPath(x - 4.0f, y - 2.0f);
     arrow.lineTo(x, y + 2.0f);

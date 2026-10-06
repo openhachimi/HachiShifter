@@ -86,7 +86,8 @@ double activeRms(const juce::AudioBuffer<float>& audio)
 }
 
 void matchActiveRms(juce::AudioBuffer<float>& rendered,
-                    const juce::AudioBuffer<float>& source)
+                    const juce::AudioBuffer<float>& source,
+                    juce::AudioBuffer<float>* noise = nullptr)
 {
     const auto sourceRms = activeRms(source);
     const auto renderedRms = activeRms(rendered);
@@ -98,6 +99,7 @@ void matchActiveRms(juce::AudioBuffer<float>& rendered,
             peak = std::max(peak, std::abs(rendered.getSample(channel, sample)));
     if (peak * gain > 0.98f) gain = 0.98f / peak;
     rendered.applyGain(gain);
+    if (noise != nullptr) noise->applyGain(gain);
 }
 
 void raiseActiveRmsFloor(juce::AudioBuffer<float>& rendered,
@@ -198,7 +200,8 @@ void applyExpressionAndTension(juce::AudioBuffer<float>& audio, double sampleRat
                                const std::vector<float>& targetMidi,
                                const std::vector<float>& noteGain,
                                const std::vector<float>& tension,
-                               const std::vector<float>& breath)
+                               const std::vector<float>& breath,
+                               juce::AudioBuffer<float>* noise = nullptr)
 {
     if (audio.getNumSamples() <= 0 || sampleRate <= 0.0) return;
     const auto framePeriod = std::max(0.1, framePeriodMs);
@@ -212,6 +215,7 @@ void applyExpressionAndTension(juce::AudioBuffer<float>& audio, double sampleRat
         for (int channel = 0; channel < audio.getNumChannels(); ++channel)
         {
             auto tiltLow = audio.getSample(channel, 0);
+            auto noiseLow = noise != nullptr ? noise->getSample(channel, 0) : 0.0f;
             auto smoothedTension = 0.0f;
             double inputPower = 0.0;
             double outputPower = 0.0;
@@ -241,6 +245,12 @@ void applyExpressionAndTension(juce::AudioBuffer<float>& audio, double sampleRat
                 const auto lowGain = std::pow(10.0f, -smoothedTension * 1.5f / 20.0f);
                 const auto tilted = tiltLow * lowGain + tiltHigh * highGain;
                 audio.setSample(channel, sample, tilted);
+                if (noise != nullptr)
+                {
+                    const auto n = noise->getSample(channel, sample);
+                    noiseLow += coefficient * (n - noiseLow);
+                    noise->setSample(channel, sample, noiseLow * lowGain + (n - noiseLow) * highGain);
+                }
                 inputPower += static_cast<double>(current) * current;
                 outputPower += static_cast<double>(tilted) * tilted;
                 inputPeak = std::max(inputPeak, std::abs(current));
@@ -255,11 +265,13 @@ void applyExpressionAndTension(juce::AudioBuffer<float>& audio, double sampleRat
             if (inputPeak > 1.0e-6f && outputPeak > 1.0e-6f)
                 correction = std::min(correction, inputPeak * 1.6f / outputPeak);
             audio.applyGain(channel, 0, audio.getNumSamples(), correction);
+            if (noise != nullptr) noise->applyGain(channel, 0, noise->getNumSamples(), correction);
         }
 
     for (int channel = 0; channel < audio.getNumChannels(); ++channel)
     {
         auto airLow = audio.getSample(channel, 0);
+        auto noiseLow = noise != nullptr ? noise->getSample(channel, 0) : 0.0f;
         const auto airCoefficient = static_cast<float>(1.0
             - std::exp(-juce::MathConstants<double>::twoPi * 3500.0 / sampleRate));
         for (int sample = 0; sample < audio.getNumSamples(); ++sample)
@@ -274,6 +286,12 @@ void applyExpressionAndTension(juce::AudioBuffer<float>& audio, double sampleRat
             airLow += airCoefficient * (current - airLow);
             const auto airHigh = current - airLow;
             audio.setSample(channel, sample, (current + airHigh * air * 0.22f) * gain);
+            if (noise != nullptr)
+            {
+                const auto n = noise->getSample(channel, sample);
+                noiseLow += airCoefficient * (n - noiseLow);
+                noise->setSample(channel, sample, (n + (n - noiseLow) * air * 0.22f) * gain);
+            }
         }
     }
 }
@@ -674,6 +692,25 @@ public:
     {
         if (shouldExit()) return jobHasFinished;
         juce::AudioFormatManager formats;
+        const auto separate = request.exportComponent != WavExportComponent::full;
+        if (separate && request.pitchBackend != PitchRenderBackend::world
+            && request.pitchBackend != PitchRenderBackend::llsm2)
+        {
+            RenderedAudio failure;
+            failure.warning = "Selected backend cannot export voice components";
+            if (completion) completion(std::move(failure));
+            return jobHasFinished;
+        }
+        // Preserve the local MLD5 renderer for existing projects. This is an
+        // independent experimental renderer, never the official Melodyne provider.
+        if (request.pitchBackend == PitchRenderBackend::mld3
+            || request.pitchBackend == PitchRenderBackend::vslib)
+        {
+            RenderedAudio failure;
+            failure.warning = "Selected backend is disabled or has no native implementation";
+            if (completion) completion(std::move(failure));
+            return jobHasFinished;
+        }
         formats.registerBasicFormats();
         auto reader = std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(request.sourceFile));
         if (reader == nullptr || reader->sampleRate <= 0.0)
@@ -697,10 +734,16 @@ public:
 
         const auto targetSamples = std::max(1, static_cast<int>(std::llround(
             std::max(0.001, request.targetDurationSeconds) * reader->sampleRate)));
-        if (request.pitchBackend == PitchRenderBackend::mld5)
+        // Robust pitch curve is a native analysis stabilizer, not a UTAU flag.
+        // NSF has no source-MIDI input tensor, so apply the same corrected
+        // target curve before its F0 conversion instead of silently dropping
+        // the feature on the neural backend.
+        if (request.pitchBackend == PitchRenderBackend::mld5
+            || request.pitchBackend == PitchRenderBackend::nsfHifigan)
             applyRobustPitchCurve(request.sourceMidi, request.targetMidi,
                                   request.robustPitchCurve);
-        juce::AudioBuffer<float> rendered;
+        juce::AudioBuffer<float> rendered, noise;
+        auto* noiseOutput = separate ? &noise : nullptr;
         auto usedNsfModel = false;
         auto usedLlsm2 = false;
         juce::String nsfInference;
@@ -712,18 +755,20 @@ public:
                 worldTimeMap.push_back({ point.targetSeconds, point.sourceSeconds });
             rendered = WorldRenderer::render(source, targetSamples, reader->sampleRate,
                 request.framePeriodMs, request.sourceMidi, request.targetMidi,
-                request.formantSemitones, worldTimeMap);
+                request.formantSemitones, worldTimeMap, noiseOutput);
             // A malformed or exceptionally constrained source still remains
             // playable through the established model-free route.
             if (rendered.getNumSamples() != targetSamples)
-                rendered = renderFormantPreserved(source, targetSamples, reader->sampleRate,
-                    request.framePeriodMs, request.sourceMidi, request.targetMidi,
-                    request.formantSemitones, request.noteGain, request.tension, request.breath,
-                    request.timeMap, request.pitchBackend, request.stretchAlgorithm);
+            {
+                RenderedAudio failure;
+                failure.warning = "WORLD render failed; backend substitution is prohibited";
+                if (completion) completion(std::move(failure));
+                return jobHasFinished;
+            }
             else
                 applyExpressionAndTension(rendered, reader->sampleRate, request.framePeriodMs,
                                           request.targetMidi, request.noteGain, request.tension,
-                                          request.breath);
+                                          request.breath, noiseOutput);
         }
         else if (request.pitchBackend == PitchRenderBackend::mld5)
         {
@@ -748,24 +793,13 @@ public:
         }
         else if (request.pitchBackend == PitchRenderBackend::mld3)
         {
-            // Melodyne 3 algorithm path: independent PSOLA period-transition
-            // renderer with separate pitch / formant ratios, fully
-            // independent from the M5 MULSS spectral path.
-            Mld3RenderRequest mld3Request;
-            mld3Request.input = &source;
-            mld3Request.sampleRate = reader->sampleRate;
-            mld3Request.framePeriodMs = request.framePeriodMs;
-            mld3Request.sourceMidi = request.sourceMidi;
-            mld3Request.targetMidi = request.targetMidi;
-            mld3Request.formantSemitones = request.formantSemitones;
-            mld3Request.noteGain = request.noteGain;
-            for (const auto& point : request.timeMap)
-                mld3Request.timeMap.push_back({ point.targetSeconds, point.sourceSeconds });
-            mld3Request.targetSamples = targetSamples;
-            Mld3Renderer mld3;
-            rendered = mld3.render(mld3Request);
-            applyExpressionAndTension(rendered, reader->sampleRate, request.framePeriodMs,
-                request.targetMidi, {}, request.tension, request.breath);
+            // The independent Melodyne algorithms are intentionally disabled
+            // until their quality is validated. Never silently route mld3 to a
+            // different backend.
+            RenderedAudio disabled;
+            disabled.warning = "mld3 backend is disabled";
+            if (completion) completion(std::move(disabled));
+            return jobHasFinished;
         }
         else if (request.pitchBackend == PitchRenderBackend::llsm2)
         {
@@ -780,7 +814,7 @@ public:
             {
                 rendered = Llsm2Renderer::render(source, targetSamples, reader->sampleRate,
                     request.framePeriodMs, request.sourceMidi, request.targetMidi,
-                    request.formantSemitones, request.tension, request.timeMap);
+                    request.formantSemitones, request.tension, request.timeMap, noiseOutput);
             }
             catch (const std::bad_alloc&)
             {
@@ -792,15 +826,15 @@ public:
                 usedLlsm2 = true;
                 applyExpressionAndTension(rendered, reader->sampleRate,
                     request.framePeriodMs, request.targetMidi, request.noteGain,
-                    {}, request.breath);
+                    {}, request.breath, noiseOutput);
             }
             else
                 try
                 {
-                    rendered = renderFormantPreserved(source, targetSamples, reader->sampleRate,
-                        request.framePeriodMs, request.sourceMidi, request.targetMidi,
-                        request.formantSemitones, request.noteGain, request.tension, request.breath,
-                        request.timeMap, request.pitchBackend, request.stretchAlgorithm);
+                    RenderedAudio failure;
+                    failure.warning = "LLSM2 render failed; backend substitution is prohibited";
+                    if (completion) completion(std::move(failure));
+                    return jobHasFinished;
                 }
                 catch (const std::bad_alloc&)
                 {
@@ -809,6 +843,13 @@ public:
         }
         else if (request.pitchBackend == PitchRenderBackend::nsfHifigan)
         {
+            if (!NsfHifiganRenderer::modelAvailable(request.hifiganModelDirectory))
+            {
+                RenderedAudio disabled;
+                disabled.warning = "NSF-HiFiGAN is selected but its model pack is unavailable";
+                if (completion) completion(std::move(disabled));
+                return jobHasFinished;
+            }
             // Both neural routes extract the spectral envelope directly from
             // original PCM.  This avoids a preliminary time-domain stretch
             // changing the vocal tract before the vocoder sees it.  Standard
@@ -850,19 +891,40 @@ public:
                     request.tension, request.breath);
             }
             else
-                rendered = renderFormantPreserved(source, targetSamples, reader->sampleRate,
-                    request.framePeriodMs, request.sourceMidi, request.targetMidi,
-                    request.formantSemitones, request.noteGain, request.tension, request.breath,
-                    request.timeMap, request.pitchBackend, request.stretchAlgorithm);
+            {
+                RenderedAudio disabled;
+                disabled.warning = neural.error.isNotEmpty() ? neural.error
+                    : "NSF-HiFiGAN render failed";
+                if (completion) completion(std::move(disabled));
+                return jobHasFinished;
+            }
         }
-        else
+        else if (request.pitchBackend == PitchRenderBackend::vslib)
+        {
+            // vslib is not available to the Linux build. Do not silently
+            // substitute another backend there. Windows keeps its native
+            // implementation path.
+#if !JUCE_WINDOWS
+            RenderedAudio disabled;
+            disabled.warning = "vslib backend is unavailable on this platform";
+            if (completion) completion(std::move(disabled));
+            return jobHasFinished;
+#else
             rendered = renderFormantPreserved(source, targetSamples, reader->sampleRate,
                 request.framePeriodMs, request.sourceMidi, request.targetMidi,
                 request.formantSemitones, request.noteGain, request.tension, request.breath,
-                request.timeMap,
-                request.pitchBackend, request.stretchAlgorithm);
+                request.timeMap, request.pitchBackend, request.stretchAlgorithm);
+#endif
+        }
+        else
+        {
+            RenderedAudio disabled;
+            disabled.warning = "requested pitch backend is disabled";
+            if (completion) completion(std::move(disabled));
+            return jobHasFinished;
+        }
         if (request.normalizeVolume && !usedNsfModel)
-            matchActiveRms(rendered, source);
+            matchActiveRms(rendered, source, noiseOutput);
         auto backend = request.pitchBackend == PitchRenderBackend::mld5
             ? juce::String("mld5-single-pass-stable-clock")
             : request.pitchBackend == PitchRenderBackend::mld3
@@ -882,6 +944,23 @@ public:
             : request.stretchAlgorithm == 2 ? "+loop"
             : request.stretchAlgorithm == 3 ? "+soundtouch"
             : "+melodyne-hybrid";
+        if (separate)
+        {
+            if (noise.getNumSamples() != rendered.getNumSamples()
+                || noise.getNumChannels() != rendered.getNumChannels())
+            {
+                RenderedAudio failure;
+                failure.warning = "Selected backend returned no separated component";
+                if (completion) completion(std::move(failure));
+                return jobHasFinished;
+            }
+            if (request.exportComponent == WavExportComponent::breath)
+                rendered = std::move(noise);
+            else
+                for (int channel = 0; channel < rendered.getNumChannels(); ++channel)
+                    rendered.addFrom(channel, 0, noise, channel, 0, rendered.getNumSamples(), -1.0f);
+            backend += request.exportComponent == WavExportComponent::breath ? "+breath" : "+non-breath";
+        }
         RenderedAudio result { std::move(rendered), reader->sampleRate, backend };
         if (shouldExit()) return jobHasFinished;
         // AudioEngine publishes the completed buffer through release/acquire
@@ -894,6 +973,66 @@ public:
 
 private:
     Mld5FileRenderRequest request;
+    FileCompletion completion;
+};
+
+class RenderService::UtauRenderJob final : public juce::ThreadPoolJob
+{
+public:
+    UtauRenderJob(UtauRenderRequest requestToUse, FileCompletion completionToUse)
+        : ThreadPoolJob("utau-phrase-render"), request(std::move(requestToUse)),
+          completion(std::move(completionToUse))
+    {
+    }
+
+    JobStatus runJob() override
+    {
+        if (shouldExit()) return jobHasFinished;
+        request.cancelled = [this] { return shouldExit(); };
+        auto rendered = UtauRenderer::render(request);
+        if (shouldExit()) return jobHasFinished;
+        if (rendered.warning.isNotEmpty())
+            juce::Logger::writeToLog("UTAU: " + rendered.warning);
+        if (completion)
+            completion({ std::move(rendered.buffer), rendered.sampleRate,
+                         std::move(rendered.backend), std::move(rendered.warning) });
+        return jobHasFinished;
+    }
+
+private:
+    UtauRenderRequest request;
+    FileCompletion completion;
+};
+
+class RenderService::NsfUtauRenderJob final : public juce::ThreadPoolJob
+{
+public:
+    NsfUtauRenderJob(UtauRenderRequest requestToUse, juce::File modelDirectoryToUse,
+                     OrtExecutionConfig executionToUse, FileCompletion completionToUse)
+        : ThreadPoolJob("nsf-utau-phrase-render"), request(std::move(requestToUse)),
+          modelDirectory(std::move(modelDirectoryToUse)),
+          execution(std::move(executionToUse)),
+          completion(std::move(completionToUse))
+    {
+    }
+
+    JobStatus runJob() override
+    {
+        if (shouldExit()) return jobHasFinished;
+        auto rendered = renderNsfUtauPhrase(request, modelDirectory, execution);
+        if (shouldExit()) return jobHasFinished;
+        if (rendered.warning.isNotEmpty())
+            juce::Logger::writeToLog("NSF-UTAU: " + rendered.warning);
+        if (completion)
+            completion({ std::move(rendered.buffer), rendered.sampleRate,
+                         std::move(rendered.backend), std::move(rendered.warning) });
+        return jobHasFinished;
+    }
+
+private:
+    UtauRenderRequest request;
+    juce::File modelDirectory;
+    OrtExecutionConfig execution;
     FileCompletion completion;
 };
 
@@ -915,6 +1054,18 @@ void RenderService::renderMld5(Mld5RenderRequest request, Completion completion)
 void RenderService::renderMld5File(Mld5FileRenderRequest request, FileCompletion completion)
 {
     pool.addJob(new FileRenderJob(std::move(request), std::move(completion)), true);
+}
+
+void RenderService::renderUtau(UtauRenderRequest request, FileCompletion completion)
+{
+    pool.addJob(new UtauRenderJob(std::move(request), std::move(completion)), true);
+}
+
+void RenderService::renderNsfUtau(UtauRenderRequest request, juce::File modelDirectory,
+                                  OrtExecutionConfig execution, FileCompletion completion)
+{
+    pool.addJob(new NsfUtauRenderJob(std::move(request), std::move(modelDirectory),
+                                     std::move(execution), std::move(completion)), true);
 }
 
 void RenderService::cancelAll()

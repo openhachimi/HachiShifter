@@ -90,8 +90,10 @@ juce::AudioBuffer<float> WorldRenderer::render(
     const std::vector<float>& sourceMidi,
     const std::vector<float>& targetMidi,
     const std::vector<float>& formantSemitones,
-    const std::vector<WorldTimeMapPoint>& timeMap)
+    const std::vector<WorldTimeMapPoint>& timeMap,
+    juce::AudioBuffer<float>* noiseOutput)
 {
+    if (noiseOutput != nullptr) noiseOutput->setSize(0, 0);
     const auto sourceSamples = source.getNumSamples();
     const auto channels = source.getNumChannels();
     if (sourceSamples <= 0 || targetSamples <= 0 || channels <= 0 || sampleRate <= 0.0)
@@ -106,7 +108,7 @@ juce::AudioBuffer<float> WorldRenderer::render(
             - point.targetSeconds / std::max(1.0e-9, targetDuration)) > 1.0e-6;
     const auto formantChanged = std::any_of(formantSemitones.begin(), formantSemitones.end(),
         [](float value) { return std::abs(value) > 1.0e-4f; });
-    if (!timeChanged && !formantChanged && !hasPitchDifference(sourceMidi, targetMidi))
+    if (noiseOutput == nullptr && !timeChanged && !formantChanged && !hasPitchDifference(sourceMidi, targetMidi))
         return source;
 
     const auto fs = std::max(8'000, static_cast<int>(std::llround(sampleRate)));
@@ -166,6 +168,11 @@ juce::AudioBuffer<float> WorldRenderer::render(
 
     juce::AudioBuffer<float> output(channels, targetSamples);
     output.clear();
+    if (noiseOutput != nullptr)
+    {
+        noiseOutput->setSize(channels, targetSamples);
+        noiseOutput->clear();
+    }
     for (int channel = 0; channel < channels; ++channel)
     {
         std::vector<double> input(static_cast<std::size_t>(sourceSamples));
@@ -216,14 +223,17 @@ juce::AudioBuffer<float> WorldRenderer::render(
         }
 
         std::vector<double> synthesized(static_cast<std::size_t>(targetSamples), 0.0);
-        Synthesis(targetF0.data(), targetFrames, warpedSpectrumPointers.data(),
+        std::vector<double> noise(noiseOutput != nullptr ? static_cast<std::size_t>(targetSamples) : 0);
+        SynthesisWithNoiseOutput(targetF0.data(), targetFrames, warpedSpectrumPointers.data(),
                   warpedAperiodicityPointers.data(), cheapTrickOption.fft_size,
-                  period, fs, targetSamples, synthesized.data());
+                  period, fs, targetSamples, synthesized.data(), noise.empty() ? nullptr : noise.data());
         auto* destination = output.getWritePointer(channel);
         for (int sample = 0; sample < targetSamples; ++sample)
         {
             const auto value = synthesized[static_cast<std::size_t>(sample)];
             destination[sample] = std::isfinite(value) ? static_cast<float>(value) : 0.0f;
+            if (noiseOutput != nullptr)
+                noiseOutput->setSample(channel, sample, std::isfinite(noise[sample]) ? static_cast<float>(noise[sample]) : 0.0f);
         }
     }
     return output;

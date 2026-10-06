@@ -1,0 +1,145 @@
+name: Windows build
+
+on:
+  push:
+    branches:
+      - new
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Windows x64 (model-free)
+    runs-on: windows-latest
+
+    env:
+      FETCH_CACHE: ${{ github.workspace }}\.cache\hachishifter-fetch
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FETCH_CACHE }}
+          key: hachi-fetch-windows-${{ hashFiles('juce/CMakeLists.txt') }}
+          restore-keys: |
+            hachi-fetch-windows-
+
+      - name: Configure
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure CMake
+        run: |
+          cmake -S juce -B build-windows `
+            -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_EXE_LINKER_FLAGS=/MAP `
+            -DFETCHCONTENT_BASE_DIR="$env:FETCH_CACHE"
+
+      - name: Build
+        run: cmake --build build-windows --target HachiShifterNext -- -j32
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $binary = Get-ChildItem -Path build-windows -Recurse -Filter "*.exe" |
+            Where-Object { $_.FullName -match "_artefacts" -and $_.Name -like "HachiShifter*.exe" } |
+            Select-Object -First 1
+          if (-not $binary) { throw "No HachiShifter executable was produced" }
+
+          $stage = "HachiShifterNext-windows-x64"
+          New-Item -ItemType Directory -Force -Path "$stage/models" | Out-Null
+          Copy-Item $binary.FullName "$stage/HachiShifterNext.exe"
+
+          # The ONNX runtime and DirectML libraries are copied beside the
+          # executable by the CMake POST_BUILD step.  A package missing them
+          # cannot run the neural backends at all, so treat them as required.
+          $runtimeDir = $binary.DirectoryName
+          foreach ($dll in @("onnxruntime.dll", "onnxruntime_providers_shared.dll", "DirectML.dll")) {
+            $source = Join-Path $runtimeDir $dll
+            if (-not (Test-Path $source)) { throw "Missing runtime library: $dll" }
+            Copy-Item $source "$stage/$dll"
+          }
+
+          Copy-Item LICENSE "$stage/LICENSE"
+
+          # Bundle the redistributable CRT required by both the application
+          # and ONNX Runtime on machines without Visual Studio installed.
+          $crt = Get-ChildItem "$env:VCToolsRedistDir/x64" -Directory -Filter "Microsoft.VC*.CRT" |
+            Select-Object -First 1
+          if (-not $crt) { throw "MSVC redistributable CRT directory not found" }
+          Copy-Item "$($crt.FullName)/*.dll" $stage
+
+          # Models stay out of the package, exactly as the GitLab job requires.
+          if ((Get-ChildItem "$stage/models" -Recurse -File).Count -ne 0) {
+            throw "The package must not ship model files"
+          }
+
+          Compress-Archive -Path "$stage/*" -DestinationPath "$stage-no-model.zip" -Force
+          (Get-FileHash "$stage-no-model.zip" -Algorithm SHA256).Hash |
+            Out-File "$stage-no-model.zip.sha256" -Encoding ascii
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: HachiShifterNext-windows-x64-no-model-${{ github.sha }}
+          path: |
+            HachiShifterNext-windows-x64-no-model.zip
+            HachiShifterNext-windows-x64-no-model.zip.sha256
+          retention-days: 30
+
+      - name: Verify GUI startup and responsiveness
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "HachiShifterNext-windows-x64/HachiShifterNext.exe").Path
+          $app = Start-Process $exe -PassThru -RedirectStandardError gui-startup.log
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 1
+              $app.Refresh()
+              if ($app.HasExited) { throw "GUI exited during startup: $($app.ExitCode)" }
+              if ($app.MainWindowHandle -ne 0 -and $app.Responding) { $ready = $true; break }
+            }
+            if (-not $ready) { throw "GUI did not create a responsive window" }
+            Start-Sleep -Seconds 5
+            $app.Refresh()
+            if ($app.HasExited -or -not $app.Responding) { throw "GUI stopped responding" }
+            Get-Content gui-startup.log
+          } finally {
+            if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
+          }
+
+      - name: Upload GUI startup log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-startup-log
+          path: gui-startup.log
+
+      - name: Upload startup symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-link-map
+          path: build-windows/**/*.map
+
+      - name: Verify local tempo editing modes
+        shell: pwsh
+        run: |
+          $env:HACHI_TEST_SETTINGS_DIR = "$env:RUNNER_TEMP/hachi-tempo-settings"
+          $exe = "HachiShifterNext-windows-x64/HachiShifterNext.exe"
+          & $exe --smoke-tempo-change | Out-Host
+          if ($LASTEXITCODE -ne 0) { throw "Tempo editing smoke failed: $LASTEXITCODE" }
+
+      - name: Probe Melodyne provider
+        # Informational only: the runner has no Melodyne installation, so this
+        # reports "not detected" rather than proving the VST3 host path.
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $exe = "HachiShifterNext-windows-x64/HachiShifterNext.exe"
+          & $exe --smoke-melodyne-provider
+          Write-Host "provider probe exit code: $LASTEXITCODE"

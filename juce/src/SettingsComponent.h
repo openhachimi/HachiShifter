@@ -2,6 +2,7 @@
 
 #include "I18n.h"
 #include "Theme.h"
+#include "backend/DiffSingerOptions.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <functional>
@@ -19,6 +20,7 @@ public:
                       juce::PropertiesFile& propertiesToUse, Applied appliedToUse);
     ~SettingsComponent() override;
     void resized() override;
+    void selectPage(int page) { tabs.setCurrentTabIndex(page, false); }
     [[nodiscard]] int diagnosticTabCount() const { return tabs.getNumTabs(); }
     [[nodiscard]] int diagnosticInferenceDeviceCount() const
     {
@@ -32,6 +34,21 @@ public:
     }
 
 private:
+    class PathPicker final : public juce::Component
+    {
+    public:
+        PathPicker();
+        void resized() override;
+        void setText(const juce::String& text);
+        [[nodiscard]] juce::String getText() const;
+        void setBrowseTooltip(const juce::String& text);
+        std::function<void()> onBrowse;
+
+    private:
+        juce::TextEditor editor;
+        juce::TextButton browseButton { "..." };
+    };
+
     class FormPage final : public juce::Component
     {
     public:
@@ -46,11 +63,17 @@ private:
     static juce::Colour colourFromText(const juce::String& text, juce::Colour fallback);
     void loadValues();
     void saveValues();
+    void refreshDiffSingerControls();
     void setTexts();
     void refreshAudioValues();
     void applyAudioValues();
     void openAdvancedAudioPanel();
     void refreshImportedStretchItems(int preferredId = 0);
+    void chooseUtauVoicebank();
+    void chooseUtauWavtool();
+    void chooseUtauResampler();
+    [[nodiscard]] juce::File initialPathFor(const PathPicker& picker,
+                                             bool directory) const;
 
     I18n& strings;
     juce::AudioDeviceManager& devices;
@@ -62,11 +85,16 @@ private:
     FormPage operationPage;
     FormPage importPage;
     FormPage audioPage;
+    FormPage diffSingerPage;
+    juce::Label dsBackendLabel, dsDeviceLabel, dsPreviewLabel, dsExportLabel,
+                dsAcousticLabel, dsPitchLabel, dsVarianceLabel, dsDepthLabel, dsHelp, dsStatus;
+    juce::ComboBox dsBackend, dsDevice, dsPreview, dsExport;
+    juce::Slider dsAcoustic, dsPitch, dsVariance, dsDepth;
 
     juce::Label languageLabel, themeLabel, accentLabel, accentLightLabel, noteColourLabel;
     juce::ComboBox language, theme;
     juce::TextEditor accent, accentLight, noteColour;
-    juce::ToggleButton showNoteLabels;
+    juce::ToggleButton showNoteLabels, softwareRendering;
     juce::Label uiScaleLabel;
     juce::Slider uiScale;
 
@@ -75,12 +103,15 @@ private:
     juce::TextButton advancedAudio;
 
     juce::Label gamePathLabel, gameModelLabel, fcpePathLabel, hifiganPathLabel, inferenceLabel,
-                inferenceDeviceLabel, utauResamplerLabel;
-    juce::TextEditor gamePath, fcpePath, hifiganPath, utauResamplerPath;
+                inferenceDeviceLabel, utauVoicebankLabel, utauWavtoolLabel,
+                utauResamplerLabel;
+    juce::TextEditor gamePath, fcpePath, hifiganPath;
+    PathPicker utauVoicebankPath, utauWavtoolPath, utauResamplerPath;
     juce::ComboBox gameModel, inference, inferenceDevice;
+    std::unique_ptr<juce::FileChooser> pathChooser;
 
-    juce::Label shortcutLabel, wheelLabel;
-    juce::ComboBox shortcutPreset, wheelAction;
+    juce::Label shortcutLabel;
+    juce::ComboBox shortcutPreset;
     juce::ToggleButton spacePlayback, confirmDestructive;
 
     juce::Label melodyneComposeLabel, melodynePitchLabel, importedAlgorithmLabel,

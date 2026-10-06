@@ -1,0 +1,37 @@
+KARA2 weights: Ultimate Vocal Remover (UVR), Anjok07 and aufr33. MDX-Net architecture: Kuielab.
+Source: https://github.com/Anjok07/ultimatevocalremovergui
+Weights: https://github.com/TRvlvr/model_repo/releases/tag/all_public_uvr_models
+
+Upstream README licensing and credits (retrieved 2026-09-29):
+## License
+
+
+
+The **Ultimate Vocal Remover GUI** code is [MIT-licensed](LICENSE). 
+
+
+
+- **Please Note:** For all third-party application developers who wish to use our models, please honor the MIT license by providing credit to UVR and its developers.
+
+
+
+## Credits
+
+- [ZFTurbo](https://github.com/ZFTurbo) - Created & trained the weights for the new MDX23C models. 
+
+- [DilanBoskan](https://github.com/DilanBoskan) - Your contributions at the start of this project were essential to the success of UVR. Thank you!
+
+- [Bas Curtiz](https://www.youtube.com/user/bascurtiz) - Designed the official UVR logo, icon, banner, and splash screen.
+
+- [tsurumeso](https://github.com/tsurumeso) - Developed the original VR Architecture code. 
+
+- [Kuielab & Woosung Choi](https://github.com/kuielab) - Developed the original MDX-Net AI code. 
+
+- [Adefossez & Demucs](https://github.com/facebookresearch/demucs) - Developed the original Demucs AI code. 
+
+- [KimberleyJSN](https://github.com/KimberleyJensen) - Advised and aided the implementation of the training scripts for MDX-Net and Demucs. Thank you!
+
+- [Hv](https://github.com/NaJeongMo/Colab-for-MDX_B) - Helped implement chunks into the MDX-Net AI code. Thank you!
+
+
+

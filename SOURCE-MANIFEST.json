@@ -1,0 +1,2571 @@
+{
+  "public_version": "0.2.3",
+  "documentation_revision": "053",
+  "created_at": "2026-10-01T19:51:59.524905+08:00",
+  "source_root": "E:\\和声合成新UI\\HachiShifter-integrated",
+  "description": "Current working-tree source snapshot including uncommitted changes",
+  "excluded": {
+    ".deps/": 1,
+    ".git/": 1,
+    "build-integrated/": 1,
+    "build-temp/": 1,
+    "extensions/.log": 58,
+    "extensions/.mp3": 1,
+    "extensions/.pt": 2,
+    "integration-tests/": 1,
+    "juce/engines/diffsinger/__pycache__/": 1,
+    "juce/engines/diffsinger/pronunciation-data/pypinyin/__pycache__/": 1,
+    "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/__pycache__/": 1,
+    "juce/engines/diffsinger/pronunciation-data/pypinyin/seg/__pycache__/": 1,
+    "juce/engines/diffsinger/pronunciation-data/pypinyin/style/__pycache__/": 1,
+    "juce/tests/__pycache__/": 1,
+    "test-output/": 1,
+    "tools/__pycache__/": 1,
+    "tools/hamood_audio/__pycache__/": 1,
+    "tools/hamood_audio/deps/": 1,
+    "tools/hamood_audio/downloads/": 1,
+    "tools/hamood_audio/models/": 1,
+    "tools/hamood_audio/reference-deps/": 1,
+    "tools/hamood_audio/vendor/BTC-ISMIR19/.git/": 1,
+    "tools/hamood_audio/vendor/BTC-ISMIR19/__pycache__/": 1,
+    "tools/hamood_audio/vendor/BTC-ISMIR19/utils/__pycache__/": 1,
+    "tools/hamood_audio/wheels/": 1
+  },
+  "files": [
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug-report.yml",
+      "bytes": 841,
+      "sha256": "d88c78cbd72b3809745b17cf23ac58b4f1ea5d7f1435dc3d55b571a2628b2ae5"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/feature-request.yml",
+      "bytes": 459,
+      "sha256": "f2088e45d9a37d442511a71d9a58bb61d9e27387a872c0fe9050a7d29a3fd370"
+    },
+    {
+      "path": ".github/workflows/windows-build.yml",
+      "bytes": 5674,
+      "sha256": "d5f9d2a74f64e7529185a92811d80e73e36ce97df7962281a3019a9f1cd11be9"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 1144,
+      "sha256": "f75a9e266b43159fc1ed4971ed86890e6577c6bd2f8f58a6c488e47b77a8f327"
+    },
+    {
+      "path": ".gitlab-ci.yml",
+      "bytes": 5594,
+      "sha256": "a90191e0759457c91398a309662aca5f10129c01bcaefd7944751090dd02c44f"
+    },
+    {
+      "path": ".mcp.json",
+      "bytes": 210,
+      "sha256": "7bf1c65a5220c0d382187c5e11d37220310668b6a3bb7f878009c4972e43367f"
+    },
+    {
+      "path": "AGENTS.md",
+      "bytes": 762,
+      "sha256": "e1f6f5eed1c5cebdf62efb6c51ce7def4a292f2c30dcd38643d5ef8781458b2a"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 2611,
+      "sha256": "6ea1e02d8b8288efcec8db0293559fc4138f970091a29572f0fb2b9286ebd1aa"
+    },
+    {
+      "path": "build-local.ps1",
+      "bytes": 2554,
+      "sha256": "816c3dddb11677aaf204f9f9bc4a4d4b2ca83a4ef77827b756fd5da2509a0f4b"
+    },
+    {
+      "path": "build-windows-native.ps1",
+      "bytes": 1033,
+      "sha256": "b2df60a740ba8c969d79f7b35aa16ea6ff752536f24de49a714054a72f83e8ae"
+    },
+    {
+      "path": "docs/accompaniment.md",
+      "bytes": 1756,
+      "sha256": "cd26d947648bbe791e740c999b427f1f54a7bc8e5794e415a0f93ec9cbcd03f6"
+    },
+    {
+      "path": "docs/audio-export.md",
+      "bytes": 3880,
+      "sha256": "08904acb97f525452b0f38f8ec7c677fe450e0df1eb297809e183a339445c04f"
+    },
+    {
+      "path": "docs/diffsinger-audit.md",
+      "bytes": 8549,
+      "sha256": "9fd1272c5133e98a40a9bcd04a8760ac8d406fb0d32a08b23416d4350d6e5887"
+    },
+    {
+      "path": "docs/diffsinger.md",
+      "bytes": 34795,
+      "sha256": "9a55f324fc5ca90f19e52ad3a65aecce422aef80ffe01da7a7c4fb5897c257c5"
+    },
+    {
+      "path": "docs/hamood-audio.md",
+      "bytes": 4427,
+      "sha256": "c68fdf160cf69363711e81685cf41acdb864d58c4eb88795816ef670ac05533c"
+    },
+    {
+      "path": "docs/hamood.md",
+      "bytes": 10007,
+      "sha256": "429cb928d21bae295efa0b5daa800a9be6d5ad77b15617874f2dd441263c14f1"
+    },
+    {
+      "path": "docs/integration-notes.md",
+      "bytes": 6271,
+      "sha256": "d35b0e71422406548672cbf5fd59043fa19adc54d60cf3a1d1313fdf5414071d"
+    },
+    {
+      "path": "docs/kara2.md",
+      "bytes": 2379,
+      "sha256": "c36cd23f762d5e8a389998aadf249b8f44cb4906a809dfeb7a1af29d1637307f"
+    },
+    {
+      "path": "docs/local-integration-20260924.md",
+      "bytes": 6840,
+      "sha256": "a532704322acd907bd47d983eb6f748b28d73b1c12843618b40968b784dea41f"
+    },
+    {
+      "path": "docs/mcp-live.md",
+      "bytes": 11434,
+      "sha256": "c66ef3ccc2e55264921f094b71a5089cd4db78540b97eaee6d42f1056aa0caad"
+    },
+    {
+      "path": "docs/mcp.md",
+      "bytes": 11426,
+      "sha256": "911f90cf52417d92847ec820c8bc02ef8efdcceff696e6cd86a42f3382c77b72"
+    },
+    {
+      "path": "docs/nsf-hifigan-model.md",
+      "bytes": 2054,
+      "sha256": "b95c444dcfa01fc99f7a5161e383effa27258ecf9a21c78250d0dfa1965d9b7e"
+    },
+    {
+      "path": "docs/pitch-timeline-fix-20260921.md",
+      "bytes": 2849,
+      "sha256": "512756f04a59b8698cc0de2eb38e57cf7224a7f55500581e91d75022fdca4c6b"
+    },
+    {
+      "path": "docs/tempo-change-options.md",
+      "bytes": 1105,
+      "sha256": "c01a0129e0fa2ae90983ec515c70db36f4cf3b6f612010a51f0995bd58e22300"
+    },
+    {
+      "path": "docs/unified-editor-design.md",
+      "bytes": 20692,
+      "sha256": "3612db48cd6af14b9f8d5fa99be9bd458ed1613d89438db9c7174d98770993b0"
+    },
+    {
+      "path": "docs/updates.md",
+      "bytes": 44283,
+      "sha256": "11f07b481c06453611572e01cdbbb50569e52471c272ee1e8c74b1b77742ed69"
+    },
+    {
+      "path": "docs/utau-feature-parity.md",
+      "bytes": 8154,
+      "sha256": "3beb2b48280ff2575cbc795ea3c327f6fa774fc1b6d4c2b713b39148e7c75b28"
+    },
+    {
+      "path": "docs/utau-linear-flags.md",
+      "bytes": 3177,
+      "sha256": "7d7f44736474cf686428a320bbe82ff276ff6b9274eba8acc5c75dd1393b50a5"
+    },
+    {
+      "path": "docs/windows-build.md",
+      "bytes": 4112,
+      "sha256": "79dd0053fd808339c7f4687dcaf559fe2fa8f79b59e390688df8fc158f1c5003"
+    },
+    {
+      "path": "juce/CMakeLists.txt",
+      "bytes": 20354,
+      "sha256": "48bf1de2c639e619df43afb883f1e1c024b80f41ba2b6b5c33bd01be2c2a5be5"
+    },
+    {
+      "path": "juce/README.md",
+      "bytes": 3374,
+      "sha256": "dd3c9303dc5fbbee675fa2362b68815769dfc38611b28eb80cabb6a1226b44b1"
+    },
+    {
+      "path": "juce/cmake/windows-msvc-xwin.cmake",
+      "bytes": 2881,
+      "sha256": "d5c9cfbbce7378126b8972333255a5a4c32e38b8cea5ab58821da704be40be15"
+    },
+    {
+      "path": "juce/cmake/windows-msys2-xwin-native.cmake",
+      "bytes": 2520,
+      "sha256": "3ba4cfb16046198511bce740e3bf3a44a8bd085f3a6e55164b71e1e3aef6fd16"
+    },
+    {
+      "path": "juce/engines/diffsinger/bridge.py",
+      "bytes": 34345,
+      "sha256": "38a3063cfa582e6fd941a7c55dfef367b2c5b6913158750aabb130d6c54146bb"
+    },
+    {
+      "path": "juce/engines/diffsinger/compatibility.py",
+      "bytes": 9883,
+      "sha256": "0901275b5f2d47ea89cbc554d9332a7314d521148046cee8674137bd32ab09ec"
+    },
+    {
+      "path": "juce/engines/diffsinger/english_g2p.py",
+      "bytes": 4031,
+      "sha256": "afaa1351579c109b0899d19000ed51eb93f2e59628916786a1eaed3268f713b7"
+    },
+    {
+      "path": "juce/engines/diffsinger/expressions.py",
+      "bytes": 6597,
+      "sha256": "0099dc76e87a9d080ff5c9b710ab1a630cc92eca8dc56d28ae288d439303709a"
+    },
+    {
+      "path": "juce/engines/diffsinger/inference.py",
+      "bytes": 5716,
+      "sha256": "5cab2a63a49ed75809b983a8f592e5d78d8749506f8c6d54f5161949eb9eac34"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/LICENSE-cmudict.txt",
+      "bytes": 1754,
+      "sha256": "bd4ce8e44170a5f9f481310ca85c51de3c4f851a65e679b40e603b143bd3542a"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/LICENSE-g2p-en.txt",
+      "bytes": 11357,
+      "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/LICENSE-pypinyin.txt",
+      "bytes": 1105,
+      "sha256": "1e6c90014b4912815c296ee64bb6f6280af47e6d4c5d80e86232dfc5defe764c"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/checkpoint20.npz",
+      "bytes": 3342298,
+      "sha256": "b8af35e4596d8dd5836dfd3fe9b2ba4f97b9c311efe8879544cbcfcbd566d8c6"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/cmudict.dict",
+      "bytes": 3618488,
+      "sha256": "81917843c7f44ce2b094ac63873c2c7a4cf802040792c455ba3ca406891c3d22"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/__init__.py",
+      "bytes": 1654,
+      "sha256": "d76b62b3b5b0b1a8f6f2f834e4c795d6580d9f3d2a9d4243524098217e528160"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/__init__.pyi",
+      "bytes": 1527,
+      "sha256": "06a56de3de53f7a4072bc91476d7a51bb104365caae1088166e12ef52660e22f"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/__main__.py",
+      "bytes": 118,
+      "sha256": "1c0708354996d4606d94c6e2073986d22ac803518b888fc76ddf2d4c4337b402"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/__pyinstaller/__init__.py",
+      "bytes": 193,
+      "sha256": "4339bfcc5b805f0714bb40c0a6c63ca1b1ae637e841fb3889b2ed19ddff482a2"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/__pyinstaller/__init__.pyi",
+      "bytes": 71,
+      "sha256": "a33a6d28782c0f082725acb0ff07ab99f1457b7f9bc196e69789bee54bf48ed0"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/__pyinstaller/hook-pypinyin.py",
+      "bytes": 280,
+      "sha256": "94717e478968c3eafd153851004874f6eea056d9428f5b248b4a15c91d68712b"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/compat.py",
+      "bytes": 631,
+      "sha256": "a3365385089e50f7fc2116fbd9151e0414eead666be50f5364d44602f50daa06"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/compat.pyi",
+      "bytes": 280,
+      "sha256": "902c4e0d8db56cc0a556cdb54d7156c4171f5ec63dc5b2a8052c7a6e9b7abb9c"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/constants.py",
+      "bytes": 4918,
+      "sha256": "2b19c791decc7ffbef1b24fc469f492f2db060c2dcb43bcfa5828afb78ccac62"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/constants.pyi",
+      "bytes": 1611,
+      "sha256": "0adee30aedb402284a2489fb46795ec29f355f59442956d3eb0503fee5b5b2eb"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/_tone_rule.py",
+      "bytes": 143,
+      "sha256": "e0ffda1e6b5421ce4056d6c420122b88234a2c5e0263b4da5af469f9b8aecb23"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/_tone_rule.pyi",
+      "bytes": 128,
+      "sha256": "87811c1174522d1bf55f4bc07dc772c7c648cdf0e1cecb9b1f2da5e8bdb73f99"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/mmseg.py",
+      "bytes": 167,
+      "sha256": "38ab4c8035a145daf306cd440661f7d06c9c4e7da4e7b8ff1159540342085da2"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/mmseg.pyi",
+      "bytes": 591,
+      "sha256": "950bd91176567aad3744c006ebf85e8b7bd77432944944feaccc4ee5ea77c801"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/neutral_tone.py",
+      "bytes": 2267,
+      "sha256": "1244b5e3b9c06588429c543e0589934a69ec15b42aec6b67f6edbb33d6c3f411"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/neutral_tone.pyi",
+      "bytes": 518,
+      "sha256": "c6ba84075db7e4e1c265a5ca575aaeda41f434ca75d26fec05d8418eae077aa4"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/tone_convert.py",
+      "bytes": 565,
+      "sha256": "3688a246d8698c3953c97778cbeaefea66399c7850a06003a96594c95e91ccec"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/tone_convert.pyi",
+      "bytes": 1814,
+      "sha256": "d1571a418396476cb26fff8a8f69711abf63b5233ddfce392c2fbcf3aec031e4"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/tone_sandhi.py",
+      "bytes": 7077,
+      "sha256": "33bd5350484ff00b9c3f4e6d73942b53de8e99ab307ab9ebe678e839d6c717c2"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/tone_sandhi.pyi",
+      "bytes": 594,
+      "sha256": "d2f5295c8d56cfe6abc0974f9f102fc307205ef41024e2859eb483dc7413f66a"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/uv.py",
+      "bytes": 1334,
+      "sha256": "db18fe994d67f19ccb2a627aa53adcf8d36881a4a777e2b561a199157009f083"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/contrib/uv.pyi",
+      "bytes": 389,
+      "sha256": "e93e29c1806572f54d5c9bef1b95c4e96ebded24e4e5b828449f1ba80a43424b"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/converter.py",
+      "bytes": 15228,
+      "sha256": "1bbd6c9b63d033a1c05f929b94ac7002a0e4c6d226e48bdbe074250fa4a15e44"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/converter.pyi",
+      "bytes": 5635,
+      "sha256": "40cd983513a797b2d06b4b1f605e6d9e2498f86f2aacda2b78feef26c45988a6"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/core.py",
+      "bytes": 16000,
+      "sha256": "1575e91eaabf14421447916c0a892acaa64fb86949d4e6494ea9cd3b4661a0e4"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/core.pyi",
+      "bytes": 3400,
+      "sha256": "1bcef54c36ff2f4ffaf8dbc336769d7e5e7bcd8a6c4e1a3120e396f33a7e5e38"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/exceptions.py",
+      "bytes": 396,
+      "sha256": "baa77b9396728d76ae4975edd8ef524a4a9e02adf228ce0d7ab371e19b6aa75c"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/exceptions.pyi",
+      "bytes": 228,
+      "sha256": "0a2355fef53cd7216a512fe483234bd6857614117f5ba56bde1b457bd886ce0f"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/phonetic_symbol.py",
+      "bytes": 874,
+      "sha256": "4072121012dabf2d35442d8ee4e75044624545aedb6e4adc4bada592b97f1b9a"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/phonetic_symbol.pyi",
+      "bytes": 136,
+      "sha256": "a9a31a1c97d3da011415c98eb3f1b3d52056731f63ddd6d1f9f6373d6054428f"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/phrases_dict.json",
+      "bytes": 2545585,
+      "sha256": "a45ff140a6b631ca9c82127b280a2f414e0aba6bb2824a0e9d1e77fff359c665"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/phrases_dict.py",
+      "bytes": 421,
+      "sha256": "3f6f39bbca68d8d1676ea463cd4620b934b03160cc5042fb9d9007b8f3a80b9e"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/phrases_dict.pyi",
+      "bytes": 94,
+      "sha256": "9a9e68169fb350ccc1a616df9a943e8a70e565daf07b1e813ffc66dbcd865f10"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/pinyin_dict.json",
+      "bytes": 788780,
+      "sha256": "5f294c01e6c6c0a1c8e329c79335a3f8e0b27d06bf1de7a99244b765892d1e5b"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/pinyin_dict.py",
+      "bytes": 517,
+      "sha256": "245c1f70509432b289cde1f938157cd5ff1372d1d083b577d5fab72b4dfcda08"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/pinyin_dict.pyi",
+      "bytes": 74,
+      "sha256": "905ab44cb10c290b940314fd53a64bdfa55a74ca5a2746d36c8b071423ec4d84"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/py.typed",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/runner.py",
+      "bytes": 4598,
+      "sha256": "9c1e65c34300391daf7f9d67d62b6b8b5cfc92fcd53baf8f3c0806268e1f4452"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/runner.pyi",
+      "bytes": 241,
+      "sha256": "7a8102359fe134a9a855b431002b081581dafbd18601e83c2324aee35429ba31"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/seg/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/seg/mmseg.py",
+      "bytes": 4567,
+      "sha256": "d6062526432a4bf199b7058cdc3cb95068624df93d1fb9982168f68b6322d56f"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/seg/mmseg.pyi",
+      "bytes": 833,
+      "sha256": "08b980a5cd4781342ff6ccc94b03a9de78d9a0bb1d19111205fde5ff63ddda9f"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/seg/simpleseg.py",
+      "bytes": 1885,
+      "sha256": "875419d7ca6d8654cd185a3ef6ade1723ed667be3d98c30776fbed5789acedca"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/seg/simpleseg.pyi",
+      "bytes": 186,
+      "sha256": "b010392b5091587199697e4c7aecabf1f0555886b0d31e1e0aa154251048a1e2"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/standard.py",
+      "bytes": 4406,
+      "sha256": "ab115f304d0c54a086fa4dc42460cec6c9dbe1ae2ec81f6db2fd15988f424213"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/standard.pyi",
+      "bytes": 306,
+      "sha256": "2cf2e8b9c4e3c631be8a93a21e5bfc7f2331fc088bba5e5fe3eca5e919e58a97"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/__init__.py",
+      "bytes": 2102,
+      "sha256": "188ff8bd75d2208eefd879a784796499cc4e5a4e63021568b69347f93691c990"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/__init__.pyi",
+      "bytes": 619,
+      "sha256": "b330d646e91a2529341477d08835fcf0296cb118012065d2a3fea127e58bdde3"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/_constants.py",
+      "bytes": 1532,
+      "sha256": "0e925a829e8884f61ea06a5d53c9a12984ed84ecb2a12d26fccb749eb11b9d03"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/_constants.pyi",
+      "bytes": 421,
+      "sha256": "9472e930e49f7f11d99332a1cd1c7868560873637e780ce0ba2fc2c98199ec54"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/_tone_convert.py",
+      "bytes": 19866,
+      "sha256": "c31261e3ab6ed74159ef5b9edaae8d5493b51b83671b79287710b4a217000c88"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/_tone_convert.pyi",
+      "bytes": 1813,
+      "sha256": "9fcdd8fa11bfc8d89f45126af4c1b256292fa47a34bef72434d0faa0c88caccb"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/_tone_rule.py",
+      "bytes": 1755,
+      "sha256": "41ee1148cfbbc76c7de057e33f4856c13f1be3e651c98c3099b2e782f59f7faa"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/_tone_rule.pyi",
+      "bytes": 128,
+      "sha256": "87811c1174522d1bf55f4bc07dc772c7c648cdf0e1cecb9b1f2da5e8bdb73f99"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/_utils.py",
+      "bytes": 2558,
+      "sha256": "581c7dc5dd4cadaf9dba136a1c29f1310fd1396df13a6aed89039370bf177600"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/_utils.pyi",
+      "bytes": 304,
+      "sha256": "31a403bfdfce468468f69f91e4de864c056f60cf41cdd61c3125ccddc38871f5"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/bopomofo.py",
+      "bytes": 2383,
+      "sha256": "92f96377cacf8a2d8503803eedeee7ef3db4fe73817998434fd53a1bdb97bcaa"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/bopomofo.pyi",
+      "bytes": 435,
+      "sha256": "4c1db946064dbeb449b1762ce474ac857c4665bd0506a80ee7621cb67356d8b4"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/braille_mainland.py",
+      "bytes": 3125,
+      "sha256": "6795856841a5afd5b0245b38ab730fcfc19070911d3b6130aadf911d1a077810"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/braille_mainland.pyi",
+      "bytes": 543,
+      "sha256": "e99870e87f3800b445d54985cf1e6a94c0cc962f6e5c55453dec779e52d22953"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/cyrillic.py",
+      "bytes": 2445,
+      "sha256": "fcb979838e6ce99bbcadb3dc7a5d1a5a55ddb39419efe6c8a3668f79d8ca495b"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/cyrillic.pyi",
+      "bytes": 440,
+      "sha256": "274a62c6ccf516987ece866ecef63dffef21df001a29561402a653bb29eea873"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/finals.py",
+      "bytes": 1246,
+      "sha256": "b7823d46e6a00eb9c361c84f8d92ac405b32b60a63caa03ea00551f10da29679"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/finals.pyi",
+      "bytes": 389,
+      "sha256": "4c9bc2f394c1ead14c1e2258c24284be646e729bdc47238b9843886813c476cf"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/gwoyeu.py",
+      "bytes": 2573,
+      "sha256": "37db64b421c0953c9768bdc1deefa5d9908301a83cb7081eef0372c7c831a27f"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/gwoyeu.pyi",
+      "bytes": 283,
+      "sha256": "8458b786b538abb43b7940322b8cef0eb2ea3f85e2e9086272f0ab0f988a0099"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/initials.py",
+      "bytes": 352,
+      "sha256": "cdecc3cd259af6407151b232c9e4c6317fc3902e1d457c365d1e036ec6adc2b9"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/initials.pyi",
+      "bytes": 85,
+      "sha256": "cb651ddce746db9310d459995e3d48436f1d6a7118168e5ba290adbe8649ea4c"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/others.py",
+      "bytes": 712,
+      "sha256": "f413219c53e07c37b6da816b36a24c0a2ac811045571a110fd3e2d43bea1114f"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/others.pyi",
+      "bytes": 244,
+      "sha256": "6d859c922defbfc2d818e6958ea38390dff4b37a7fee42312681226dfa9c7ac2"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/tone.py",
+      "bytes": 917,
+      "sha256": "ef352422c8497465ff7c84c1099f444c7aeada7178def00e3191819f4c13a154"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/tone.pyi",
+      "bytes": 297,
+      "sha256": "f2bd7d5bce89bb754bd26a2937f257acacb017596f087e48a091ef9757a2a6ef"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/wadegiles.py",
+      "bytes": 12194,
+      "sha256": "a033cd299e39d94b0bb794261257837a4253488c56d291bc70f3f8db382bc182"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/style/wadegiles.pyi",
+      "bytes": 292,
+      "sha256": "1fd9462ac7d34e2a310f3552a2fa86f2a5f4260c6c6d631a3c624f12eab9f7e6"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/tools/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/tools/toneconvert.py",
+      "bytes": 2417,
+      "sha256": "18379b99c67a62f39b79342aa44e1d6330efe89706b237007d1e525f4821d330"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/tools/toneconvert.pyi",
+      "bytes": 430,
+      "sha256": "c388473a0d9f3b9e1d76c2f52ac355f99d459f10d213edcb886f9205f7531535"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/utils.py",
+      "bytes": 856,
+      "sha256": "b40f891f2c0a24194b55dac75c324181facfd241771255e401c4e4dc12a676f5"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/pypinyin/utils.pyi",
+      "bytes": 241,
+      "sha256": "9bfc99a2375aaaf810c8632efec3152974b15e4781559b8fffc768d0c6d93b14"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation-data/sources.json",
+      "bytes": 428,
+      "sha256": "cd02f3b15c068dfabc5992c8e2bddda352209a4f5ac3770137e1089d73c32903"
+    },
+    {
+      "path": "juce/engines/diffsinger/pronunciation.py",
+      "bytes": 13673,
+      "sha256": "854ffc8445fe2eadfd9153588ca3b66182460690adf39a9dbc331114b2c94bf1"
+    },
+    {
+      "path": "juce/engines/diffsinger/requirements.txt",
+      "bytes": 149,
+      "sha256": "681f3221f0048eb35a1964f8ed5e09f6cad132decf79aa9362f04337dece400a"
+    },
+    {
+      "path": "juce/engines/diffsinger/runtime.py",
+      "bytes": 5686,
+      "sha256": "d098c86f44ad5ff17909c2517d890c56494909a0c7cdb3ceac0e5941e96d3b74"
+    },
+    {
+      "path": "juce/engines/diffsinger/timing.py",
+      "bytes": 3821,
+      "sha256": "aa95473112f6fd8951042e9d8b2c849620da5668398b101e0f06e76d1628aff9"
+    },
+    {
+      "path": "juce/engines/diffsinger/variance_retake.py",
+      "bytes": 7770,
+      "sha256": "efc4041d8ca852990d62feeec3cf266197b5f7db8dddc145e27bf815cbd5d072"
+    },
+    {
+      "path": "juce/resources/icon-small.png",
+      "bytes": 20454,
+      "sha256": "5e30c62019b2627270e918f247a68bcabe440dfa02e937cd0a5d47990cfd0b62"
+    },
+    {
+      "path": "juce/resources/icon.png",
+      "bytes": 993891,
+      "sha256": "2eeea4a6cd222ae309aac1ba6bf8f1e9cbeab81aa80ecd1c6851bea759d21fcc"
+    },
+    {
+      "path": "juce/resources/note-dance/1789609568206.gif",
+      "bytes": 19799,
+      "sha256": "b7f54aa5881794d7f3ed8b9cacc1ef7f1609ccfd9f05cc8aa18467e71ce9cfd0"
+    },
+    {
+      "path": "juce/resources/note-dance/1789609570935.gif",
+      "bytes": 22444,
+      "sha256": "d53d4288036f744ee72d9fe2c7bee71353304be7da363486525bdeca7f5ec100"
+    },
+    {
+      "path": "juce/resources/note-dance/1789609573303.gif",
+      "bytes": 19799,
+      "sha256": "b7f54aa5881794d7f3ed8b9cacc1ef7f1609ccfd9f05cc8aa18467e71ce9cfd0"
+    },
+    {
+      "path": "juce/resources/note-dance/1789609575392.gif",
+      "bytes": 6572,
+      "sha256": "20c1aafc76c9afed0b5b628ddec23e687526ac5bbdf7270ec8e1c57bb57b9f7f"
+    },
+    {
+      "path": "juce/resources/note-dance/danceEight.png",
+      "bytes": 29227,
+      "sha256": "99b2dd2fd13369b0412ac9f8f010cf7ebd7b29227f19fc05218220f4c47f91bd"
+    },
+    {
+      "path": "juce/resources/note-dance/danceF1.png",
+      "bytes": 23653,
+      "sha256": "7b6d19cd1d437cfa74941e5702b7092bc8281595c34c0a08e7990533ecb8acf2"
+    },
+    {
+      "path": "juce/resources/note-dance/danceF2.png",
+      "bytes": 23653,
+      "sha256": "7b6d19cd1d437cfa74941e5702b7092bc8281595c34c0a08e7990533ecb8acf2"
+    },
+    {
+      "path": "juce/resources/note-dance/danceQ.png",
+      "bytes": 8745,
+      "sha256": "485b228e30be7c6c80d1444b09035ad8dc411f49fc5441a2225881f006b2475f"
+    },
+    {
+      "path": "juce/resources/note-dance/frames.inc",
+      "bytes": 666,
+      "sha256": "48c7ab495daf360c26bc50c128f0fbed1121a5d495c1df7fc4c92369e69c2048"
+    },
+    {
+      "path": "juce/resources/windows/HachiShifterNext.manifest",
+      "bytes": 1698,
+      "sha256": "f20c5002eb844682d118f10403565839e2cd1d8f7b78f278feffca3c03adad16"
+    },
+    {
+      "path": "juce/resources/windows/HachiShifterNext.rc",
+      "bytes": 34,
+      "sha256": "9ca92b041532346f2e8aa19da191c77574f08e4f35fc3128b8298a38641ff6c0"
+    },
+    {
+      "path": "juce/src/AssetManagerComponent.cpp",
+      "bytes": 39520,
+      "sha256": "4f698179869ecb047d043875b44f35aa418d0f4200dce8d83ee7b3577dcdd1e4"
+    },
+    {
+      "path": "juce/src/AssetManagerComponent.h",
+      "bytes": 6386,
+      "sha256": "5d42457eb1a96f0d0fe81a5539bda72d1d0c61ff0a6fd4dc05f4fa21e9449876"
+    },
+    {
+      "path": "juce/src/AudioEngine.cpp",
+      "bytes": 164235,
+      "sha256": "9acb9a61611dceec8c3745ac40aa6709ef7eaf9c5a1f88da810ba7890cfbe01d"
+    },
+    {
+      "path": "juce/src/AudioEngine.h",
+      "bytes": 16882,
+      "sha256": "93eef372db429e07b07f5814f004fec053c4019dc513c955398dce830a5def0f"
+    },
+    {
+      "path": "juce/src/ClipParts.h",
+      "bytes": 7760,
+      "sha256": "3998d7280aecc28242c91300b0d35b2d4d1585c3537adc49bd3e3c8e35cb66fd"
+    },
+    {
+      "path": "juce/src/DiffSingerParameterCurves.h",
+      "bytes": 3407,
+      "sha256": "7ded3f0180babf53d27654c3fe0a436127ab9f5bd899d598004c717e7b618c88"
+    },
+    {
+      "path": "juce/src/DiffSingerPhonemeDisplay.h",
+      "bytes": 430,
+      "sha256": "94ce570ae807359ba09ccaa806ced971446eea5525dc412b6bbfaf2302fe62ac"
+    },
+    {
+      "path": "juce/src/DiffSingerPhonemeEditor.h",
+      "bytes": 21197,
+      "sha256": "44522ecf9372768a00ab3c22196f78c7c98bd21e7c8555585aa5ae6b40c532af"
+    },
+    {
+      "path": "juce/src/DiffSingerPitchHandles.h",
+      "bytes": 4609,
+      "sha256": "087057fc789112bd591e9c71ebd2adee12562232a345d80bbfa44d023c554990"
+    },
+    {
+      "path": "juce/src/DiffSingerPitchRestore.h",
+      "bytes": 5196,
+      "sha256": "6a2bee57ad554e24d4693f0dc121589d576c82f44dbf77826aa600c5341e547a"
+    },
+    {
+      "path": "juce/src/DiffSingerPronunciationEditor.h",
+      "bytes": 7577,
+      "sha256": "ee38f836b4afdcb262e7c481b5e58934be0de15fd747cb9e4969d0c2414f9835"
+    },
+    {
+      "path": "juce/src/DiffSingerRequest.h",
+      "bytes": 1815,
+      "sha256": "a5dd4136750976b99a343816a6a6d3033cff59b5b315c3e422c93a1f6e144135"
+    },
+    {
+      "path": "juce/src/FlagCurveDrawing.h",
+      "bytes": 2925,
+      "sha256": "37c23908f5a4cc734d43b8d10136d6f0e36080748b43da9b1a00ad84cfa0acec"
+    },
+    {
+      "path": "juce/src/Hamood.cpp",
+      "bytes": 27795,
+      "sha256": "a73df5740895a29c9158a8ae1970aaba9e13eb0ec0b4a36c0d9e5f8194f0d55c"
+    },
+    {
+      "path": "juce/src/Hamood.h",
+      "bytes": 2301,
+      "sha256": "bc2be3ff45f63a8fb13c1569c1ef56d0d57f25142e60f8ab4e6338ffafb713e3"
+    },
+    {
+      "path": "juce/src/HamoodAudio.h",
+      "bytes": 12773,
+      "sha256": "572aab28f7f2ec248fe2211fdbbbebb65f62a6c4320a6526e2c1df52c1ee9490"
+    },
+    {
+      "path": "juce/src/I18n.cpp",
+      "bytes": 61763,
+      "sha256": "be4cb2088225a4592cef03752b372c64523deab2be68d7a4703cb3af81d01e65"
+    },
+    {
+      "path": "juce/src/I18n.h",
+      "bytes": 446,
+      "sha256": "a526915f1ef9dcc0910b9524d825ce1285a0e60689e08f9499ce4a6c5b91cd0e"
+    },
+    {
+      "path": "juce/src/Main.cpp",
+      "bytes": 1132094,
+      "sha256": "99b0828d5f4820ac8c4fe11d575fa2987d799b2f841d6e4d0db178c9875e23dd"
+    },
+    {
+      "path": "juce/src/MainComponent.cpp",
+      "bytes": 261265,
+      "sha256": "256810bd2af8dda8ad59e70f503f09b1ec88e71f9cb83703efdab526f7227a29"
+    },
+    {
+      "path": "juce/src/MainComponent.h",
+      "bytes": 38178,
+      "sha256": "1d22259e1031149caeabef50b9c291b97fe9e1b1103507ad0999be0710778a5b"
+    },
+    {
+      "path": "juce/src/MainComponentDiffSinger.cpp",
+      "bytes": 36794,
+      "sha256": "79c78b8de25d23b0a0c3e22b96cbc289a8432d1f825eb8fa8c99ffaee8c42ec9"
+    },
+    {
+      "path": "juce/src/MainComponentHamood.cpp",
+      "bytes": 28634,
+      "sha256": "60ac83c4c5441487757fe22684d93690bd4e01a55d5bb5edfa0da684a22f31da"
+    },
+    {
+      "path": "juce/src/MainComponentMcp.cpp",
+      "bytes": 53828,
+      "sha256": "bf0f7c868436403faa12fe5ade58416e4f333ffd9853e194a87da5b378408c03"
+    },
+    {
+      "path": "juce/src/NoteDanceAnimation.h",
+      "bytes": 2418,
+      "sha256": "02a7a616edb556bd64cd6f029dced8dde273f119f3f83201315b998e17a06ad2"
+    },
+    {
+      "path": "juce/src/OtoWaveformEditorComponent.cpp",
+      "bytes": 60655,
+      "sha256": "0cbb9582bc6f9ff12282558db8423bcedce03d2326d967ef4eb89208af1d5bf7"
+    },
+    {
+      "path": "juce/src/OtoWaveformEditorComponent.h",
+      "bytes": 18692,
+      "sha256": "fccf527f45094d28de05248a762ca8e061a85d8d81d924c9b0404b77385540e0"
+    },
+    {
+      "path": "juce/src/PianoRollComponent.cpp",
+      "bytes": 450644,
+      "sha256": "1feb5adf2408f64370af0cad9edff4b9e795a01a67186dab60bc6ef03031bcea"
+    },
+    {
+      "path": "juce/src/PianoRollComponent.h",
+      "bytes": 70477,
+      "sha256": "2383ed9eacb384e2bfd39db1c377c80dcf15ebae8de68045d631f1139867bc8e"
+    },
+    {
+      "path": "juce/src/PianoRollDiffSingerOffset.h",
+      "bytes": 13391,
+      "sha256": "ac54146a153eee384954757e37e12dbfe3c5ce8ea8bf1ea0c7326f78f08d0403"
+    },
+    {
+      "path": "juce/src/Pinyin.cpp",
+      "bytes": 1184,
+      "sha256": "13676e6e32bf67a4a7495fb189e758f34fabf9b82407666ef76121f177cba5bb"
+    },
+    {
+      "path": "juce/src/Pinyin.h",
+      "bytes": 759,
+      "sha256": "3cf021d36e16aa1ccac7adce8871326358bd78d6ac10e943c5768dc9819ff8bc"
+    },
+    {
+      "path": "juce/src/PinyinTable.inc",
+      "bytes": 367401,
+      "sha256": "3f46aa809025f11ce2c352606668f29f1c4d528c5a1e53a37bc74c9d81dbca35"
+    },
+    {
+      "path": "juce/src/ProjectModel.cpp",
+      "bytes": 345486,
+      "sha256": "58e50ef0026be5be3d3a34104404d50db33ea8a4454d69cc69c0e3f7de0bed28"
+    },
+    {
+      "path": "juce/src/ProjectModel.h",
+      "bytes": 60589,
+      "sha256": "cd2090809b2b8eee6608cfd2ba92d041d3ab0037f6c1cd8b40c9145755f10623"
+    },
+    {
+      "path": "juce/src/SampleSettings.cpp",
+      "bytes": 84913,
+      "sha256": "b183f95f4d09b8a5313b5fea8758633dacde22a184c7740e8d0f950b78b98e21"
+    },
+    {
+      "path": "juce/src/SampleSettings.h",
+      "bytes": 11452,
+      "sha256": "a91083654e190e4567dba0fbf7f7e9dfb438b0fbcd3d6b09c5b86cc90b405b38"
+    },
+    {
+      "path": "juce/src/SettingsComponent.cpp",
+      "bytes": 30207,
+      "sha256": "ffb81c9827daf4005853ff39f6f5d8a9a860bcc2651d95c604efba32351a76d4"
+    },
+    {
+      "path": "juce/src/SettingsComponent.h",
+      "bytes": 4644,
+      "sha256": "d097bd72d6d3b48788551d03418f034eca17c6143dc99baa3876cd2b4a2866f8"
+    },
+    {
+      "path": "juce/src/StartupLog.h",
+      "bytes": 546,
+      "sha256": "c7ee5de9c5c06e97e2b65ca821277e70c9d22e89afc93d1afdf2e4bef1b92bb6"
+    },
+    {
+      "path": "juce/src/Theme.cpp",
+      "bytes": 16312,
+      "sha256": "b5cb92e61530c85130a0751132725b61eaa3434d094d93bffd33d5f60280b3a7"
+    },
+    {
+      "path": "juce/src/Theme.h",
+      "bytes": 2049,
+      "sha256": "6d713bdf6d507e9d4e14a8ac3b0f50c1e3e0bfe5aa64e942440588f1e3d2b77d"
+    },
+    {
+      "path": "juce/src/TimelineComponent.cpp",
+      "bytes": 51874,
+      "sha256": "984c19fa8bc28da59f282d4bcf6019bcea1180e10f4de403aec9edba6674ed49"
+    },
+    {
+      "path": "juce/src/TimelineComponent.h",
+      "bytes": 7251,
+      "sha256": "c0abd9290a851e997caeb68b90b8ee4c15ed369c44e9458426b22b2d1697312b"
+    },
+    {
+      "path": "juce/src/TimelineGainEnvelope.h",
+      "bytes": 8168,
+      "sha256": "a151b8a8b10c849a7254a72e1c9c840dbbbdcfbb6f81e95083bb21bd6d874ac5"
+    },
+    {
+      "path": "juce/src/TrackGainEnvelope.h",
+      "bytes": 4928,
+      "sha256": "bf616e4a365948e7fd63d2eb5ad24acdbe698834fd771bcdde109b0fa2df3628"
+    },
+    {
+      "path": "juce/src/TrackListComponent.cpp",
+      "bytes": 21732,
+      "sha256": "d7af92d3791013c3933cb3d320393f63ebeadf57eeff86a06f06afa271eaf629"
+    },
+    {
+      "path": "juce/src/TrackListComponent.h",
+      "bytes": 5922,
+      "sha256": "f40d0ce48ff857486ef28149561ed6564c179601842b4547206c120a7e46e7db"
+    },
+    {
+      "path": "juce/src/VoicebankSettingsComponent.cpp",
+      "bytes": 25330,
+      "sha256": "61dd12cad485f7a592709d5db89c3691c4322be731d9882f3332c7cef894968c"
+    },
+    {
+      "path": "juce/src/VoicebankSettingsComponent.h",
+      "bytes": 4156,
+      "sha256": "d8db11b028f71088074f66974b572cccacc5edbeddee62b02f511f049ecf76fe"
+    },
+    {
+      "path": "juce/src/WavExportOptions.h",
+      "bytes": 908,
+      "sha256": "8393b55933f5312691848f5554256eea124525d21884064fbe0d25af6a0debd7"
+    },
+    {
+      "path": "juce/src/ZoomScrollBar.h",
+      "bytes": 4921,
+      "sha256": "df6ebddb4c1153fe784aaccbe66c028856ff677929c0f455989acb9fe22cd15b"
+    },
+    {
+      "path": "juce/src/backend/AmplitudeEnvelopeCurve.h",
+      "bytes": 1558,
+      "sha256": "b84f3018209e3c41e8e038aa68efc9d224ec1397a63deb71ff2cab6bfda89f24"
+    },
+    {
+      "path": "juce/src/backend/AnalysisService.cpp",
+      "bytes": 16005,
+      "sha256": "e14253101bd4a8e31c9340cacf31e3df3b3c377430d73c0902870336ae3a6f13"
+    },
+    {
+      "path": "juce/src/backend/AnalysisService.h",
+      "bytes": 2401,
+      "sha256": "7bb461aac0794e46dfdfc48ae42e804ff1285e694838b8baf2a6ac7dde3453dd"
+    },
+    {
+      "path": "juce/src/backend/AudioFileReader.cpp",
+      "bytes": 3778,
+      "sha256": "4a8442dabe59a3a30b04cd518938ff35b07e758060b1f9464f8588149694e81d"
+    },
+    {
+      "path": "juce/src/backend/AudioFileReader.h",
+      "bytes": 261,
+      "sha256": "c96886af354f0b4a1383511b0eca10506cac39716a32b1ca68f1623f75e47ccd"
+    },
+    {
+      "path": "juce/src/backend/DiffSingerOptions.h",
+      "bytes": 2573,
+      "sha256": "3a32adda447c03ce14bcbfd7ce0a52b6cd31c58ceed5ef55e57410fca4ca4924"
+    },
+    {
+      "path": "juce/src/backend/DiffSingerProjectCache.h",
+      "bytes": 9765,
+      "sha256": "d4973b00e5835ec807ce64addeaaf4f317bd8f315f8ee3298b70ac84bca1683c"
+    },
+    {
+      "path": "juce/src/backend/DiffSingerRenderer.cpp",
+      "bytes": 17908,
+      "sha256": "02fefc855b07e650fe18a54bb6e336d730ba5f43f4ec7f655e0fceebd3eb5db4"
+    },
+    {
+      "path": "juce/src/backend/DiffSingerRenderer.h",
+      "bytes": 955,
+      "sha256": "2739ac254462ea02b6b7ef0a49005524b6a49221800f6f0f0401f869603959b7"
+    },
+    {
+      "path": "juce/src/backend/DiffSingerTiming.h",
+      "bytes": 897,
+      "sha256": "635f38e49cc44153b7e91723aca2fa956288f4d366a65e1ed26516bc9b9a8149"
+    },
+    {
+      "path": "juce/src/backend/FcpeAnalyzer.cpp",
+      "bytes": 16913,
+      "sha256": "e09aa25f826b6b6cb9264104e62d97a4bd08083f48e9c1f8fe5fd6b6c127e49d"
+    },
+    {
+      "path": "juce/src/backend/FcpeAnalyzer.h",
+      "bytes": 742,
+      "sha256": "033c35cdb617d9b01cee190dce5ba61aa8aea8cf01a81614d88d0f38ddd36788"
+    },
+    {
+      "path": "juce/src/backend/GameAnalyzer.cpp",
+      "bytes": 31951,
+      "sha256": "a8b33e92e465db613f93dc47d9c63fac8aabab5ac8ba4c2d84a08f2130a2f1ec"
+    },
+    {
+      "path": "juce/src/backend/GameAnalyzer.h",
+      "bytes": 922,
+      "sha256": "6c054c2f4747b7b3841c97944e20332f6b694f5a164e564b2259244c51a520bd"
+    },
+    {
+      "path": "juce/src/backend/LiveMcpBridge.cpp",
+      "bytes": 8564,
+      "sha256": "9e402fc2d4864b42d607ea05064b70bf6fe38b84f90708e3a70578a9eb611728"
+    },
+    {
+      "path": "juce/src/backend/LiveMcpBridge.h",
+      "bytes": 882,
+      "sha256": "87b38f477e61e577abd30fa05af7e906a60a4ff2ae72d8413f1de6fda3eee342"
+    },
+    {
+      "path": "juce/src/backend/Llsm2Renderer.cpp",
+      "bytes": 19428,
+      "sha256": "f115e4fcceb808ce2717a8958a9f8c1add3ca2314e7e5df0f1c0c213e547ff16"
+    },
+    {
+      "path": "juce/src/backend/Llsm2Renderer.h",
+      "bytes": 903,
+      "sha256": "d3a54b15265aee8dc8a359defa2cf445636b7b73e90556117e04e81ac59168d1"
+    },
+    {
+      "path": "juce/src/backend/McpServer.cpp",
+      "bytes": 101647,
+      "sha256": "17f6c5996bc9d293bf11ec6dff66754b2edaeaa7c92986a1d3bbdf5fbb8ee073"
+    },
+    {
+      "path": "juce/src/backend/McpServer.h",
+      "bytes": 3382,
+      "sha256": "e8db23247ccdfdbcb079eb905d514b6c37b0fb2593b95cdd3fcc51bc61894a4b"
+    },
+    {
+      "path": "juce/src/backend/MelodyneImporter.cpp",
+      "bytes": 54283,
+      "sha256": "725d5be60f1cd68eb6ad2f1067b244a3f2c8da0512d6e7f01b844cd8195a25fd"
+    },
+    {
+      "path": "juce/src/backend/MelodyneImporter.h",
+      "bytes": 1480,
+      "sha256": "fbf8f21e895b09088c7b8228f69afd12c9deb606fc40042d245fe38b36c40f68"
+    },
+    {
+      "path": "juce/src/backend/MelodyneProvider.cpp",
+      "bytes": 5112,
+      "sha256": "a51272337115dda33acf51034f0ab6392d48b8e0b1b00aec3d5f205a3c19c298"
+    },
+    {
+      "path": "juce/src/backend/MelodyneProvider.h",
+      "bytes": 1853,
+      "sha256": "215eb3cb5eff68c4c743dc68dbb1260331f1432fa5ab766238c97c7e73e2e1ed"
+    },
+    {
+      "path": "juce/src/backend/Mld3Renderer.cpp",
+      "bytes": 14028,
+      "sha256": "52b69847e6e0c2ce13bcf8d69bf7d20225b96e33159255c96a63740730b56dd7"
+    },
+    {
+      "path": "juce/src/backend/Mld3Renderer.h",
+      "bytes": 1428,
+      "sha256": "ec5a67fdd777aad66d26ec5d8deb354cb09141d2775177f2aa4c9d75ddd4f6f9"
+    },
+    {
+      "path": "juce/src/backend/Mld5Renderer.cpp",
+      "bytes": 42206,
+      "sha256": "3140321e7ba26918445609c591fb917634344a50f696098f0f26fb722dc458c4"
+    },
+    {
+      "path": "juce/src/backend/Mld5Renderer.h",
+      "bytes": 1633,
+      "sha256": "4ef66291195e4125add342565825d35f4edb322695e51b090238831b599c6edf"
+    },
+    {
+      "path": "juce/src/backend/NativeAnalyzer.cpp",
+      "bytes": 23593,
+      "sha256": "c3ff1016aaf9fa3af4680e1b816e65920e8e91e0a2b672d3d6024d8e005a0595"
+    },
+    {
+      "path": "juce/src/backend/NativeAnalyzer.h",
+      "bytes": 1630,
+      "sha256": "bc7789a26210cbd88063c176d7ca3436bc6f0666125998e2c90654d1c36cb05b"
+    },
+    {
+      "path": "juce/src/backend/NsfHifiganRenderer.cpp",
+      "bytes": 76166,
+      "sha256": "bf981a0fde9945e8839771a75cb77b660ea80aff123e49a72544e3cf6c7a07f0"
+    },
+    {
+      "path": "juce/src/backend/NsfHifiganRenderer.h",
+      "bytes": 6117,
+      "sha256": "d8e707136fe0128d295ebcc331fc51050b7193f92cad6cdc5aea32f07e934ed5"
+    },
+    {
+      "path": "juce/src/backend/OrtExecution.cpp",
+      "bytes": 2603,
+      "sha256": "84b9d66f60369d41458bc462f8c11e1fa3e23f2aff7cccb1be0cbb4f74b8c939"
+    },
+    {
+      "path": "juce/src/backend/OrtExecution.h",
+      "bytes": 938,
+      "sha256": "03bfaa81d2d4e950eff18d6beb80e93c8646ff9a4aa0fc8aea228675ec8daa29"
+    },
+    {
+      "path": "juce/src/backend/RenderService.cpp",
+      "bytes": 54861,
+      "sha256": "8e035ca9464aae004a4b0d457bf09a500d813621d664b43e63b8cf8984bad467"
+    },
+    {
+      "path": "juce/src/backend/RenderService.h",
+      "bytes": 3357,
+      "sha256": "f0874e4103916d0fcda38b5c34335936612c713f52d26b27dc7f10a94dbc3af3"
+    },
+    {
+      "path": "juce/src/backend/UstImporter.cpp",
+      "bytes": 15326,
+      "sha256": "c276454db83bfd0112155358c8e054f1fcfb30dc29efd38dc40e777eec3dc4d5"
+    },
+    {
+      "path": "juce/src/backend/UstImporter.h",
+      "bytes": 5832,
+      "sha256": "daafaff4de584e35164457598301c7b6ce4d2b6ee0a771b2b4775cb85ffb5db5"
+    },
+    {
+      "path": "juce/src/backend/UtauOtoOverride.h",
+      "bytes": 1912,
+      "sha256": "60cae7ae73f3c1821b47483f72e9a6b4d0b30a8949a0ad72003b910710fbb04c"
+    },
+    {
+      "path": "juce/src/backend/UtauRenderer.cpp",
+      "bytes": 118054,
+      "sha256": "ce8331b6426df60e09ec3b31234b9268e1c5037fab33a15c353ab8b3c66cb895"
+    },
+    {
+      "path": "juce/src/backend/UtauRenderer.h",
+      "bytes": 16410,
+      "sha256": "0f4acab04d0894bd096824ad8c7b63ba5874c28883982b919ee71a8bd9015ec5"
+    },
+    {
+      "path": "juce/src/backend/WorldRenderer.cpp",
+      "bytes": 13055,
+      "sha256": "4ec0b920805ac845b663c73983998c6086743e5529847f035dfc840e1f9666e4"
+    },
+    {
+      "path": "juce/src/backend/WorldRenderer.h",
+      "bytes": 704,
+      "sha256": "41a34859726d69c9dd0ee25c79c4ae20fbfd40a894be74a5372c06eecadc551c"
+    },
+    {
+      "path": "juce/src/tests/AccompanimentSmoke.h",
+      "bytes": 9778,
+      "sha256": "77b1bc8ca57c7de6350abaf1fd3b94931b2f2fae80ddbfa5a28fc4fa08149c29"
+    },
+    {
+      "path": "juce/src/tests/ClassicFlagUiSmoke.h",
+      "bytes": 1863,
+      "sha256": "e548e9d3b978df14cca0e3ba584aa87b9254869c60e40c6c1814109fbb333d7f"
+    },
+    {
+      "path": "juce/src/tests/ClipEditorScopeSmoke.h",
+      "bytes": 9601,
+      "sha256": "18255a37c8352ab914c0de81010c9d4f4544075ab4ca65ee60478b87a13ca68c"
+    },
+    {
+      "path": "juce/src/tests/ClipGainKnobSmoke.h",
+      "bytes": 10854,
+      "sha256": "ce2a53838317155c1157d5b5fb35f1a25b9d4d7894a13251f3e9df006e70feac"
+    },
+    {
+      "path": "juce/src/tests/ClipMergeSmoke.h",
+      "bytes": 9226,
+      "sha256": "27490182d06ba715c860c5f67600efb5a5c315d52b0442aaa4594364945f52ca"
+    },
+    {
+      "path": "juce/src/tests/ClipSplitSmoke.h",
+      "bytes": 18842,
+      "sha256": "d818956c6e0792920bbc7b38451bbe437c9b509302cf59f5a18cbe7af21c1ee1"
+    },
+    {
+      "path": "juce/src/tests/ClipTrimSmoke.h",
+      "bytes": 10871,
+      "sha256": "32d60c1c8b47a4fb56a62f4e61912d861e14da6cad17defeed4f4865afef8bbf"
+    },
+    {
+      "path": "juce/src/tests/ComponentExportSmoke.h",
+      "bytes": 11293,
+      "sha256": "0757556ff4c9be9ca25c6966c3b0c07bea73690d81576a1a774aee3d661cdc98"
+    },
+    {
+      "path": "juce/src/tests/ContinuousFlagSmoke.h",
+      "bytes": 12657,
+      "sha256": "43023823ccf246cabfee2907f4ca685dc031b9c224e1d9fa5763b917bd8b5530"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerCacheSmoke.h",
+      "bytes": 6476,
+      "sha256": "6085d510471548398aeaf7b4f9a82e2e82495658779b3c9368f117aaea1b846e"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerConsonantSmoke.h",
+      "bytes": 6453,
+      "sha256": "ed2204f09fdf4da91a4c932b8717e3f67b03ddc41940e5210512bc80206d8ced"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerExpressionsSmoke.h",
+      "bytes": 4568,
+      "sha256": "c045988245928bd8c29ba1c4cd65897abed1b2e54acc7b9744510e4404771bfd"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerInferenceSmoke.h",
+      "bytes": 6351,
+      "sha256": "c021dcdedb904e25347ba70945e85de8ca6d38afeda7ee89879c8ea0d3754059"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerParameterRetakeSmoke.h",
+      "bytes": 9627,
+      "sha256": "2d868d078c4aeaa79f5e21c2a11f7be8ebc394684d52436c4f77805ff6f47ae3"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerParametersSmoke.h",
+      "bytes": 15656,
+      "sha256": "09c102ee94541033e6b76a106978d901801089b1353f8e9e4e86630826c9d7cf"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerPitchHandlesSmoke.h",
+      "bytes": 10693,
+      "sha256": "4ed6d9d8b25826c8fd611680378b7d688129ea7b1a8a12f4ce37f7d1d9e623cf"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerPitchOffsetSmoke.h",
+      "bytes": 14351,
+      "sha256": "4293ce08068e9bce38c19df3d380ac12c258c331da02dabb75d902d166185802"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerPitchPersistenceSmoke.h",
+      "bytes": 8782,
+      "sha256": "99b249e5e899a501da94cecfbc06505c72d903d1c180116b7761c71361ae6f31"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerPitchReferenceSmoke.h",
+      "bytes": 8997,
+      "sha256": "f1b2efa637ecb7551575fe5ed055e8afd36c1cf52394c124de40b428bdda1f38"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerPitchRestoreSmoke.h",
+      "bytes": 14569,
+      "sha256": "32df1b475ebd082721c81bb43fc393e09d7d864b8dbf20d705530e73037001a8"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerSmoke.h",
+      "bytes": 6507,
+      "sha256": "81722cd4468fae0af9c9e63ed74e7e2cf2bac35a05fc62cea5af1a209692ef5c"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerTimingSmoke.h",
+      "bytes": 11624,
+      "sha256": "bae82372e658f91c7f8dccddb6efbca1726e7787b8d185ab78e95ccecca68151"
+    },
+    {
+      "path": "juce/src/tests/DiffSingerUiSmoke.h",
+      "bytes": 13579,
+      "sha256": "1ce12f4e3addde2e1ceae4a5efb88538e97c72cabff24edfec35196b2a5cf157"
+    },
+    {
+      "path": "juce/src/tests/EmptyTuningClipSmoke.h",
+      "bytes": 6956,
+      "sha256": "becdec352427debebe9b4fcbe665d96d8d61ae4b509443b8885991cb7812f535"
+    },
+    {
+      "path": "juce/src/tests/HamoodUtauSmoke.h",
+      "bytes": 9916,
+      "sha256": "8c9decb5a94c5a9a7bd2eff44f955cd65937827087d4d5e34842106fe99da487"
+    },
+    {
+      "path": "juce/src/tests/IndependentZoomSmoke.h",
+      "bytes": 4219,
+      "sha256": "3b063afe9d31c41b162e2ff6a87d84ccb74213db05b6254a595e9ea9a9f3aa53"
+    },
+    {
+      "path": "juce/src/tests/IntegratedSmoke.h",
+      "bytes": 5563,
+      "sha256": "35ffb568221b8a0b4f59075c6ec256ed40101b6c00de8e38d1732b463c084435"
+    },
+    {
+      "path": "juce/src/tests/NormalDisplaySmoke.h",
+      "bytes": 12387,
+      "sha256": "10bced5f9de7850503a3bacdaffb1b1ca847979b8aaa66e09c4633522296a0ec"
+    },
+    {
+      "path": "juce/src/tests/NoteDancePreview.h",
+      "bytes": 2221,
+      "sha256": "fb7af82706cc9705e4eacf1d0eb7eb3851f056173d9ee9bfcbec2ef4a178ab95"
+    },
+    {
+      "path": "juce/src/tests/NoteHintsSmoke.h",
+      "bytes": 11197,
+      "sha256": "457b335a374025715277ad741b00b269820d0c636a8730783591c6272cb3e2dd"
+    },
+    {
+      "path": "juce/src/tests/NsfPickerSmoke.h",
+      "bytes": 1601,
+      "sha256": "deced98eb7fe39468e2ea84c85dd8fc2f69cd6d275ee9cab0c338e83d38bec12"
+    },
+    {
+      "path": "juce/src/tests/ScrollZoomSmoke.h",
+      "bytes": 9175,
+      "sha256": "5dc9661806041012a53d486d3748dd244571735098f463854800b4288ccaa61a"
+    },
+    {
+      "path": "juce/src/tests/TempoChangeSmoke.h",
+      "bytes": 8500,
+      "sha256": "3957c6f2df976172e3ac16b9cb5fb2574b1c23ff2b6c3e737f181219b94356af"
+    },
+    {
+      "path": "juce/src/tests/TimelineNotePreviewSmoke.h",
+      "bytes": 8476,
+      "sha256": "a11338b9f2800bff153572bccbd1641b56637837517c28312696ac7c88884b7f"
+    },
+    {
+      "path": "juce/src/tests/TimelinePitchSmoke.h",
+      "bytes": 8530,
+      "sha256": "b394ede50079149726fead48c461003a579a8970799e862fc6d109e832636c82"
+    },
+    {
+      "path": "juce/src/tests/TimelineSelectionSmoke.h",
+      "bytes": 9129,
+      "sha256": "785491032c52ff8f608a35f12adc48a3abf325df051bfaf2398c68cd69aadd64"
+    },
+    {
+      "path": "juce/src/tests/TrackGainEnvelopeSmoke.h",
+      "bytes": 16003,
+      "sha256": "0365bde3bef0914b13a0314c4e60319fd3eb1bd96a92d071b645966ccdff5014"
+    },
+    {
+      "path": "juce/src/tests/WavExportSmoke.h",
+      "bytes": 22337,
+      "sha256": "47ffdc8d9b8123eca8e112852f64e5c15b42dc7ca256f14eeccefe2dc6b9bd8c"
+    },
+    {
+      "path": "juce/tests/consonant_untouched_smoke.py",
+      "bytes": 13956,
+      "sha256": "712bb8d52b94dce4509902fb2091ef3a0cb44e74e82887ff61d5966f9afb06e4"
+    },
+    {
+      "path": "juce/tests/diffsinger_expressions.py",
+      "bytes": 10400,
+      "sha256": "ea5d40ff6452debb6475fb1541bf75e9307ccad93ba7cc5927d592bcd8eb00e5"
+    },
+    {
+      "path": "juce/tests/diffsinger_inference.py",
+      "bytes": 6601,
+      "sha256": "c26e8385bb2b1cbe56aebaf6bbb724aad41090d38bef83c0b5406f90d1d705bf"
+    },
+    {
+      "path": "juce/tests/diffsinger_parameters.py",
+      "bytes": 4767,
+      "sha256": "5bff2233fe6dce9f3dabd099366d0ad081f4a13d9c9e0a913b5c0d9dc7de6b43"
+    },
+    {
+      "path": "juce/tests/diffsinger_pronunciation_retake.py",
+      "bytes": 5421,
+      "sha256": "097044ac52ce9d3be315ef1af94d607b7a5768f0fd913c4cfbb07effa47b7798"
+    },
+    {
+      "path": "juce/tests/diffsinger_runtime.py",
+      "bytes": 9813,
+      "sha256": "01d72bed123d0146b161a4f6796811174766b39dae7c0bf0499d994709ae43fc"
+    },
+    {
+      "path": "juce/tests/diffsinger_smoke.py",
+      "bytes": 3904,
+      "sha256": "8eddd0e74c79a690b87df48097dac890b2d722131947259a4c9d118952e58cde"
+    },
+    {
+      "path": "juce/tests/diffsinger_timing.py",
+      "bytes": 5058,
+      "sha256": "3fc0aec06f24965ba34b2f6cca6486628a2f01599e367f8afc0339b5b58bc53b"
+    },
+    {
+      "path": "juce/tests/diffsinger_variance_retake.py",
+      "bytes": 10558,
+      "sha256": "620ff1b188030db9859b43df16ade89d16d329d89e60d038f745384ec5771179"
+    },
+    {
+      "path": "juce/tests/envelope_stretch_smoke.py",
+      "bytes": 5298,
+      "sha256": "5e2a601353acc2696a0acc3008a265880fd736d4f02d717f0f5ac8e82f7d300d"
+    },
+    {
+      "path": "juce/tests/envelope_tail_smoke.py",
+      "bytes": 6930,
+      "sha256": "83bd134acdfc42c30c3e713b9251e06a8157764b2b885571cceaf54df637d9dd"
+    },
+    {
+      "path": "juce/tests/export_tracks_smoke.py",
+      "bytes": 9908,
+      "sha256": "7b37bfdc369e43864a6f4b65882935de4a853a43118c3e8a6099241a727a6da7"
+    },
+    {
+      "path": "juce/tests/flag_curve_smoke.py",
+      "bytes": 16949,
+      "sha256": "3b104ec89505db26a0af4688ca546ba4f5d19269f0b8528e5529143602fe18e9"
+    },
+    {
+      "path": "juce/tests/flag_precedence_smoke.py",
+      "bytes": 4176,
+      "sha256": "54fdc59a65a9f68b38305b7afecd656a49eec3be9dea9516df82c9b30c10dbae"
+    },
+    {
+      "path": "juce/tests/flag_rerender_smoke.py",
+      "bytes": 4198,
+      "sha256": "800f91b313315254541396ad8933957fb53b779a365bd6424363168bbcecc5fc"
+    },
+    {
+      "path": "juce/tests/game_fcpe_smoke.py",
+      "bytes": 2702,
+      "sha256": "47881760ce31ff1dc822dc33899ebbfb82f4e12ac6942eb5f14388d574f97b32"
+    },
+    {
+      "path": "juce/tests/hamood_live_smoke.py",
+      "bytes": 7785,
+      "sha256": "4f2d08bb1d3fcc5535b215474ff248169dad03103093ca479021b25f058934e2"
+    },
+    {
+      "path": "juce/tests/mcp_live_smoke.py",
+      "bytes": 18305,
+      "sha256": "5fe52b5813ab6db3558a2881a4de5840a668653ef13214a1833d188b0c900d40"
+    },
+    {
+      "path": "juce/tests/mcp_smoke.py",
+      "bytes": 15208,
+      "sha256": "60af6ac0a86b780d8de1b0a927a23559c89c01c8dc71da4210fe60cb68c888ce"
+    },
+    {
+      "path": "juce/tests/melodyne_import_smoke.py",
+      "bytes": 5907,
+      "sha256": "b5042978d63fa03389a89c3832f39e1d166870000591beb7f2fddd0283443458"
+    },
+    {
+      "path": "juce/tests/mou_mixed_counts_smoke.py",
+      "bytes": 8883,
+      "sha256": "e15c522fe036f1da3404b4a390df8b698c07749a560e0714afaffd26f128b91b"
+    },
+    {
+      "path": "juce/tests/mou_oto_smoke.py",
+      "bytes": 6174,
+      "sha256": "a912f0f527fc8b005c57056e22e86ccafd6a5d1b47a51c07c038576c6963eec3"
+    },
+    {
+      "path": "juce/tests/native_pitch_smoke.py",
+      "bytes": 5669,
+      "sha256": "af57ecae55be1699914a0722de96e66144e6dec9d65910f3c3d513551647ecb5"
+    },
+    {
+      "path": "juce/tests/nsf_hifigan_model_smoke.py",
+      "bytes": 12847,
+      "sha256": "cdcc14267c87b316a7c7796d71f331afc9bbf549c039ebdb71520075cfcc8a20"
+    },
+    {
+      "path": "juce/tests/region_flag_smoke.py",
+      "bytes": 5893,
+      "sha256": "0574339119525348450bfe33dc083568cb62069d89511f9f6d5de79b4b02f076"
+    },
+    {
+      "path": "juce/tests/rest_lyric_smoke.py",
+      "bytes": 6218,
+      "sha256": "3e1f94bf5b8e69f7b9c8b14d374e85622c4a401f2395eed83b5f5061a658be6d"
+    },
+    {
+      "path": "juce/tests/splice_smoke.py",
+      "bytes": 8907,
+      "sha256": "9b6a0f40bdaa60fafcea37eecf93ab9bbc3461d872b2969d923bdac59d97fc21"
+    },
+    {
+      "path": "juce/tests/utau4_mode_smoke.py",
+      "bytes": 4107,
+      "sha256": "98007038258cbcb603e0e7aefe6e2b58ce6352183eb0f0e37ea83f91528f8a32"
+    },
+    {
+      "path": "juce/third_party/ciglet/.gitignore",
+      "bytes": 39,
+      "sha256": "8d13b7e80dcb3b1f53ac7126888c3756d1786cc62b21f84d0eaa84adb6cbcf34"
+    },
+    {
+      "path": "juce/third_party/ciglet/CMakeLists.txt",
+      "bytes": 152,
+      "sha256": "506ff7fa772cabfa99752b956f6d44edf3b224a0f09035036a41e0ae975ddaf8"
+    },
+    {
+      "path": "juce/third_party/ciglet/ciglet.c",
+      "bytes": 48180,
+      "sha256": "d2ed7a0da09607b67618f0220df0542fd051ac432f65fa29796c250a50b7f48c"
+    },
+    {
+      "path": "juce/third_party/ciglet/ciglet.h",
+      "bytes": 42873,
+      "sha256": "8c9a94f0edabbad8489a99313d03fbeb092b1aba15fb50df461ca2d48cf49b67"
+    },
+    {
+      "path": "juce/third_party/ciglet/external/fastapprox-all.h",
+      "bytes": 60359,
+      "sha256": "fefc78c6d316bbb4fb094fdecffc803fe41571b1838b9568f2a2882b89f78ae9"
+    },
+    {
+      "path": "juce/third_party/ciglet/fast_median.c",
+      "bytes": 7013,
+      "sha256": "e5e670fbf8ebdee5503cb2c495a9f3bb28f85005b3a537ffa9fbc22657d7281f"
+    },
+    {
+      "path": "juce/third_party/ciglet/fftsg_h.c",
+      "bytes": 93556,
+      "sha256": "85669de7d382a8c220bc7df8094e912ac82959ec10efb81841d53a0ff11ad3d3"
+    },
+    {
+      "path": "juce/third_party/ciglet/readme.md",
+      "bytes": 3306,
+      "sha256": "e050d4e5bf2ec87d81c228b0828046cd9c551bfcfbd0af67495fd63277cddadd"
+    },
+    {
+      "path": "juce/third_party/ciglet/wavfile.c",
+      "bytes": 9543,
+      "sha256": "ea2c060e8bdcb12f1a10e5bf5470e2e534e049ed1d6a5c6138cf81b1baaf5e29"
+    },
+    {
+      "path": "juce/third_party/libllsm2/CMakeLists.txt",
+      "bytes": 302,
+      "sha256": "362d93758b43f2956e5b3da63c5d6bdc6cb2247735a5893c5f6e01a7739569e2"
+    },
+    {
+      "path": "juce/third_party/libllsm2/LICENSE",
+      "bytes": 35821,
+      "sha256": "0b383d5a63da644f628d99c33976ea6487ed89aaa59f0b3257992deac1171e6b"
+    },
+    {
+      "path": "juce/third_party/libllsm2/NOTE",
+      "bytes": 1303,
+      "sha256": "efbaea326dc5d236707548a554bf61de47a29450e9568d66fc27de3d9ae7ece9"
+    },
+    {
+      "path": "juce/third_party/libllsm2/README.md",
+      "bytes": 10746,
+      "sha256": "134d5d9250c9dbfcb2c4ebbd98ded4ae4246c24b3e3a338637f6e420a82aeec1"
+    },
+    {
+      "path": "juce/third_party/libllsm2/buffer.h",
+      "bytes": 10718,
+      "sha256": "44bc4277d3f01820a3b9a92dc3a190a3e72937bcbf11e7508b3f6d5f38707f00"
+    },
+    {
+      "path": "juce/third_party/libllsm2/coder.c",
+      "bytes": 10612,
+      "sha256": "38e6d6d15e600d8b7ac28a8fea90c8d274f6a9db7438575499f46ff86a519829"
+    },
+    {
+      "path": "juce/third_party/libllsm2/constants.h",
+      "bytes": 376,
+      "sha256": "20b57ce24cdc9059f31a113007061a2bc13781c5d61a0b7e83b16071b5b2c2c7"
+    },
+    {
+      "path": "juce/third_party/libllsm2/container.c",
+      "bytes": 6076,
+      "sha256": "79f0fb78d7017c003998f82a118462851e2cdf453876321971f208498fd70e42"
+    },
+    {
+      "path": "juce/third_party/libllsm2/dsputils.c",
+      "bytes": 21256,
+      "sha256": "75e92f5d7ea80a08b19837bc710fe6a6a989130dcf49fbe2d0c8a45837e6d9db"
+    },
+    {
+      "path": "juce/third_party/libllsm2/dsputils.h",
+      "bytes": 5645,
+      "sha256": "f9456fb043d6d8dbe2a5fe16ffcfe2fe16eb541bd61ae3d6ccbcc320b867ce2f"
+    },
+    {
+      "path": "juce/third_party/libllsm2/filter-coef.h",
+      "bytes": 14957,
+      "sha256": "2e96fe15db4610beca3c1f3012507bc027b54875f9c82edb95683f578ad40ef8"
+    },
+    {
+      "path": "juce/third_party/libllsm2/frame.c",
+      "bytes": 9524,
+      "sha256": "f7c05774bfdebe283e41359c7aa4996475a32d25fbc2e11a5314b49355f295c0"
+    },
+    {
+      "path": "juce/third_party/libllsm2/layer0.c",
+      "bytes": 26929,
+      "sha256": "8a757f447c28b18749a6476b8c78614980a2b0d9cba4ebd4de8d4c7706016b08"
+    },
+    {
+      "path": "juce/third_party/libllsm2/layer1.c",
+      "bytes": 8307,
+      "sha256": "fa0652a69d700bd204d4428072c382e2c9dbb167a3c40e09c93d8b69cf201e5f"
+    },
+    {
+      "path": "juce/third_party/libllsm2/llsm.h",
+      "bytes": 16433,
+      "sha256": "634bcc4abea64503f877d6be07e538fe48815a25fa7cace4a5cfd8d8b56f44e4"
+    },
+    {
+      "path": "juce/third_party/libllsm2/llsmrt.c",
+      "bytes": 23222,
+      "sha256": "278b0fdc56601ebeddc5f08e1d85d207f289e2a7511c78a6bc0df0af633d71a1"
+    },
+    {
+      "path": "juce/third_party/libllsm2/llsmrt.h",
+      "bytes": 2332,
+      "sha256": "af06358a70a41fea50b2b0b9f05d14f65cd5b494f09d6d8d57cb66c5d1266993"
+    },
+    {
+      "path": "juce/third_party/libllsm2/llsmutils.c",
+      "bytes": 7967,
+      "sha256": "0f7d060b9851f2394038539222be92215e40a80d92c630651f1e404bec6cd23f"
+    },
+    {
+      "path": "juce/third_party/libllsm2/llsmutils.h",
+      "bytes": 1794,
+      "sha256": "0ea3ff9559a02afd5026b149ad67ffaf2eceb5f872fa2033aa06cd0de39633b9"
+    },
+    {
+      "path": "juce/third_party/signalsmith-stretch/LICENSE.txt",
+      "bytes": 1113,
+      "sha256": "16bf62d475af149d96a24853e77c9e0d939259a9d55b23b41da7f9939db85085"
+    },
+    {
+      "path": "juce/third_party/signalsmith-stretch/signalsmith-linear/LICENSE.txt",
+      "bytes": 1095,
+      "sha256": "a91f5703b0f5fa22e8c14a8bd854559a7c512bbe58656ea8bdcd4964e923ab2f"
+    },
+    {
+      "path": "juce/third_party/signalsmith-stretch/signalsmith-linear/fft.h",
+      "bytes": 46269,
+      "sha256": "1f9e5d16ffdae37f87021c505e8a36f107ade2723d4ccd4a75402e74b9680028"
+    },
+    {
+      "path": "juce/third_party/signalsmith-stretch/signalsmith-linear/linear.h",
+      "bytes": 35384,
+      "sha256": "a732f66c3fbb361ab391449824fbc504e2934f261ca8eb110230b4e876825720"
+    },
+    {
+      "path": "juce/third_party/signalsmith-stretch/signalsmith-linear/stft.h",
+      "bytes": 22498,
+      "sha256": "033200f123f89af7845817e302ce0f716aaf8a182ab8e72a4957aa0f79950460"
+    },
+    {
+      "path": "juce/third_party/signalsmith-stretch/signalsmith-stretch.h",
+      "bytes": 36395,
+      "sha256": "8e7f763de8601c0afe784bf2ddb62653135061e1eaaa3586c0e925ca51cd8dd4"
+    },
+    {
+      "path": "juce/third_party/world/.gitignore",
+      "bytes": 2454,
+      "sha256": "8782e7e3ca2c8e23f6f67abed2e176c84fbf94f4712316f07fae3f4460da7bd0"
+    },
+    {
+      "path": "juce/third_party/world/CMakeLists.txt",
+      "bytes": 4190,
+      "sha256": "4f244683666c7f7ba312891ff061cab8c076959d6a4ab6839655d4aa98b529ae"
+    },
+    {
+      "path": "juce/third_party/world/LICENSE.txt",
+      "bytes": 2847,
+      "sha256": "cb19c28611fcee6ce200c075a0e5bc91f0dcb0637985797b830990d2fe2fcffe"
+    },
+    {
+      "path": "juce/third_party/world/README.md",
+      "bytes": 5325,
+      "sha256": "be876ecb881754f390018b4336cbb2642174c1cf6024c3c3aa024ea8966a96dd"
+    },
+    {
+      "path": "juce/third_party/world/doc/readme_ENG.txt",
+      "bytes": 786,
+      "sha256": "82b3ffe60e84e8b6654cd88cbcdc84c32a6e83394228b11ff7a1ea2da6284eee"
+    },
+    {
+      "path": "juce/third_party/world/doc/readme_JP.txt",
+      "bytes": 477,
+      "sha256": "8d34e5728a082b71ae44013f5d12ec70dd3527717a50211ed8bf59eb96430ea2"
+    },
+    {
+      "path": "juce/third_party/world/examples/CMakeLists.txt",
+      "bytes": 601,
+      "sha256": "830752d809d35a4d89c6dca0a7ba3787db219b75b2627cbe0a887e0352212cb8"
+    },
+    {
+      "path": "juce/third_party/world/examples/README.md",
+      "bytes": 1173,
+      "sha256": "30fa641606b34c642248955cd2e139d3fc82ba5141b80e0b0c0b6fdfea0e3d27"
+    },
+    {
+      "path": "juce/third_party/world/examples/analysis_synthesis/CMakeLists.txt",
+      "bytes": 78,
+      "sha256": "232b196ddee545c63b1074c169e0a17156ab2ddd527f92aca1fa0aadd7d185cd"
+    },
+    {
+      "path": "juce/third_party/world/examples/analysis_synthesis/analysis.cpp",
+      "bytes": 13993,
+      "sha256": "41e7fc8bebdbeaaf122b626690549915961846ab355518d9af7ba6f30f37e694"
+    },
+    {
+      "path": "juce/third_party/world/examples/analysis_synthesis/makefile",
+      "bytes": 4652,
+      "sha256": "2196ad0a3987c7a0d76a3d94e843e6a43468e2c55c2b914e20dfa3b22188bab2"
+    },
+    {
+      "path": "juce/third_party/world/examples/analysis_synthesis/synthesis.cpp",
+      "bytes": 8591,
+      "sha256": "c516c513275c8a22353fd6f1355856dcfd44d29a68369db667cb7a4d53daeae4"
+    },
+    {
+      "path": "juce/third_party/world/examples/codec_test/CMakeLists.txt",
+      "bytes": 121,
+      "sha256": "75e07401d3ca54b62523a91efbfee8ab4720a7359beb121f2cd494f8fbd04526"
+    },
+    {
+      "path": "juce/third_party/world/examples/codec_test/README.md",
+      "bytes": 514,
+      "sha256": "28ebde7ca499dca554fe435e665e4917d2213d7726f8fad470d1a69aba411a77"
+    },
+    {
+      "path": "juce/third_party/world/examples/codec_test/apanalysis.cpp",
+      "bytes": 5658,
+      "sha256": "a212e64f79dbb9dc0e05244a38e27a1ff2605e35488bb78b31ca923b8b38d56c"
+    },
+    {
+      "path": "juce/third_party/world/examples/codec_test/f0analysis.cpp",
+      "bytes": 3924,
+      "sha256": "541933a51fc8ee3bdf71ed5b2d9e5f8a168fd64d220386ec210ea58b4c7e2d3e"
+    },
+    {
+      "path": "juce/third_party/world/examples/codec_test/makefile",
+      "bytes": 5457,
+      "sha256": "87310fd3e96e84b93c72361626fcc0ba1bad593e5ea4a3cce14855513e253445"
+    },
+    {
+      "path": "juce/third_party/world/examples/codec_test/readandsynthesis.cpp",
+      "bytes": 5162,
+      "sha256": "e29cb8cc56fe63fc09d796684bfb1ef5777fe38d60c69e9d7aac615dc5c76be9"
+    },
+    {
+      "path": "juce/third_party/world/examples/codec_test/spanalysis.cpp",
+      "bytes": 5659,
+      "sha256": "3b2e507767d16fcd487579117dd6e7c3604c865d4a5ea6aa7a133862880faf64"
+    },
+    {
+      "path": "juce/third_party/world/examples/parameter_io/CMakeLists.txt",
+      "bytes": 123,
+      "sha256": "f20e3d00fcb2b5094132b346bea23f3e638903451066bcf00ab19eae41ed5a92"
+    },
+    {
+      "path": "juce/third_party/world/examples/parameter_io/README.md",
+      "bytes": 436,
+      "sha256": "dfa1778310a72969bd62034e5d4c123bf41e63fa9c33e8d70f9f115d7eae5a10"
+    },
+    {
+      "path": "juce/third_party/world/examples/parameter_io/apanalysis.cpp",
+      "bytes": 4545,
+      "sha256": "20ca1f7489fe84d5cdcee83e7cb4b6e778c7d4a878d6a16dfc32fad3aeb405dc"
+    },
+    {
+      "path": "juce/third_party/world/examples/parameter_io/f0analysis.cpp",
+      "bytes": 3953,
+      "sha256": "2ab8f2901f9599ccbe16aaf7188a7b5c776262f2e90b1cdf99e1a8ae1a134b04"
+    },
+    {
+      "path": "juce/third_party/world/examples/parameter_io/makefile",
+      "bytes": 5253,
+      "sha256": "8b75f20f93512fe7754be24caa282e806e6c05cc2663484c494ffd8bbe660f4f"
+    },
+    {
+      "path": "juce/third_party/world/examples/parameter_io/readandsynthesis.cpp",
+      "bytes": 3283,
+      "sha256": "2e798e60136113315592932f4be4f07feb3521365f4e4a1932fdc71db2f32e07"
+    },
+    {
+      "path": "juce/third_party/world/examples/parameter_io/spanalysis.cpp",
+      "bytes": 4572,
+      "sha256": "e68db0d9b09aa9b13f84bb7ae0d8ac1f187d82fba3d2730f278480f6b7ace7fc"
+    },
+    {
+      "path": "juce/third_party/world/makefile",
+      "bytes": 4783,
+      "sha256": "263ac5eb030271da8c6981ac16a3131d3d75fd57db275d92d8d32a80176c5ea8"
+    },
+    {
+      "path": "juce/third_party/world/src/cheaptrick.cpp",
+      "bytes": 10225,
+      "sha256": "3517ed5c9d0b86c34a60d82e77c8d42b97ec951d9656dc047c8644c0af68ae33"
+    },
+    {
+      "path": "juce/third_party/world/src/codec.cpp",
+      "bytes": 13961,
+      "sha256": "0f55e9096070b78ff3a944c59cb239a8880cab70c1dc9b19ae5f16cc031869e9"
+    },
+    {
+      "path": "juce/third_party/world/src/common.cpp",
+      "bytes": 9260,
+      "sha256": "fd4e764c64316a65320362a3defe0f4abf6496b0dac956a7f8c8f964f6bc65c3"
+    },
+    {
+      "path": "juce/third_party/world/src/d4c.cpp",
+      "bytes": 18307,
+      "sha256": "b95dbe0c67418741e185be7a32c5cdb4b3511f8638b986c076889bab9dcbdda1"
+    },
+    {
+      "path": "juce/third_party/world/src/dio.cpp",
+      "bytes": 28773,
+      "sha256": "cd6f8e964464471aa688bbc3702a62ce95183e983d71030422eb7c1aca9e6960"
+    },
+    {
+      "path": "juce/third_party/world/src/fft.cpp",
+      "bytes": 63537,
+      "sha256": "1b648fd3dce29a373a752c4281fbf51ef7958adc1ed160d51a899a65d95a4662"
+    },
+    {
+      "path": "juce/third_party/world/src/harvest.cpp",
+      "bytes": 53590,
+      "sha256": "812f5189755f7137245ed4f746c9378215f622855d85dadf32432a1f3ae23789"
+    },
+    {
+      "path": "juce/third_party/world/src/matlabfunctions.cpp",
+      "bytes": 9961,
+      "sha256": "c385beff10a839c1c8ab9d13fa860fa6721da73c7d443ceb9608e0fec3341bfe"
+    },
+    {
+      "path": "juce/third_party/world/src/stonemask.cpp",
+      "bytes": 9683,
+      "sha256": "96e955db3466ba4a4ccb185f9c11ab37ba3adfa7373ff6a1830e2249dc6ba4d1"
+    },
+    {
+      "path": "juce/third_party/world/src/synthesis.cpp",
+      "bytes": 17530,
+      "sha256": "b2ae88811bc1358311a1124b891236a587b3863675ca46ca7b731d807a7df7dc"
+    },
+    {
+      "path": "juce/third_party/world/src/synthesisrealtime.cpp",
+      "bytes": 23279,
+      "sha256": "6a1382d2c8dfdf319dfaf05aa5549facb1b5f63740c88ac48ed92cbbfa99b2a2"
+    },
+    {
+      "path": "juce/third_party/world/src/world/cheaptrick.h",
+      "bytes": 3200,
+      "sha256": "94afdfc4b14b9b7745a246292d52f9e4d36053dc13c4ae918379c14d7b5c4490"
+    },
+    {
+      "path": "juce/third_party/world/src/world/codec.h",
+      "bytes": 3494,
+      "sha256": "2e42c22dcb69322360d3756e503e1f96f3c77660b0664b9aa9b9e14b0affcafc"
+    },
+    {
+      "path": "juce/third_party/world/src/world/common.h",
+      "bytes": 5028,
+      "sha256": "a19b1112787bb3af96b303ebd9d62823f000cb1e501bb3301dc590cfbb8546e5"
+    },
+    {
+      "path": "juce/third_party/world/src/world/constantnumbers.h",
+      "bytes": 1815,
+      "sha256": "7d7029bada09c6fe09bbd1d3fa9695dd44a1b582ca41bbb7388398f015c7b816"
+    },
+    {
+      "path": "juce/third_party/world/src/world/d4c.h",
+      "bytes": 1933,
+      "sha256": "c73365acc0b7f91d0cc9e9b18777ec3a589ee1974b5f995cdce723cf7dad49b7"
+    },
+    {
+      "path": "juce/third_party/world/src/world/dio.h",
+      "bytes": 2392,
+      "sha256": "89edb01530176b1ca674bc71dab1407cace607f134095d28e2a05aaff72f008d"
+    },
+    {
+      "path": "juce/third_party/world/src/world/fft.h",
+      "bytes": 1323,
+      "sha256": "afd5a470ee89eeaa0fbee781b317df1741dba9ce7c569d5779db71cbfbeea8b1"
+    },
+    {
+      "path": "juce/third_party/world/src/world/harvest.h",
+      "bytes": 2316,
+      "sha256": "eb6a971600cb44e019c933a6b20f55b59278c25b53f84502297e24291c808a34"
+    },
+    {
+      "path": "juce/third_party/world/src/world/macrodefinitions.h",
+      "bytes": 4780,
+      "sha256": "7f2aa64f16568ffe708cae94d2e2c7025c3de977229aed187aae142fd0826414"
+    },
+    {
+      "path": "juce/third_party/world/src/world/matlabfunctions.h",
+      "bytes": 6903,
+      "sha256": "f094d3a49b429655f45c11a400ba3d3152c13936de7565a10a857d02f5a7015f"
+    },
+    {
+      "path": "juce/third_party/world/src/world/stonemask.h",
+      "bytes": 1182,
+      "sha256": "77eab23e7f08249d14b67a846453d2677d2e5d6d9efe2b4aed198331de8680de"
+    },
+    {
+      "path": "juce/third_party/world/src/world/synthesis.h",
+      "bytes": 1876,
+      "sha256": "d6a64e9a50f137161b5bc780c62581a79fccc3649a37efc3c966ec067b7fbaa4"
+    },
+    {
+      "path": "juce/third_party/world/src/world/synthesisrealtime.h",
+      "bytes": 5313,
+      "sha256": "1aa223457af86847966fe10f2c84a0c0384649790b782a6eb819ead350546197"
+    },
+    {
+      "path": "juce/third_party/world/styleguide.txt",
+      "bytes": 700,
+      "sha256": "06e3af7d989a8acd6a8669cc0673e3d89d0f7b8826c1339a99e454ceeec1391b"
+    },
+    {
+      "path": "juce/third_party/world/test/ctest.c",
+      "bytes": 17491,
+      "sha256": "41a2022bf071db60d981552e482aa6910ed2b67493e02e909797be1148dd8fed"
+    },
+    {
+      "path": "juce/third_party/world/test/test.cpp",
+      "bytes": 16405,
+      "sha256": "33c927c3cba4e178a87ba291940b3597731132e5416d6fd74cc5e6c1a80a4e8b"
+    },
+    {
+      "path": "juce/third_party/world/tools/README.md",
+      "bytes": 187,
+      "sha256": "85823807134364ab2304063c2c80b7545f3ccfc4697e399dfab0af46f394b7d6"
+    },
+    {
+      "path": "juce/third_party/world/tools/audioio.cpp",
+      "bytes": 6952,
+      "sha256": "07f4c586fa9c592238f22c34a780e984dc1a0c52bbdbbdc557813a4d543e9bd0"
+    },
+    {
+      "path": "juce/third_party/world/tools/audioio.h",
+      "bytes": 1958,
+      "sha256": "0b73f0766fca98bdabc91a4f4352e105fc8f84966d4bdd81b87d99d4630f6f0b"
+    },
+    {
+      "path": "juce/third_party/world/tools/parameterio.cpp",
+      "bytes": 6567,
+      "sha256": "1ac3edc0d8014dd1a3409ebb296b0fc858651c8577a941fe1d87ad8ac53ff6dd"
+    },
+    {
+      "path": "juce/third_party/world/tools/parameterio.h",
+      "bytes": 5144,
+      "sha256": "298e88900f07b5aebbf5428ebe505e45fc40b35b9fe6c7b33f2eead4df4e7de3"
+    },
+    {
+      "path": "juce/third_party/world/visualstudio2015/.gitignore",
+      "bytes": 7283,
+      "sha256": "956efe7f2705a13c64199e6e18288bc28b463c5959d0dc7bdd1d33bb579d67a5"
+    },
+    {
+      "path": "juce/third_party/world/visualstudio2015/README.md",
+      "bytes": 304,
+      "sha256": "d9838a697b34c0a406fc7d6e666f8553b25b0f68db1d2f85cafc43cb8d39de06"
+    },
+    {
+      "path": "juce/third_party/world/visualstudio2015/win/win.vcxproj",
+      "bytes": 7408,
+      "sha256": "2fb37c4ff1db401879ee513fb7b71179f9bd4b6ac23356e85d32b71bcbaf0d3e"
+    },
+    {
+      "path": "juce/third_party/world/visualstudio2015/win/win.vcxproj.filters",
+      "bytes": 3220,
+      "sha256": "1d5ed57a29660b53d60970dc85e5ed6d6b758c204458963f573bb1ed7cbed44d"
+    },
+    {
+      "path": "juce/third_party/world/visualstudio2019/.gitignore",
+      "bytes": 7283,
+      "sha256": "956efe7f2705a13c64199e6e18288bc28b463c5959d0dc7bdd1d33bb579d67a5"
+    },
+    {
+      "path": "juce/third_party/world/visualstudio2019/README.md",
+      "bytes": 304,
+      "sha256": "d9838a697b34c0a406fc7d6e666f8553b25b0f68db1d2f85cafc43cb8d39de06"
+    },
+    {
+      "path": "juce/third_party/world/visualstudio2019/win/win.vcxproj",
+      "bytes": 7526,
+      "sha256": "b0af3df3e41520401f6b431aa97ea74225cd929059fd55d3ac0dc5ab3ef5e985"
+    },
+    {
+      "path": "juce/third_party/world/visualstudio2019/win/win.vcxproj.filters",
+      "bytes": 3220,
+      "sha256": "1d5ed57a29660b53d60970dc85e5ed6d6b758c204458963f573bb1ed7cbed44d"
+    },
+    {
+      "path": "juce/third_party/world/visualstudio2022/.gitignore",
+      "bytes": 7283,
+      "sha256": "956efe7f2705a13c64199e6e18288bc28b463c5959d0dc7bdd1d33bb579d67a5"
+    },
+    {
+      "path": "juce/third_party/world/visualstudio2022/README.md",
+      "bytes": 304,
+      "sha256": "d9838a697b34c0a406fc7d6e666f8553b25b0f68db1d2f85cafc43cb8d39de06"
+    },
+    {
+      "path": "juce/third_party/world/visualstudio2022/win/win.vcxproj",
+      "bytes": 7526,
+      "sha256": "51f839d1b9ad23bde6e1c7d817158ebd3249ef0b22691a4a5eaa3573c4006c7f"
+    },
+    {
+      "path": "juce/third_party/world/visualstudio2022/win/win.vcxproj.filters",
+      "bytes": 3220,
+      "sha256": "1d5ed57a29660b53d60970dc85e5ed6d6b758c204458963f573bb1ed7cbed44d"
+    },
+    {
+      "path": "juce/third_party/world/world-config.cmake.in",
+      "bytes": 14,
+      "sha256": "b89aee3ba69a60039ba8fc23c441f40572513ddad2dfd103623809ac9a404bcd"
+    },
+    {
+      "path": "tools/breaks/amplitude_waveform.py",
+      "bytes": 6852,
+      "sha256": "6c1ce7407f20447f5097852d605b2abf1e98ad638bea5c689da29e865ad0768f"
+    },
+    {
+      "path": "tools/breaks/dragged_transition.py",
+      "bytes": 3377,
+      "sha256": "3572cefcfec55d65a00f98915c60c6e6839849b53e6adcded44e01e910cfe2c7"
+    },
+    {
+      "path": "tools/breaks/envelope_base.py",
+      "bytes": 7064,
+      "sha256": "d437b56b2f1e024ddc085627bce2024b1b50713ff86c2df387621a07e7eb1711"
+    },
+    {
+      "path": "tools/breaks/forward_bend.py",
+      "bytes": 2586,
+      "sha256": "9e15d76968447d43b3c81340335be775f3507c22a7e938abc5f5d63a52558cab"
+    },
+    {
+      "path": "tools/breaks/hanzi_pinyin.py",
+      "bytes": 4187,
+      "sha256": "a6803fe6bf186976e6975f26a64279b47e7bee85e451c4df0b97b4096702b91d"
+    },
+    {
+      "path": "tools/breaks/mcp_roots.py",
+      "bytes": 3802,
+      "sha256": "a2a2fb694472d12950f2522cfc9fcd520f8c5f1a552a127eff6d6367168a7e55"
+    },
+    {
+      "path": "tools/breaks/mcp_roots_wiring.py",
+      "bytes": 3396,
+      "sha256": "926a2e49aea1d58a60395d373fd95a234348934f75dca3b7bc5a0f5ca5bf8d03"
+    },
+    {
+      "path": "tools/breaks/mcp_schema.py",
+      "bytes": 3802,
+      "sha256": "65b4e99c6124f4617766f15050aabf370bb97b9c1bb90352a606003894bb33ca"
+    },
+    {
+      "path": "tools/breaks/midi_export.py",
+      "bytes": 4814,
+      "sha256": "9b746c558c9fc3e0bbed24f891f01e9d84a805287cde3249e0896a40a243d298"
+    },
+    {
+      "path": "tools/breaks/midi_track_import.py",
+      "bytes": 5326,
+      "sha256": "192cf2950961fefeb545079d242982737bbc8fe77acdf4950f8cf0a341cc2be1"
+    },
+    {
+      "path": "tools/breaks/missing_alias_piano.py",
+      "bytes": 2461,
+      "sha256": "c3149fba49cc1481dd2e674837b48f016253d2766666e252f048b4ad8b492e36"
+    },
+    {
+      "path": "tools/breaks/note_waveform.py",
+      "bytes": 5305,
+      "sha256": "be5555ca7df589dd4756fffcd5ce4f1a7604febf0af8d814b74ceab997459418"
+    },
+    {
+      "path": "tools/breaks/pitch_line.py",
+      "bytes": 3663,
+      "sha256": "6ab64b08d224ce01d3b49e03eaa32713a7a4bbdfa349d54226f4c6a9e827d10b"
+    },
+    {
+      "path": "tools/breaks/shared_pitch_line.py",
+      "bytes": 9067,
+      "sha256": "055fce974023075dff1a921030398bc2595f598a75b1dac0d4de55e14ec81a47"
+    },
+    {
+      "path": "tools/breaks/shared_pitch_line_real.py",
+      "bytes": 3229,
+      "sha256": "0fda2f922dade085a36880f405c7bdb7b34f6dcbe1a6ed2a17a8f7b9c34e9c08"
+    },
+    {
+      "path": "tools/breaks/ust_import.py",
+      "bytes": 4655,
+      "sha256": "78b17393a4e4b602bec9afe4989976a448590bb9ae1dbd178ed77cca4a350922"
+    },
+    {
+      "path": "tools/breaks/ust_vibrato.py",
+      "bytes": 2975,
+      "sha256": "904de9bf63d72778d02757750171ebf01578025146295c463c42b008d57e4aaf"
+    },
+    {
+      "path": "tools/breaks/vibrato_end.py",
+      "bytes": 5076,
+      "sha256": "97a0bf36ce1f89a3b5c7cf362f95fabdba142c0a65631a411f760a29d3ea4d0a"
+    },
+    {
+      "path": "tools/breaks/waveform_alignment.py",
+      "bytes": 4789,
+      "sha256": "bfff70b91ac147cb32139200b7f7d58be20d8fd37c14ba49637371af7f1626c3"
+    },
+    {
+      "path": "tools/check_mcp_roots.py",
+      "bytes": 7186,
+      "sha256": "381ea7ab53e9757f75651e1a76003ece17ad85639b62b3bfdf0370addc83788c"
+    },
+    {
+      "path": "tools/check_mcp_schemas.py",
+      "bytes": 5271,
+      "sha256": "f7c9a13b29ed7ee1c3480d8cbb2a636f8efe07e9e445595b6eb9582571502abb"
+    },
+    {
+      "path": "tools/hamood_audio/analyse_kara2.py",
+      "bytes": 6502,
+      "sha256": "51327844ed91597f5a9929c21127de8e1fbf5dc7002cb43fd0dc908a683e1c1a"
+    },
+    {
+      "path": "tools/hamood_audio/analyse_reference.py",
+      "bytes": 4963,
+      "sha256": "295794453de10b48362c2ffc4b5fb73a1f95bb2d7a79fda55dcc3e14fb4fe5c0"
+    },
+    {
+      "path": "tools/hamood_audio/apply_reference.py",
+      "bytes": 4459,
+      "sha256": "f3afcd6977f00bcb6f07f24c2ab2cf3b40043fb6d77b3f1432a9fe83d6bfd08e"
+    },
+    {
+      "path": "tools/hamood_audio/arrange_continuous_harmony.py",
+      "bytes": 9331,
+      "sha256": "a78c4cd4b720b4f20ee0a95d9fc99f64bc2ca0cb7926ba0b1fffc08fafcaab40"
+    },
+    {
+      "path": "tools/hamood_audio/build_continuous_harmony.py",
+      "bytes": 7528,
+      "sha256": "582f8d693bef155421ec84935bc71d4213dabd67588d056423bdc2fd522760c4"
+    },
+    {
+      "path": "tools/hamood_audio/build_kara2_project.py",
+      "bytes": 5784,
+      "sha256": "a413011d227fad008eb6f6baa4e5d0b4183afc4fc3ae6b40ef4218462793b4b6"
+    },
+    {
+      "path": "tools/hamood_audio/client.py",
+      "bytes": 2015,
+      "sha256": "f0a76d21238450a084f56855113b9be3d12de35d0ca6f8695ad8974ed203ccf6"
+    },
+    {
+      "path": "tools/hamood_audio/continuous_harmony_artifacts.py",
+      "bytes": 8668,
+      "sha256": "e7f05501cb888135c233f47c446ba9f669133b525fbe5844305ebf417aae7163"
+    },
+    {
+      "path": "tools/hamood_audio/corroborate_kara2.py",
+      "bytes": 3635,
+      "sha256": "146d8e43c369267dab6ac72f19e85343ef3122032cede1312a55b0708d57a6c1"
+    },
+    {
+      "path": "tools/hamood_audio/deploy_local.py",
+      "bytes": 3731,
+      "sha256": "e1d0c4e5840899c888219380f500ca5c9a29067911c26aeb443c6d61c0772e33"
+    },
+    {
+      "path": "tools/hamood_audio/export_tokyo.py",
+      "bytes": 754,
+      "sha256": "59ede9a7057031463ee566ff20107d93b3b5c47518becd948f7e2031f5327f11"
+    },
+    {
+      "path": "tools/hamood_audio/export_tokyo_cached.py",
+      "bytes": 1372,
+      "sha256": "c3a8c8511a739c6911ece76f676162cd8419f86494e297950bbccf0c92b0aabb"
+    },
+    {
+      "path": "tools/hamood_audio/finish_tokyo_audio.py",
+      "bytes": 1493,
+      "sha256": "08b32137effa7b139742a95e6c7f4f992ddae550040acb31e41496badd0347a3"
+    },
+    {
+      "path": "tools/hamood_audio/generate_tokyo.py",
+      "bytes": 4354,
+      "sha256": "58d5abccc5140b450b8e78839e8516569c1a649eaec57b0188a967c9e543cf3e"
+    },
+    {
+      "path": "tools/hamood_audio/generate_tokyo_final.py",
+      "bytes": 3729,
+      "sha256": "53812e409d5076cade5ac4fe245b50a19b5886dbec1e668dcce005353b8bb353"
+    },
+    {
+      "path": "tools/hamood_audio/kara2-model.json",
+      "bytes": 532,
+      "sha256": "92cb23234388b1083c1b33a1a7dcfe8b08ac0e0da90e41f523f98f9e78bf3c21"
+    },
+    {
+      "path": "tools/hamood_audio/kara2.cmd",
+      "bytes": 67,
+      "sha256": "7f03b6c860d61a7c15cc942675f650195a0041bb5fdbce6296170ae66f83204b"
+    },
+    {
+      "path": "tools/hamood_audio/kara2.py",
+      "bytes": 8481,
+      "sha256": "6b017038b10370baa30b70c9e30455bb9d68bb42a43a35a6feec6c6f7b24e287"
+    },
+    {
+      "path": "tools/hamood_audio/kara2_artifacts.py",
+      "bytes": 4463,
+      "sha256": "df6c44606c244ccde638323a871afa584a4ed70feaed421070daac768f060d32"
+    },
+    {
+      "path": "tools/hamood_audio/licenses/UVR-NOTICE.txt",
+      "bytes": 1548,
+      "sha256": "ce5446fccb9f0c3266a0ed421e0fa7471a14b677ebfa78110d07c5dfd50505e2"
+    },
+    {
+      "path": "tools/hamood_audio/package_full.py",
+      "bytes": 2550,
+      "sha256": "0833216ab1afca046125d34c309653e58338150300648ddcae33f2c42ccd2baa"
+    },
+    {
+      "path": "tools/hamood_audio/prepare_full_package.py",
+      "bytes": 2721,
+      "sha256": "bfe7407ef5f8a2ed4dca27b83275284a9f3c5de87b03494599d6b9bcda261601"
+    },
+    {
+      "path": "tools/hamood_audio/prepare_reference.py",
+      "bytes": 1861,
+      "sha256": "616870d122aca3be3839207b2bc6ce6df16d3f14a972762127e904291e0c1aa6"
+    },
+    {
+      "path": "tools/hamood_audio/prepare_tokyo.py",
+      "bytes": 1927,
+      "sha256": "2564d73f1175d39981ec71c081af48af9304704aca67e57a918ae814608eed5b"
+    },
+    {
+      "path": "tools/hamood_audio/recheck_chorus_artifacts.py",
+      "bytes": 8739,
+      "sha256": "9ca580991ebd44fc4b3734e753b04efd3256523e91b55793f18572097e92b91d"
+    },
+    {
+      "path": "tools/hamood_audio/recheck_chorus_filters.py",
+      "bytes": 6310,
+      "sha256": "a7a9e87de0f55c2c8e1fd257590ebd2874f264970cda95461c70406afe83d9c5"
+    },
+    {
+      "path": "tools/hamood_audio/recheck_chorus_report.py",
+      "bytes": 7976,
+      "sha256": "bcd715b5bb211fc82679ea92f4c95fe7ef92db6346e7c2dd0870049c4cad01e1"
+    },
+    {
+      "path": "tools/hamood_audio/recheck_chorus_separation.py",
+      "bytes": 8195,
+      "sha256": "fec58dc39c21113af3d0770ea005fb6a902602a7fbab10fb52d7ce489ea99c0f"
+    },
+    {
+      "path": "tools/hamood_audio/reference_polyphony.py",
+      "bytes": 3182,
+      "sha256": "3dbd5b4f684d6d978df95c9382b8d9ba757535906f83f0f80b98c3de6211647c"
+    },
+    {
+      "path": "tools/hamood_audio/render_continuous_baseline.py",
+      "bytes": 1110,
+      "sha256": "3cba446cabd9e8d18e2ba0b053ce7c342369dcfd2d78237315830a1b414b25e6"
+    },
+    {
+      "path": "tools/hamood_audio/render_continuous_harmony.py",
+      "bytes": 4374,
+      "sha256": "4e025c86910a3a76b9c0d83429fbaa6d427143eaf1943aacb713a609c1ed3c93"
+    },
+    {
+      "path": "tools/hamood_audio/render_kara2.py",
+      "bytes": 1430,
+      "sha256": "c224f2e133229ae518496615ce2362db3f146cd758157bf405a4348128ebc9a9"
+    },
+    {
+      "path": "tools/hamood_audio/render_reference.py",
+      "bytes": 1628,
+      "sha256": "9b76578786430fe8b07daadebd9ff4fe095d65cfa1cf2b64a0707b7360000ded"
+    },
+    {
+      "path": "tools/hamood_audio/research/uvr-readme.md",
+      "bytes": 14009,
+      "sha256": "8d2aaf57e9e128934ad7dd0265b7061de91ca36997f85479acf6eda098028740"
+    },
+    {
+      "path": "tools/hamood_audio/research/uvr-separate.py",
+      "bytes": 74033,
+      "sha256": "d3d1fd3288491895415a8487bb56d0cf75914e0080d1f1cf37aab145c5c576e8"
+    },
+    {
+      "path": "tools/hamood_audio/research/uvr-spec-utils.py",
+      "bytes": 45115,
+      "sha256": "6fcf1f01f56e1a88c3ddd559f4645d68c8ccd7ef0adacdbb6334ff7250ef87ba"
+    },
+    {
+      "path": "tools/hamood_audio/research/uvr-stft.py",
+      "bytes": 7766,
+      "sha256": "909f4d9812901d27353b65a66085b6e9662ff60601354b22a83ea22f2bc3b42a"
+    },
+    {
+      "path": "tools/hamood_audio/runtime.json",
+      "bytes": 44,
+      "sha256": "e2ff120389d2b651d6de38634e1c3797d134b144914b8ce164ac33813501960c"
+    },
+    {
+      "path": "tools/hamood_audio/validate_tokyo.py",
+      "bytes": 5750,
+      "sha256": "d77aef5861e87830860e91d982b1c83a1ab27ee5f9cc5973e74b510888d01b34"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/LICENSE",
+      "bytes": 1091,
+      "sha256": "26cce0d49b43b301baae32c06e9ecbbe5c2bf1a21decdc033675de3df59390dd"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/README.md",
+      "bytes": 2720,
+      "sha256": "ce703f7d98dde1f8284704e256a40d17762239da2f64989fb523f77de35edb33"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/audio_dataset.py",
+      "bytes": 9891,
+      "sha256": "d2aad299c7b1a0fd17eaf8f2e08a1fe9ebf782516f08400fbb97400ead01fea5"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/baseline_models.py",
+      "bytes": 6234,
+      "sha256": "1eb62e91c41b41668034c8e98e39212deffeea4bd2fc80767162985b288b2a86"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/btc_model.py",
+      "bytes": 7559,
+      "sha256": "c7f5eb16dc6d5909c3f700465a371fb97db11a0127c1a4a918c10984bda13544"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/crf_model.py",
+      "bytes": 5769,
+      "sha256": "ddd45a26a8d6e1bc0608cf0f1080d06125ec046b8d7d8ebfaad5007579258cf9"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/png/attention.png",
+      "bytes": 1640905,
+      "sha256": "f0907cd0e5890b0aef7093fdc655ff81b055e070a8b2e8aab692617070475fa8"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/png/example.png",
+      "bytes": 7180,
+      "sha256": "3e9f1bd619997d083280496b4a595a069341e380b04f408f5be87e031f6c5c90"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/png/model.png",
+      "bytes": 92636,
+      "sha256": "c8b5759058979ace298846a40910333b66f23552f5f067ed5a4496af5a8cd392"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/run_config.yaml",
+      "bytes": 834,
+      "sha256": "d74e1785a81b120ed90090c851c489e68f1481cdafc302edd62f7b970c0682ad"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/test.py",
+      "bytes": 5172,
+      "sha256": "d5d10d7fa4b1366db73fb5db6b392d5b2beec056dc8b8ad12a42b5cb61c8649b"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/train.py",
+      "bytes": 13971,
+      "sha256": "37a4e0fec9931bb13edee02ef3b310d15375156910c2064b5ee586ebf41d1e45"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/train_crf.py",
+      "bytes": 14874,
+      "sha256": "91c10d4d6ca731d15c7fc5e1f9b9164438788486fab8bc0f6051fa4151dc496a"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/utils/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/utils/chords.py",
+      "bytes": 18849,
+      "sha256": "23eaaf61cd17b0d5c10826d5c9bcae2d9326f36f6756452068b96678b19cc6c9"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/utils/hparams.py",
+      "bytes": 977,
+      "sha256": "e5aa6f0c3fe4d9657740636aed026e8971ea8f72553b7cf9dc705374a43c4581"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/utils/logger.py",
+      "bytes": 1941,
+      "sha256": "3f22437f9e80d1165251c13ede8e8f18f143e37b3a4262f8c34518db412cecca"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/utils/mir_eval_modules.py",
+      "bytes": 26792,
+      "sha256": "cee088f62dfb80d56211fecebdbbd43d4fff099334316cbdafd305faa861286b"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/utils/preprocess.py",
+      "bytes": 23836,
+      "sha256": "4b72887e81783284a0e8d1ce6b1bb43523a469ec5bd898453749d28655e9852a"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/utils/pytorch_utils.py",
+      "bytes": 1316,
+      "sha256": "f11837f1fd15e98236c89c63d8dd0c1fc92ed369e3c1c73816f3b713b78d9a2d"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/utils/tf_logger.py",
+      "bytes": 2433,
+      "sha256": "3900caf36b44a0b53fd4125e9aa761ca3b851c64752581720bddbb5b7a533f0b"
+    },
+    {
+      "path": "tools/hamood_audio/vendor/BTC-ISMIR19/utils/transformer_modules.py",
+      "bytes": 10750,
+      "sha256": "123c961561997c504e4a59ff3751cc0c9dd2f013bd84e240c2cfa801f52f37bd"
+    },
+    {
+      "path": "tools/hamood_audio/verify_installed.py",
+      "bytes": 2816,
+      "sha256": "21db49f99d9cfd0f8ea487be796cf3aae0fdc82a0fcb6232f8caaddff3017e41"
+    },
+    {
+      "path": "tools/hamood_audio/verify_kara2_portable.py",
+      "bytes": 3394,
+      "sha256": "7dc65ca2f76b10add676466d939e1af2ac28c7d40d9e2d9b14d5b2503eb8c282"
+    },
+    {
+      "path": "tools/hamood_audio/verify_portable_live.py",
+      "bytes": 2814,
+      "sha256": "7210d61820c952e263c35b525df5de469ad57fd7e04c399cc2dfa2545f394a41"
+    },
+    {
+      "path": "tools/hamood_audio/worker.py",
+      "bytes": 7693,
+      "sha256": "4c237361c45cc7378ae69d36fd3328d554b7e5c6c6ac863b42d5dd5cd8ef38ac"
+    },
+    {
+      "path": "tools/integration-package-smoke.py",
+      "bytes": 3521,
+      "sha256": "dd05742b92d0c49f999203fa24934b7a190014e2bc62acb1285e9607b011807b"
+    },
+    {
+      "path": "tools/integration-regression.py",
+      "bytes": 2992,
+      "sha256": "0e7a1fea89e7df87181684ec095be9b9b2d18b2923e1560339407005469a01d5"
+    },
+    {
+      "path": "tools/make_fixtures.py",
+      "bytes": 13658,
+      "sha256": "5f442d9bfa146f3b87854339b75eae57034f3d2c34d2759c3c5e9e40cb413734"
+    },
+    {
+      "path": "tools/make_mcp_doc.py",
+      "bytes": 4224,
+      "sha256": "0d3a59d37e92c21df0783463aaf1eaee7bac9b422c7e14045667c6091d5df68d"
+    },
+    {
+      "path": "tools/make_pinyin_table.py",
+      "bytes": 5893,
+      "sha256": "863c27780170b7b2d530a4432befc2d4bbe8de641d697541f1bae82899dc9983"
+    },
+    {
+      "path": "tools/package-current-distribution.py",
+      "bytes": 3908,
+      "sha256": "d52c29536867d1093582c2e9cef4239bf53a100943cf6bcd508d7c13eca39d10"
+    },
+    {
+      "path": "tools/prepare-diffsinger-pronunciation.py",
+      "bytes": 2957,
+      "sha256": "266b44f1c76e68ad2929543976f35b3c9a75c7df5ed525e8a381bfc046f7be7d"
+    },
+    {
+      "path": "tools/prepare-note-dance.py",
+      "bytes": 1923,
+      "sha256": "c882e3ca285fbc8ece3545faa87b437cebef975d8b211154301ca706bedc4fb7"
+    },
+    {
+      "path": "tools/prepare-nsf-model.py",
+      "bytes": 2222,
+      "sha256": "a3d4d8f50200e4d3a670fc12100f6393906b0d16221a569eeafaa93d7d47b4ef"
+    },
+    {
+      "path": "tools/regress.sh",
+      "bytes": 8411,
+      "sha256": "92e0b0f9df87d0be54c372e5b85fc9bcf087b17178e5c071484a5a97e47e2a48"
+    },
+    {
+      "path": "tools/run_breaks.sh",
+      "bytes": 3374,
+      "sha256": "08de1204e95d07a52e79c07eea8b64f17ead4e116b3df2657ddc9932e8e04bdd"
+    },
+    {
+      "path": "tools/verify_midi.py",
+      "bytes": 5998,
+      "sha256": "ceef3f9cc3ece2aa369a2846ef5dc18e1853b2f7bd423bf54be6bf1ce43067e9"
+    }
+  ]
+}

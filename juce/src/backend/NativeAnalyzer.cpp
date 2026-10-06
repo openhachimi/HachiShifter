@@ -184,6 +184,46 @@ std::optional<std::pair<float, float>> absolutePitchAt(
 }
 }
 
+std::vector<int> NativeAnalyzer::syllableCuts(const std::vector<float>& loudness,
+                                              int shortestFrames, float valleyDepth)
+{
+    std::vector<int> cuts;
+    const auto guard = std::max(1, shortestFrames);
+    const auto count = static_cast<int>(loudness.size());
+    // Nothing to divide unless both halves could hold a syllable.
+    if (count < 2 * guard + 1) return cuts;
+
+    auto index = guard;
+    while (index + guard < count)
+    {
+        const auto here = loudness[static_cast<std::size_t>(index)];
+        // Only the bottom of a dip is a candidate.
+        if (here > loudness[static_cast<std::size_t>(index - 1)]
+            || here > loudness[static_cast<std::size_t>(index + 1)])
+        {
+            ++index;
+            continue;
+        }
+        auto left = 0.0f;
+        for (int step = index - guard; step < index; ++step)
+            left = std::max(left, loudness[static_cast<std::size_t>(step)]);
+        auto right = 0.0f;
+        for (int step = index + 1; step <= index + guard; ++step)
+            right = std::max(right, loudness[static_cast<std::size_t>(step)]);
+        // Against the quieter neighbour, so a dip beside one loud syllable and
+        // one soft one is judged by the soft one.
+        const auto shoulder = std::min(left, right);
+        if (shoulder <= 1.0e-9f || here > valleyDepth * shoulder)
+        {
+            ++index;
+            continue;
+        }
+        cuts.push_back(index);
+        index += guard;
+    }
+    return cuts;
+}
+
 std::vector<NoteData> NativeAnalyzer::analyse(const juce::File& file, juce::String& error,
                                                Progress progress)
 {
@@ -271,6 +311,35 @@ std::vector<NoteData> NativeAnalyzer::analyse(const juce::File& file, juce::Stri
         }
     }
     if (begin >= 0 && lastVoiced >= begin) regions.push_back({ begin, lastVoiced + 1 });
+
+    // A voiced run can still hold several syllables, so look inside each one
+    // for the energy valleys that join them.
+    //
+    // Only within the voiced span, never in the consonant that precedes it:
+    // the dip between a plosive's aspiration and its vowel is not a syllable
+    // boundary, and searching there split "cui" and "cuan" in two.
+    {
+        constexpr auto shortestSyllableFrames = 18;   // 90 ms at this hop
+        constexpr auto valleyDepth = 0.25f;
+        std::vector<std::pair<int, int>> divided;
+        divided.reserve(regions.size());
+        for (const auto& region : regions)
+        {
+            std::vector<float> loudness;
+            loudness.reserve(static_cast<std::size_t>(region.second - region.first));
+            for (int frame = region.first; frame < region.second; ++frame)
+                loudness.push_back(frames[static_cast<std::size_t>(frame)].rms);
+            auto from = region.first;
+            for (const auto cut : NativeAnalyzer::syllableCuts(
+                     loudness, shortestSyllableFrames, valleyDepth))
+            {
+                divided.push_back({ from, region.first + cut });
+                from = region.first + cut;
+            }
+            divided.push_back({ from, region.second });
+        }
+        regions = std::move(divided);
+    }
 
     std::vector<NoteData> notes;
     for (std::size_t regionIndex = 0; regionIndex < regions.size(); ++regionIndex)

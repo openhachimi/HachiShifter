@@ -43,4 +43,3 @@ public:
     [[nodiscard]] juce::AudioBuffer<float> render(const Mld5RenderRequest& request) const;
 };
 }
-

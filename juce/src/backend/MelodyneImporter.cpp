@@ -19,6 +19,12 @@ namespace
 constexpr std::size_t maxGraphBytes = 256u * 1024u * 1024u;
 constexpr std::uint32_t nullReference = 0xffffffffu;
 
+bool hasVoicedPitch(const NoteData& note)
+{
+    return std::any_of(note.contour.begin(), note.contour.end(),
+                       [](const auto& point) { return point.voiced; });
+}
+
 template <typename T>
 std::optional<T> readLittle(const std::vector<std::uint8_t>& data, std::size_t offset)
 {
@@ -500,9 +506,24 @@ sourceChain(const Graph& graph, std::uint32_t element)
 juce::File resolveMedia(const juce::String& stored, const juce::File& projectDirectory,
                         const std::map<juce::String, juce::File>& media)
 {
-    const juce::File direct(stored);
-    if (direct.existsAsFile()) return direct;
     const auto normalized = stored.replaceCharacter('\\', '/');
+#if JUCE_LINUX
+    // MPD stores Windows absolute paths even when opened through WSL. Resolve
+    // the exact drive path before basename search (which can select a different
+    // recording with the same name).
+    if (normalized.length() >= 3 && normalized[1] == ':' && normalized[2] == '/')
+    {
+        const auto drive = normalized.substring(0, 1).toLowerCase();
+        const auto mounted = juce::File("/mnt").getChildFile(drive)
+            .getChildFile(normalized.substring(3));
+        if (mounted.existsAsFile()) return mounted;
+    }
+#endif
+    if (juce::File::isAbsolutePath(normalized))
+    {
+        const juce::File direct(normalized);
+        if (direct.existsAsFile()) return direct;
+    }
     const auto relative = projectDirectory.getChildFile(normalized);
     if (relative.existsAsFile()) return relative;
     const auto name = juce::File(normalized).getFileName();
@@ -625,6 +646,57 @@ std::optional<std::pair<float, float>> pitchAt(const std::vector<SourcePitchPoin
 }
 }
 
+std::vector<MelodyneConsonantMapping>
+MelodyneImporter::consonantCandidates(const std::vector<NoteData>& notes)
+{
+    std::vector<MelodyneConsonantMapping> mappings;
+    for (std::size_t index = 0; index + 1 < notes.size(); ++index)
+    {
+        const auto& consonant = notes[index];
+        const auto& vowel = notes[index + 1];
+        const auto adjacent = std::abs(consonant.startSeconds + consonant.durationSeconds
+                                        - vowel.startSeconds) <= 0.002;
+        if (!adjacent || hasVoicedPitch(consonant) || !hasVoicedPitch(vowel)) continue;
+        mappings.push_back({ consonant.id, vowel.id, consonant.durationSeconds });
+    }
+    return mappings;
+}
+
+juce::var MelodyneImporter::inspectTracks(const juce::File& file, juce::String& error)
+{
+    auto bytes = decodeGraph(file, error, {});
+    Graph graph;
+    if (!bytes || !graph.parse(std::move(*bytes), error)) return {};
+    juce::Array<juce::var> tracks;
+    for (std::uint32_t id = 0; id < graph.objectCount(); ++id)
+    {
+        const auto className = juce::String(graph.className(id));
+        if (!className.containsIgnoreCase("track")) continue;
+        auto* row = new juce::DynamicObject();
+        row->setProperty("object_id", static_cast<int>(id));
+        row->setProperty("class", className);
+        row->setProperty("title", graph.stringField(id, "title"));
+        row->setProperty("name", graph.stringField(id, "name"));
+        const auto elements = graph.reference(id, "elements");
+        row->setProperty("elements", elements ? static_cast<int>(graph.list(*elements).size()) : 0);
+        juce::StringArray media;
+        if (elements)
+            for (const auto element : graph.list(*elements))
+                if (const auto chain = sourceChain(graph, element))
+                {
+                    const auto [source, item, description] = *chain;
+                    juce::ignoreUnused(item, description);
+                    if (const auto path = graph.reference(source, "filePath"))
+                        media.addIfNotAlreadyThere(graph.stringField(*path, "posixPath"));
+                }
+        row->setProperty("media", media.joinIntoString("\n"));
+        const auto children = graph.reference(id, "subtracks");
+        row->setProperty("subtracks", children ? static_cast<int>(graph.list(*children).size()) : 0);
+        tracks.add(juce::var(row));
+    }
+    return tracks;
+}
+
 std::optional<MelodyneImportResult> MelodyneImporter::importProject(
     const juce::File& file, juce::String& error, Progress progress,
     MelodyneImportOptions options)
@@ -698,7 +770,7 @@ std::optional<MelodyneImportResult> MelodyneImporter::importProject(
         }
         const auto analyzer = graph.stringField(trackId, "defaultAnalyzerParameterSetIdenfier").toLowerCase();
         track.compose = analyzer.contains(".melodic");
-        track.pitchAlgorithm = PitchAlgorithm::mld5;
+        track.pitchAlgorithm = defaultPitchAlgorithm();
         track.stretchAlgorithm = StretchAlgorithm::melodyneHybrid;
 
         const auto elementList = graph.reference(trackId, "elements");
@@ -809,7 +881,12 @@ std::optional<MelodyneImportResult> MelodyneImporter::importProject(
             if (note.label.isEmpty()) note.label = graph.stringField(item, "label");
             note.startSeconds = 0.0;
             note.durationSeconds = duration;
-            note.consonantSeconds = std::clamp(graph.number(element, "attackDuration").value_or(0.0), 0.0, duration);
+            // On Melodyne import the consonant line defaults to the note's
+            // preutterance (which is zero for a fresh import), so it sits on the
+            // note start rather than at Melodyne's attackDuration; the start and
+            // cutoff region lines default to zero (no trim).  The user tunes
+            // these by hand afterwards.  UTAU import/timing is untouched.
+            note.consonantSeconds = std::max(0.0, note.utauPreutteranceSeconds);
             const auto targetCenter = static_cast<float>(graph.numberAlias(
                 element, { "pitchCenter", "targetPitchCenter" }).value_or(6000.0));
             auto sourceCenter = static_cast<float>(graph.number(item, "pitchCenter").value_or(targetCenter));
@@ -831,6 +908,18 @@ std::optional<MelodyneImportResult> MelodyneImporter::importProject(
                 graph.number(element, "sibilantBalance").value_or(0.0), 0.0, 1.0));
             note.attackSpeed = static_cast<float>(std::max(1.0e-6,
                 graph.number(element, "sourceTimeForElementTimeFunctionAttackSlope").value_or(1.0)));
+            // Melodyne stores its element gain and fade limits separately from
+            // the pitch object.  Carry the simple envelope into the native
+            // layer so the HJM conversion does not lose note-level decay.
+            const auto gainDb = note.gain > 1.0e-6f
+                ? juce::jlimit(-60.0f, 12.0f,
+                    static_cast<float>(20.0 * std::log10(note.gain))) : -60.0f;
+            const auto fadeIn = juce::jlimit(0.0, duration, clip.fadeInSeconds);
+            const auto fadeOut = juce::jlimit(0.0, duration, clip.fadeOutSeconds);
+            note.amplitudeEnvelope = { { 0.0, fadeIn > 1.0e-9 ? -60.0f : gainDb },
+                { fadeIn, gainDb },
+                { std::max(fadeIn, duration - fadeOut), gainDb },
+                { duration, fadeOut > 1.0e-9 ? -60.0f : gainDb } };
             const auto robustFields = { "robustPitchCurve", "robustPitchCurveSwitch",
                 "robustPitchCurveEnabled", "useRobustPitchCurve",
                 "usesRobustPitchCurve", "isRobustPitchCurveEnabled" };
@@ -842,16 +931,6 @@ std::optional<MelodyneImportResult> MelodyneImporter::importProject(
                 note.robustPitchCurve = note.robustPitchCurve
                     || graph.booleanAlias(*parameterSet, robustFields);
             note.connectedToPrevious = connectedPrevious.contains(element);
-            note.connectedToNext = false;
-            if (const auto join = graph.reference(element, "followingJoin"))
-            {
-                note.connectedToNext = graph.boolean(*join, "joinsPitches");
-                if (graph.boolean(*join, "joinsAmplitudes"))
-                    if (const auto atd = graph.number(*join, "amplitudeTransitionDuration"))
-                        clip.crossfadeOutSeconds = std::clamp(*atd * 0.5, 0.0, duration);
-            }
-            clip.glideConnectedToNext = note.connectedToNext;
-            clip.glideConnectedFromPrevious = note.connectedToPrevious;
 
             std::vector<SourcePitchPoint> propertyPoints;
             if (const auto propertyList = graph.reference(item, "propertyPoints"))
@@ -908,12 +987,32 @@ std::optional<MelodyneImportResult> MelodyneImporter::importProject(
             addSibilant("startSibilantEndSampleOffset");
             addSibilant("endSibilantStartSampleOffset");
 
+            if (const auto join = graph.reference(element, "followingJoin"))
+            {
+                note.connectedToNext = graph.boolean(*join, "joinsPitches");
+                // Melodyne's real crossfade: a LINEAR amplitude transition of
+                // MUSuccessiveJoin.amplitudeTransitionDuration when amplitudes
+                // are joined.  The element is placed exactly back-to-back with
+                // its join partner, so each side ramps for half the duration.
+                if (graph.boolean(*join, "joinsAmplitudes"))
+                    if (const auto atd = graph.number(*join, "amplitudeTransitionDuration"))
+                        clip.crossfadeOutSeconds = std::clamp(*atd * 0.5, 0.0, duration);
+            }
             if (const auto join = graph.reference(element, "precedingJoin"))
             {
                 if (graph.boolean(*join, "joinsAmplitudes"))
                     if (const auto atd = graph.number(*join, "amplitudeTransitionDuration"))
                         clip.crossfadeInSeconds = std::clamp(*atd * 0.5, 0.0, duration);
             }
+            // The same joins, recorded on the clip as well.  The note flags say
+            // a join edit is in effect and drive the crossfade; these say the
+            // recording itself runs continuously through the seam, which is
+            // what lets stretchSpliceThenPitch decode the chain in one pass.
+            // Two questions, so the edit-neutralising block below clears the
+            // first and leaves this one -- neutralising a user's edits does not
+            // make a continuous take discontinuous.
+            clip.glideConnectedToNext = note.connectedToNext;
+            clip.glideConnectedFromPrevious = note.connectedToPrevious;
             if (!options.preserveProjectEdits)
             {
                 // Keep the project arrangement and the analysed source F0,
@@ -926,6 +1025,8 @@ std::optional<MelodyneImportResult> MelodyneImporter::importProject(
                 note.formantSemitones = 0.0f;
                 note.breath = 0.0f;
                 note.gain = 1.0f;
+                note.amplitudeEnvelope = { { 0.0, 0.0f },
+                    { note.durationSeconds, 0.0f } };
                 note.attackSpeed = 1.0f;
                 note.connectedToPrevious = false;
                 note.connectedToNext = false;

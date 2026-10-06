@@ -1,6 +1,8 @@
 #include "McpServer.h"
-#include "AnalysisService.h"
+#include "MelodyneProvider.h"
 #include "AudioFileReader.h"
+#include "AnalysisService.h"
+#include "DiffSingerRenderer.h"
 #include <cmath>
 #include <iostream>
 
@@ -26,20 +28,161 @@ juce::var array(std::vector<juce::var> values)
     return juce::var(std::move(result));
 }
 
-juce::var permissiveSchema()
+// What a tool takes.  A client shows the model it drives only what the schema
+// says, so a tool whose schema names no properties is one whose parameter
+// names have to be guessed from a one-line description -- which is what all of
+// these were: forty-eight tools sharing one empty object.  These sit beside the
+// dispatcher that reads the arguments, and a parameter added there and not
+// named here is invisible to everything that reads the schema.
+struct Param
+{
+    const char* name;
+    const char* type;                       // JSON Schema type
+    const char* description;
+    bool required = false;
+    std::vector<const char*> choices {};    // the few words a value may be
+    juce::var (*shape)() = nullptr;         // an array's items, or an object's own fields
+};
+
+juce::var typedSchema(std::vector<Param> params);
+
+// A point of the pitch curve set_pitch_curve draws.
+juce::var pitchPointShape()
+{
+    return typedSchema({
+        { .name = "time_seconds", .type = "number",
+          .description = "When, in seconds from the clip start", .required = true },
+        { .name = "midi", .type = "number",
+          .description = "The pitch sung there, as a MIDI note with fractions",
+          .required = true },
+    });
+}
+
+// One flag's curve across a note.
+juce::var flagCurveShape()
+{
+    return typedSchema({
+        { .name = "flag", .type = "string",
+          .description = "Which flag the curve belongs to: g, Mt, Mb, Mo, Md, Ms, "
+                         "bh and the rest of the timbre flags.  Default g." },
+        { .name = "points", .type = "array",
+          .description = "[[seconds, value], ...] measured from the note's start.  "
+                         "Seconds may be negative, which reaches into the preutterance.  "
+                         "A third entry names the shape of the segment arriving there: "
+                         "linear, smooth, ease-in, ease-out or custom-bezier.  "
+                         "An empty list drops this flag's curve and leaves the others." },
+    });
+}
+
+// One region of a recording, as the .hjm.csv sidecar keeps them.
+juce::var regionRowShape()
+{
+    return typedSchema({
+        { .name = "name", .type = "string", .description = "What the region is called" },
+        { .name = "region_start_seconds", .type = "number",
+          .description = "Where the region starts in the recording", .required = true },
+        { .name = "region_end_seconds", .type = "number",
+          .description = "Where it ends", .required = true },
+        { .name = "alignment_seconds", .type = "number",
+          .description = "The moment inside it a note is lined up to" },
+        { .name = "fixed_duration_seconds", .type = "number",
+          .description = "The head of the region that is never stretched" },
+        { .name = "relative_pitch_cents", .type = "number",
+          .description = "Cents this region is moved by" },
+        { .name = "melodyne_data", .type = "boolean",
+          .description = "Whether the Melodyne fields below carry edits" },
+        { .name = "melodyne_pitch_center_cents", .type = "number",
+          .description = "The pitch the region is sung at, in cents" },
+        { .name = "melodyne_original_pitch_center_cents", .type = "number",
+          .description = "The pitch it was recorded at, in cents" },
+        { .name = "melodyne_pitch_drift", .type = "number",
+          .description = "How much of the recording's slow pitch movement is kept, 0 to 2" },
+        { .name = "melodyne_pitch_modulation", .type = "number",
+          .description = "How much of its vibrato is kept, 0 to 2" },
+        { .name = "melodyne_transition_seconds", .type = "number",
+          .description = "How long the slide into this region takes" },
+        { .name = "melodyne_formant_cents", .type = "number",
+          .description = "Formant shift, in cents" },
+        { .name = "melodyne_amplitude", .type = "number",
+          .description = "Level as a multiplier" },
+        { .name = "melodyne_sibilant_balance", .type = "number",
+          .description = "Sibilance against the rest of the sound" },
+    });
+}
+
+// The five every tool that analyses audio takes: each overrides what the
+// environment configures, and leaving them out keeps that configuration.
+std::vector<Param> withAnalysis(std::vector<Param> params)
+{
+    params.push_back({ .name = "game_model_dir", .type = "string",
+        .description = "Folder holding the GAME model, instead of the configured one" });
+    params.push_back({ .name = "fcpe_model", .type = "string",
+        .description = "FCPE model file, instead of the configured one" });
+    params.push_back({ .name = "game_model", .type = "string",
+        .description = "Which GAME model to run", .choices = { "large", "small" } });
+    params.push_back({ .name = "inference", .type = "string",
+        .description = "What runs the models",
+        .choices = { "automatic", "cpu", "directml", "cuda", "coreml" } });
+    params.push_back({ .name = "device_index", .type = "integer",
+        .description = "Which device that backend uses; -1 lets it choose" });
+    return params;
+}
+
+juce::var typedSchema(std::vector<Param> params)
 {
     auto schema = object();
     set(schema, "type", "object");
+    auto properties = object();
+    std::vector<juce::var> required;
+    for (const auto& param : params)
+    {
+        const juce::String type(param.type);
+        // An object's fields are the schema its shape returns; an array's are
+        // the schema of one element.
+        auto entry = param.shape != nullptr && type == "object" ? param.shape() : object();
+        set(entry, "type", param.type);
+        set(entry, "description", juce::String::fromUTF8(param.description));
+        if (!param.choices.empty())
+        {
+            std::vector<juce::var> choices;
+            for (const auto* choice : param.choices) choices.emplace_back(choice);
+            set(entry, "enum", array(std::move(choices)));
+        }
+        if (param.shape != nullptr && type == "array") set(entry, "items", param.shape());
+        set(properties, param.name, std::move(entry));
+        if (param.required) required.emplace_back(param.name);
+    }
+    set(schema, "properties", std::move(properties));
+    if (!required.empty()) set(schema, "required", array(std::move(required)));
+    // Left open: several tools pass settings through to the analysis
+    // configuration they share, and a caller that sends something not named
+    // here is no worse off than it was when nothing was named at all.
     set(schema, "additionalProperties", true);
     return schema;
 }
 
-juce::var makeTool(const char* name, const char* description)
+// Refusing without saying how to allow a folder reads as a broken tool.
+juce::String outsideRootsMessage(const juce::File& path,
+                                 const std::vector<juce::File>& roots)
+{
+    juce::StringArray named;
+    for (const auto& root : roots) named.add(root.getFullPathName());
+    named.removeDuplicates(true);
+    return "Outside the folders this session may read: " + path.getFullPathName()
+        + (named.isEmpty()
+               ? juce::String("; none are allowed yet -- open a project or import "
+                              "something first, or start the server with "
+                              "--roots=FOLDER (or HACHISHIFTER_MCP_ROOTS)")
+               : "; allowed: " + named.joinIntoString("; "));
+}
+
+juce::var makeTool(const char* name, const char* description,
+                   std::vector<Param> params = {})
 {
     auto tool = object();
     set(tool, "name", name);
     set(tool, "description", juce::String::fromUTF8(description));
-    set(tool, "inputSchema", permissiveSchema());
+    set(tool, "inputSchema", typedSchema(std::move(params)));
     return tool;
 }
 
@@ -107,6 +250,7 @@ juce::String pitchAlgorithmText(PitchAlgorithm value)
     if (value == PitchAlgorithm::vocalShifter) return "vslib";
     if (value == PitchAlgorithm::mld3) return "mld3";
     if (value == PitchAlgorithm::llsm2) return "llsm2";
+    if (value == PitchAlgorithm::utau) return "utau";
     return "mld5";
 }
 
@@ -166,6 +310,28 @@ juce::var sampleRowsJson(const std::vector<SampleRegionSetting>& rows)
         set(value, "melodyne_sibilant_balance", row.melodyneSibilantBalance);
         set(value, "melodyne_attack_seconds", row.melodyneAttackSeconds);
         set(value, "melodyne_decay_elongation", row.melodyneDecayElongation);
+        set(value, "hjm_version", row.hjmVersion);
+        set(value, "native_role", nativeSegmentRoleName(row.role));
+        set(value, "native_provenance", row.provenance);
+        set(value, "native_confidence", row.confidence);
+        std::vector<juce::var> segmentValues;
+        for (const auto& segment : row.segments)
+        {
+            auto segmentValue = object();
+            set(segmentValue, "id", segment.id);
+            set(segmentValue, "alias", segment.alias);
+            set(segmentValue, "role", nativeSegmentRoleName(segment.role));
+            set(segmentValue, "source_start_seconds", segment.sourceStartSeconds);
+            set(segmentValue, "source_end_seconds", segment.sourceEndSeconds);
+            set(segmentValue, "provenance", segment.provenance);
+            set(segmentValue, "confidence", segment.confidence);
+            set(segmentValue, "alignment_seconds", segment.alignmentSeconds);
+            set(segmentValue, "overlap_seconds", segment.overlapSeconds);
+            set(segmentValue, "stretchable", segment.stretchable);
+            set(segmentValue, "stretch_weight", segment.stretchWeight);
+            segmentValues.push_back(std::move(segmentValue));
+        }
+        set(value, "native_segments", array(std::move(segmentValues)));
         values.push_back(std::move(value));
     }
     return array(std::move(values));
@@ -196,6 +362,23 @@ std::vector<SampleRegionSetting> sampleRowsFromJson(const juce::var& source)
             row.melodyneSibilantBalance = number(value, "melodyne_sibilant_balance");
             row.melodyneAttackSeconds = number(value, "melodyne_attack_seconds");
             row.melodyneDecayElongation = number(value, "melodyne_decay_elongation");
+            row.hjmVersion = static_cast<int>(number(value, "hjm_version", 1.0));
+            row.role = parseNativeSegmentRole(string(value, "native_role"));
+            row.provenance = string(value, "native_provenance");
+            row.confidence = static_cast<float>(number(value, "native_confidence"));
+            if (const auto* segments = value.getProperty("native_segments", {}).getArray())
+                for (const auto& segmentValue : *segments)
+                    row.segments.push_back({
+                        string(segmentValue, "id"), string(segmentValue, "alias"),
+                        parseNativeSegmentRole(string(segmentValue, "role")),
+                        number(segmentValue, "source_start_seconds"),
+                        number(segmentValue, "source_end_seconds"),
+                        string(segmentValue, "provenance"),
+                        static_cast<float>(number(segmentValue, "confidence")),
+                        number(segmentValue, "alignment_seconds"),
+                        number(segmentValue, "overlap_seconds"),
+                        static_cast<bool>(segmentValue.getProperty("stretchable", true)),
+                        number(segmentValue, "stretch_weight", 1.0) });
             if (row.regionEndSeconds > row.regionStartSeconds)
                 rows.push_back(std::move(row));
         }
@@ -203,10 +386,31 @@ std::vector<SampleRegionSetting> sampleRowsFromJson(const juce::var& source)
 }
 }
 
-McpServer::McpServer()
-    : audio(std::make_unique<AudioEngine>())
+McpServer::McpServer(const juce::StringArray& extraRoots)
+    : ownedProject(std::make_unique<ProjectModel>()), project(*ownedProject)
+{
+    // Folders this server may read whatever else happens: given on the command
+    // line as --roots=A;B, or in HACHISHIFTER_MCP_ROOTS.  Everything else it
+    // may read it earns by being asked to work there.
+    juce::StringArray named(extraRoots);
+    named.addTokens(juce::SystemStats::getEnvironmentVariable(
+        "HACHISHIFTER_MCP_ROOTS", {}), ";", "\"");
+    for (const auto& entry : named)
+    {
+        const juce::File folder(entry.trim().unquoted());
+        if (folder != juce::File() && folder.isDirectory())
+            configuredRoots.push_back(folder);
+    }
+
+    formats.registerBasicFormats();
+}
+
+McpServer::McpServer(ProjectModel& model, AudioEngine* engine, const juce::StringArray& roots)
+    : project(model), audio(engine)
 {
     formats.registerBasicFormats();
+    for (const auto& root : roots)
+        if (juce::File(root).isDirectory()) configuredRoots.emplace_back(root);
 }
 
 int McpServer::run()
@@ -226,6 +430,376 @@ int McpServer::run()
         }
     }
     return 0;
+}
+
+// Every tool this server offers, with the parameters each takes.  Public so a
+// check reads the same list a client is sent rather than a copy of it.
+juce::var McpServer::diagnosticTools()
+{
+    return array({
+            makeTool("project_new", "Create an empty HachiShifter project / 新建工程"),
+            makeTool("project_open", "Open HJPX, legacy HSPX, MPD, MIDI, or audio from path / 打开工程或素材",
+                withAnalysis({
+                    { .name = "path", .type = "string",
+                      .description = "The file to open: .hjpx, .hspx, .mpd, .mid or a recording.  "
+                                     "A recording is analysed as it comes in.",
+                      .required = true },
+                })),
+            makeTool("project_save", "Save current project as HJPX / 保存工程", {
+                { .name = "path", .type = "string",
+                  .description = "Where to write the .hjpx", .required = true },
+            }),
+            makeTool("project_snapshot", "Read every current track, clip, note, pitch and marker / 读取全部工程内容"),
+            makeTool("import_audio", "Import an audio file at start_seconds / 导入音频",
+                withAnalysis({
+                    { .name = "path", .type = "string",
+                      .description = "The recording to bring in", .required = true },
+                    { .name = "start_seconds", .type = "number",
+                      .description = "Where on the timeline it starts.  Default 0." },
+                    { .name = "track_id", .type = "string",
+                      .description = "Which track to put it on; empty makes a new one" },
+                })),
+            makeTool("analyse_audio", "Run configured GAME+FCPE analysis with native fallback and return actual backend / 执行 GAME+FCPE 分析并报告实际后端",
+                withAnalysis({
+                    { .name = "path", .type = "string",
+                      .description = "The recording to analyse.  Nothing is added to the project.",
+                      .required = true },
+                })),
+            makeTool("analysis_status", "Inspect GAME large/small, FCPE and inference availability / 查看 GAME、FCPE 与推理状态",
+                withAnalysis({})),
+            makeTool("import_midi", "Import MIDI notes and tempo / 导入 MIDI", {
+                { .name = "path", .type = "string",
+                  .description = "The MIDI file to add as tracks", .required = true },
+            }),
+            makeTool("export_midi", "Write the project out as a MIDI file with its tempo map and lyrics / 导出 MIDI", {
+                { .name = "path", .type = "string",
+                  .description = "Where to write the .mid", .required = true },
+            }),
+            makeTool("import_ust", "Import a UTAU project as a plain UTAU track / 导入 UST", {
+                { .name = "path", .type = "string",
+                  .description = "The .ust to add as a track", .required = true },
+            }),
+            makeTool("import_melodyne", "Import Melodyne MPD edits; recursive_media, preserve_edits and source_pitch control import / 导入 Melodyne 工程并控制素材搜索、工程编辑与原始 F0",
+                withAnalysis({
+                    { .name = "path", .type = "string",
+                      .description = "The .mpd to open", .required = true },
+                    { .name = "recursive_media", .type = "boolean",
+                      .description = "Search subfolders for the recordings it names.  Default true." },
+                    { .name = "preserve_edits", .type = "boolean",
+                      .description = "Keep the edits saved in the document.  Default true." },
+                    { .name = "source_pitch", .type = "string",
+                      .description = "Where each note's source pitch comes from: keep what the "
+                                     "document holds, or read it again here.  reanalyze, "
+                                     "reanalyse and game_fcpe mean the same as game+fcpe.",
+                      .choices = { "keep", "native", "game+fcpe" } },
+                })),
+            makeTool("set_tempo", "Set BPM and time signature / 设置速度与拍号", {
+                { .name = "bpm", .type = "number",
+                  .description = "Beats a minute, 20 to 400.  Default 120." },
+                { .name = "numerator", .type = "integer",
+                  .description = "Beats in a bar.  Default 4." },
+                { .name = "denominator", .type = "integer",
+                  .description = "What counts as a beat.  Default 4." },
+            }),
+            makeTool("add_track", "Create a melodic, audio or accompaniment track / 新建旋律、普通或伴奏轨道", {
+                { .name = "name", .type = "string", .description = "What to call it" },
+                { .name = "compose", .type = "boolean",
+                  .description = "A melodic track that sings notes, rather than one that "
+                                 "plays recordings.  Default true." },
+                { .name = "accompaniment", .type = "boolean",
+                  .description = "Backing audio with all tuning engines disabled. Overrides compose. Default false." },
+            }),
+            makeTool("set_track", "Set compose, mute, solo, gain, pan and render algorithms / 设置轨道及算法", {
+                { .name = "track_id", .type = "string",
+                  .description = "Which track to change", .required = true },
+                { .name = "name", .type = "string", .description = "What to call it" },
+                { .name = "compose", .type = "boolean",
+                  .description = "Whether it sings notes" },
+                { .name = "muted", .type = "boolean", .description = "Silence this track" },
+                { .name = "solo", .type = "boolean", .description = "Silence every other track" },
+                { .name = "volume", .type = "number",
+                  .description = "Level as a multiplier; 1 leaves it alone" },
+                { .name = "pan", .type = "number",
+                  .description = "Where it sits, -1 left to 1 right" },
+                { .name = "smooth_overlaps", .type = "boolean",
+                  .description = "Crossfade where notes overlap" },
+                { .name = "normalize_volume", .type = "boolean",
+                  .description = "Even out the level across the track" },
+                { .name = "pitch_algorithm", .type = "string",
+                  .description = "What sings the notes.  utau is a plain UTAU track; utau4 (jie) "
+                                 "and utaumou (mou) are the four-region modes.",
+                  .choices = { "mld5", "mld3", "llsm2", "world", "vslib", "nsf-hifigan",
+                               "utau", "utau4", "jie", "utaumou", "mou" } },
+                { .name = "stretch_algorithm", .type = "string",
+                  .description = "What changes a recording's length",
+                  .choices = { "melodyne-hybrid", "variable-mel-hop", "loop", "soundtouch",
+                               "nsf-shift-then-splice" } },
+                { .name = "render_order", .type = "string",
+                  .description = "Whether notes are joined before or after they are processed",
+                  .choices = { "process-then-splice", "stretch-splice-then-pitch" } },
+                { .name = "utau_global_flags", .type = "string",
+                  .description = "Flags handed to the engine for every note of this track" },
+                { .name = "voicebank_directory", .type = "string",
+                  .description = "The UTAU voicebank folder this track sings from" },
+            }),
+            makeTool("set_clip", "Set clip gain, fades and mute state / 设置采样增益、淡入淡出和静音", {
+                { .name = "clip_id", .type = "string",
+                  .description = "Which clip to change", .required = true },
+                { .name = "gain", .type = "number",
+                  .description = "Level as a multiplier; 1 leaves it alone" },
+                { .name = "fade_in_seconds", .type = "number",
+                  .description = "How long it fades in for" },
+                { .name = "fade_out_seconds", .type = "number",
+                  .description = "How long it fades out for" },
+                { .name = "muted", .type = "boolean", .description = "Silence this clip" },
+            }),
+            makeTool("move_clip", "Move a clip on the timeline / 移动采样", {
+                { .name = "clip_id", .type = "string",
+                  .description = "Which clip to move", .required = true },
+                { .name = "start_seconds", .type = "number",
+                  .description = "Where it starts afterwards", .required = true },
+            }),
+            makeTool("resize_clip", "Stretch a whole clip while preserving its source media / 整体拉伸采样并保留原始素材", {
+                { .name = "clip_id", .type = "string",
+                  .description = "Which clip to stretch", .required = true },
+                { .name = "start_seconds", .type = "number",
+                  .description = "Where it starts afterwards", .required = true },
+                { .name = "duration_seconds", .type = "number",
+                  .description = "How long it lasts afterwards.  Default 0.25." },
+            }),
+            makeTool("duplicate_clip", "Deep-copy a clip and its notes to a timeline position / 深度复制采样及其音符到指定位置", {
+                { .name = "clip_id", .type = "string",
+                  .description = "The clip to copy", .required = true },
+                { .name = "start_seconds", .type = "number",
+                  .description = "Where the copy starts; leave it out to place it after the original" },
+                { .name = "track_id", .type = "string",
+                  .description = "Which track the copy goes on; empty keeps it on its own" },
+            }),
+            makeTool("transpose_note", "Move a note and its whole contour / 整体移动音高线", {
+                { .name = "note_id", .type = "string",
+                  .description = "Which note to move", .required = true },
+                { .name = "semitones", .type = "number",
+                  .description = "How far to move it, in semitones", .required = true },
+            }),
+            makeTool("edit_notes_pitch", "Batch transpose, set, average or quantize note pitches / 批量移调、设置、平均或量化音符", {
+                { .name = "note_ids", .type = "array",
+                  .description = "The notes to change", .shape = []() { return typedSchema({}); } },
+                { .name = "note_id", .type = "string",
+                  .description = "One note, when there is only one" },
+                { .name = "action", .type = "string",
+                  .description = "What to do to them: move by cents, put them all on one pitch, "
+                                 "put them on their average, or snap them to a step",
+                  .choices = { "transpose", "set", "average", "quantize" } },
+                { .name = "cents", .type = "number",
+                  .description = "How far to move them, for transpose" },
+                { .name = "midi", .type = "number",
+                  .description = "The pitch they all take, for set.  Default 60." },
+                { .name = "step_semitones", .type = "number",
+                  .description = "The step they snap to, for quantize.  Default 1." },
+            }),
+            makeTool("duplicate_notes", "Deep-copy selected notes into a target clip / 深度复制所选音符到目标采样", {
+                { .name = "note_ids", .type = "array",
+                  .description = "The notes to copy", .shape = []() { return typedSchema({}); } },
+                { .name = "note_id", .type = "string",
+                  .description = "One note, when there is only one" },
+                { .name = "clip_id", .type = "string",
+                  .description = "The clip the copies go in", .required = true },
+                { .name = "start_seconds", .type = "number",
+                  .description = "Where the first copy starts" },
+            }),
+            makeTool("resize_note", "Change note time bounds / 修改音符时间", {
+                { .name = "note_id", .type = "string",
+                  .description = "Which note to change", .required = true },
+                { .name = "start_seconds", .type = "number",
+                  .description = "Where it starts, from the clip start", .required = true },
+                { .name = "duration_seconds", .type = "number",
+                  .description = "How long it lasts.  Default 0.25." },
+            }),
+            makeTool("set_note", "Set pitch, Robust Pitch Curve, tension, breath, formant, gain, Attack and consonant parameters / 设置稳健音高线及全部音符参数", {
+                { .name = "note_id", .type = "string",
+                  .description = "Which note to change", .required = true },
+                { .name = "label", .type = "string",
+                  .description = "The lyric sung on it" },
+                { .name = "gain", .type = "number",
+                  .description = "Level as a multiplier; 1 is as written" },
+                { .name = "tension", .type = "number", .description = "Tension, -1 to 1" },
+                { .name = "breath", .type = "number", .description = "Breathiness, -1 to 1" },
+                { .name = "formant_semitones", .type = "number",
+                  .description = "Formant shift, in semitones" },
+                { .name = "drift", .type = "number",
+                  .description = "How much of the recording's slow pitch movement is kept, 0 to 2" },
+                { .name = "modulation", .type = "number",
+                  .description = "How much of its vibrato is kept, 0 to 2" },
+                { .name = "robust_pitch_curve", .type = "boolean",
+                  .description = "Follow the drawn pitch line rather than the recording's own" },
+                { .name = "consonant_seconds", .type = "number",
+                  .description = "The head of the note that is not stretched" },
+                { .name = "attack_speed", .type = "number",
+                  .description = "How quickly the note is reached" },
+                { .name = "amplitude_envelope", .type = "array",
+                  .description = "[[seconds, dB], ...] from the note's start; negative seconds "
+                                 "reach into the preutterance" },
+                { .name = "amplitude_envelope_base", .type = "number",
+                  .description = "The envelope's height as a whole, in UTAU's linear percent: "
+                                 "100 is the envelope as drawn, 200 twice as loud, 0 silence.  "
+                                 "A note with no envelope has a flat 100% one, raised the same "
+                                 "way.  0 to 200." },
+                { .name = "utau_flags", .type = "string",
+                  .description = "Flags handed to the engine for this note alone" },
+                { .name = "utau_consonant_velocity", .type = "integer",
+                  .description = "Consonant velocity, 0 to 200; 100 is as recorded" },
+                { .name = "utau_splice", .type = "boolean",
+                  .description = "Join this note to the one before it rather than re-attacking" },
+                { .name = "jie_split", .type = "array",
+                  .description = "Three rising fractions of the note naming where its four "
+                                 "regions meet; anything else hands the split back to the engine" },
+                { .name = "region_flags", .type = "array",
+                  .description = "Flags per region, as [\"f1\",\"f2\",\"f3\",\"f4\"]; an empty "
+                                 "entry leaves that region on the note's own flags",
+                  .shape = []() { return typedSchema({}); } },
+                { .name = "flag_split", .type = "boolean",
+                  .description = "Whether region_flags are used at all.  Default true." },
+                { .name = "flag_curve_enabled", .type = "boolean",
+                  .description = "Whether this note's flag curves are drawn on" },
+                { .name = "flag_curve", .type = "object",
+                  .description = "One flag's curve across the note",
+                  .shape = flagCurveShape },
+                { .name = "flag_curve_g", .type = "array",
+                  .description = "The g curve on its own, as [[seconds, value], ...]; an empty "
+                                 "list drops it" },
+            }),
+            makeTool("set_pitch_curve", "Draw an absolute target-pitch curve without replacing source F0 / 绘制目标音高线并保留原始 F0", {
+                { .name = "note_id", .type = "string",
+                  .description = "Which note the curve belongs to", .required = true },
+                { .name = "points", .type = "array",
+                  .description = "The curve, in order; at least one point",
+                  .required = true, .shape = pitchPointShape },
+            }),
+            makeTool("add_note", "Create a note in a clip / 在采样中创建音符", {
+                { .name = "clip_id", .type = "string",
+                  .description = "The clip to put it in", .required = true },
+                { .name = "start_seconds", .type = "number",
+                  .description = "Where it starts, from the clip start", .required = true },
+                { .name = "duration_seconds", .type = "number",
+                  .description = "How long it lasts.  Default 0.25." },
+                { .name = "midi", .type = "number",
+                  .description = "Its pitch, as a MIDI note.  Default 60." },
+            }),
+            makeTool("remove_note", "Delete a note / 删除音符", {
+                { .name = "note_id", .type = "string",
+                  .description = "Which note to delete", .required = true },
+            }),
+            makeTool("toggle_note_connection", "Connect or separate adjacent notes / 连接或分离相邻音符", {
+                { .name = "note_id", .type = "string",
+                  .description = "The note whose join with the one before it is turned over",
+                  .required = true },
+            }),
+            makeTool("remove_clip", "Delete a clip / 删除采样", {
+                { .name = "clip_id", .type = "string",
+                  .description = "Which clip to delete", .required = true },
+            }),
+            makeTool("remove_track", "Delete a track / 删除轨道", {
+                { .name = "track_id", .type = "string",
+                  .description = "Which track to delete", .required = true },
+            }),
+            makeTool("undo", "Undo the last project edit / 撤销工程编辑"),
+            makeTool("redo", "Redo the last project edit / 重做工程编辑"),
+            makeTool("utau_render_selection", "Choose which UTAU notes render and play; empty selects every note / 选择参与 UTAU 渲染与试听的音符", {
+                { .name = "note_ids", .type = "array",
+                  .description = "The notes that render; leave it out to select every UTAU note",
+                  .shape = []() { return typedSchema({}); } },
+                { .name = "note_id", .type = "string",
+                  .description = "One note, when there is only one" },
+            }),
+            makeTool("set_utau_resampler", "Point UTAU rendering at a resampler executable / 指定 UTAU 重采样器", {
+                { .name = "path", .type = "string",
+                  .description = "The resampler .exe to render with; it has to exist",
+                  .required = true },
+            }),
+            makeTool("render_prepare", "Pre-render the current project with its selected algorithms / 按当前所选算法预渲染工程", {
+                { .name = "wait", .type = "boolean",
+                  .description = "Wait for the render to finish before answering.  Default false." },
+                { .name = "timeout_seconds", .type = "number",
+                  .description = "How long to wait, 0.1 to 3600.  Default 300." },
+            }),
+            makeTool("render_status", "Read pre-render progress and active backends / 读取预渲染进度与实际后端"),
+            makeTool("export_wav", "Render every note and export to WAV; track_id exports one track alone, from_seconds/to_seconds one stretch / 渲染全曲并导出 WAV，track_id 可单独导出一个轨道", {
+                { .name = "path", .type = "string",
+                  .description = "Where to write the .wav", .required = true },
+                { .name = "channels", .type = "integer", .description = "1 mono or 2 stereo; default 2" },
+                { .name = "sample_rate", .type = "integer", .description = "8000..192000 Hz, 0 follows device" },
+                { .name = "bit_depth", .type = "integer", .description = "16/24 PCM or 32 float; default 24" },
+                { .name = "track_id", .type = "string",
+                  .description = "Export this track alone; empty exports the mix" },
+                { .name = "from_seconds", .type = "number",
+                  .description = "Start of the stretch to write.  Default 0." },
+                { .name = "to_seconds", .type = "number",
+                  .description = "End of the stretch; 0 writes to the end of the song" },
+                { .name = "timeout_seconds", .type = "number",
+                  .description = "How long to wait for the render, 0.1 to 3600.  Default 300." },
+            }),
+            makeTool("transport_play", "Render if needed and start playback; play_until_seconds stops where a selection ends / 必要时预渲染并开始播放", {
+                { .name = "position_seconds", .type = "number",
+                  .description = "Where to play from; leave it out to carry on from here" },
+                { .name = "play_until_seconds", .type = "number",
+                  .description = "Where to stop, as a selection's end does" },
+                { .name = "timeout_seconds", .type = "number",
+                  .description = "How long to wait for the render, 0.1 to 3600.  Default 300." },
+            }),
+            makeTool("transport_stop", "Stop transport playback / 停止播放"),
+            makeTool("transport_seek", "Seek transport to position_seconds / 跳转播放位置", {
+                { .name = "position_seconds", .type = "number",
+                  .description = "Where to move the playhead", .required = true },
+            }),
+            makeTool("transport_status", "Read playback position and render state / 读取播放位置与渲染状态"),
+            makeTool("sample_settings_read", "Read or derive audio .hjm.csv regions / 读取或生成音频 .hjm.csv 分段", {
+                { .name = "audio_path", .type = "string",
+                  .description = "The recording whose regions are read; they are derived when "
+                                 "it has no sidecar yet", .required = true },
+            }),
+            makeTool("sample_settings_save", "Save audio regions to .hjm.csv / 保存音频分段到 .hjm.csv", {
+                { .name = "audio_path", .type = "string",
+                  .description = "The recording the regions belong to", .required = true },
+                { .name = "rows", .type = "array",
+                  .description = "The regions to write; at least one", .required = true,
+                  .shape = regionRowShape },
+            }),
+            makeTool("oto_import", "Import one audio file's regions from UTAU oto.ini / 从 UTAU oto.ini 导入单个音频分段", {
+                { .name = "audio_path", .type = "string",
+                  .description = "The recording the entries describe", .required = true },
+                { .name = "oto_path", .type = "string",
+                  .description = "The oto.ini to read", .required = true },
+                { .name = "save_sidecar", .type = "boolean",
+                  .description = "Write the regions to the recording's .hjm.csv as well.  "
+                                 "Default true." },
+            }),
+            makeTool("oto_export", "Export one audio file's regions to UTAU oto.ini / 将单个音频分段导出为 UTAU oto.ini", {
+                { .name = "audio_path", .type = "string",
+                  .description = "The recording whose regions are written", .required = true },
+                { .name = "oto_path", .type = "string",
+                  .description = "The oto.ini to write", .required = true },
+            }),
+            makeTool("jie_oto_create", "Seed a voicebank's four-region oto4.ini from its oto.ini / 按 oto.ini 生成界•OTO", {
+                { .name = "voicebank_path", .type = "string",
+                  .description = "The voicebank folder holding oto.ini", .required = true },
+            }),
+            makeTool("voicebank_import", "Import an UTAU voicebank and create .hjm.csv sidecars / 导入 UTAU 音源并生成 .hjm.csv", {
+                { .name = "path", .type = "string",
+                  .description = "The voicebank folder to read", .required = true },
+            }),
+            makeTool("read_file", "Read a byte range as base64 / 读取任意文件内容", {
+                { .name = "path", .type = "string",
+                  .description = "The file to read", .required = true },
+                { .name = "offset", .type = "integer",
+                  .description = "Where to start reading, in bytes.  Default 0." },
+                { .name = "max_bytes", .type = "integer",
+                  .description = "How much to read, 1 to 4194304.  Default 1048576." },
+            }),
+            makeTool("list_directory", "List a directory with type and size / 列出目录内容", {
+                { .name = "path", .type = "string",
+                  .description = "The folder to list", .required = true },
+            })
+    });
 }
 
 juce::var McpServer::handle(const juce::var& request, bool& shouldRespond)
@@ -259,51 +833,7 @@ juce::var McpServer::handle(const juce::var& request, bool& shouldRespond)
     if (method == "tools/list")
     {
         auto result = object();
-        set(result, "tools", array({
-            makeTool("project_new", "Create an empty HachiShifter project / 新建工程"),
-            makeTool("project_open", "Open HJPX, legacy HSPX, MPD, MIDI, or audio from path / 打开工程或素材"),
-            makeTool("project_save", "Save current project as HJPX / 保存工程"),
-            makeTool("project_snapshot", "Read every current track, clip, note, pitch and marker / 读取全部工程内容"),
-            makeTool("import_audio", "Import an audio file at start_seconds / 导入音频"),
-            makeTool("analyse_audio", "Run configured GAME+FCPE analysis with native fallback and return actual backend / 执行 GAME+FCPE 分析并报告实际后端"),
-            makeTool("analysis_status", "Inspect GAME large/small, FCPE and inference availability / 查看 GAME、FCPE 与推理状态"),
-            makeTool("import_midi", "Import MIDI notes and tempo / 导入 MIDI"),
-            makeTool("import_melodyne", "Import Melodyne MPD edits; recursive_media, preserve_edits and source_pitch control import / 导入 Melodyne 工程并控制素材搜索、工程编辑与原始 F0"),
-            makeTool("set_tempo", "Set BPM and time signature / 设置速度与拍号"),
-            makeTool("add_track", "Create an empty melodic or audio track / 新建空旋律或普通音轨"),
-            makeTool("set_track", "Set compose, mute, solo, gain, pan and render algorithms / 设置轨道及算法"),
-            makeTool("set_clip", "Set clip gain, fades and mute state / 设置采样增益、淡入淡出和静音"),
-            makeTool("move_clip", "Move a clip on the timeline / 移动采样"),
-            makeTool("resize_clip", "Stretch a whole clip while preserving its source media / 整体拉伸采样并保留原始素材"),
-            makeTool("duplicate_clip", "Deep-copy a clip and its notes to a timeline position / 深度复制采样及其音符到指定位置"),
-            makeTool("transpose_note", "Move a note and its whole contour / 整体移动音高线"),
-            makeTool("edit_notes_pitch", "Batch transpose, set, average or quantize note pitches / 批量移调、设置、平均或量化音符"),
-            makeTool("duplicate_notes", "Deep-copy selected notes into a target clip / 深度复制所选音符到目标采样"),
-            makeTool("resize_note", "Change note time bounds / 修改音符时间"),
-            makeTool("set_note", "Set pitch, Robust Pitch Curve, tension, breath, formant, gain, Attack and consonant parameters / 设置稳健音高线及全部音符参数"),
-            makeTool("set_pitch_curve", "Draw an absolute target-pitch curve without replacing source F0 / 绘制目标音高线并保留原始 F0"),
-            makeTool("add_note", "Create a note in a clip / 在采样中创建音符"),
-            makeTool("remove_note", "Delete a note / 删除音符"),
-            makeTool("toggle_note_connection", "Connect or separate adjacent notes / 连接或分离相邻音符"),
-            makeTool("remove_clip", "Delete a clip / 删除采样"),
-            makeTool("remove_track", "Delete a track / 删除轨道"),
-            makeTool("undo", "Undo the last project edit / 撤销工程编辑"),
-            makeTool("redo", "Redo the last project edit / 重做工程编辑"),
-            makeTool("render_prepare", "Pre-render the current project with its selected algorithms / 按当前所选算法预渲染工程"),
-            makeTool("render_status", "Read pre-render progress and active backends / 读取预渲染进度与实际后端"),
-            makeTool("export_wav", "Render and export the current project to WAV / 渲染并导出当前工程为 WAV"),
-            makeTool("transport_play", "Render if needed and start transport playback / 必要时预渲染并开始播放"),
-            makeTool("transport_stop", "Stop transport playback / 停止播放"),
-            makeTool("transport_seek", "Seek transport to position_seconds / 跳转播放位置"),
-            makeTool("transport_status", "Read playback position and render state / 读取播放位置与渲染状态"),
-            makeTool("sample_settings_read", "Read or derive audio .hjm.csv regions / 读取或生成音频 .hjm.csv 分段"),
-            makeTool("sample_settings_save", "Save audio regions to .hjm.csv / 保存音频分段到 .hjm.csv"),
-            makeTool("oto_import", "Import one audio file's regions from UTAU oto.ini / 从 UTAU oto.ini 导入单个音频分段"),
-            makeTool("oto_export", "Export one audio file's regions to UTAU oto.ini / 将单个音频分段导出为 UTAU oto.ini"),
-            makeTool("voicebank_import", "Import an UTAU voicebank and create .hjm.csv sidecars / 导入 UTAU 音源并生成 .hjm.csv"),
-            makeTool("read_file", "Read a byte range as base64 / 读取任意文件内容"),
-            makeTool("list_directory", "List a directory with type and size / 列出目录内容")
-        }));
+        set(result, "tools", diagnosticTools());
         set(response, "result", result);
         return response;
     }
@@ -343,9 +873,84 @@ juce::var McpServer::handle(const juce::var& request, bool& shouldRespond)
     return errorResponse(id, -32601, "Method not found");
 }
 
+bool McpServer::pathWithinRoots(const std::vector<juce::File>& roots,
+                                const juce::File& target)
+{
+    if (target == juce::File()) return false;
+    // A link is followed before it is judged, or a link inside a root would
+    // hand back whatever it points at.  One level: a link somewhere further up
+    // the path is not followed, which is said plainly in docs/mcp.md.
+    const auto resolved = target.isSymbolicLink() ? target.getLinkedTarget() : target;
+    for (const auto& root : roots)
+    {
+        if (root == juce::File()) continue;
+        const auto within = root.isSymbolicLink() ? root.getLinkedTarget() : root;
+        if (within == juce::File()) continue;
+        // isAChildOf compares whole folders, so a root is not a prefix of a
+        // name that merely begins with it.
+        if (resolved == within || resolved.isAChildOf(within)) return true;
+    }
+    return false;
+}
+
+std::vector<juce::File> McpServer::projectRoots(const ProjectData& data)
+{
+    std::vector<juce::File> roots;
+    const auto add = [&roots](const juce::File& folder)
+    {
+        if (folder == juce::File() || !folder.isDirectory()) return;
+        for (const auto& known : roots) if (known == folder) return;
+        roots.push_back(folder);
+    };
+    for (const auto& track : data.tracks)
+    {
+        add(track.voicebankDirectory);
+        for (const auto& clip : track.clips)
+            if (clip.sourceFile != juce::File())
+                add(clip.sourceFile.getParentDirectory());
+    }
+    return roots;
+}
+
+std::vector<juce::File> McpServer::allowedRoots() const
+{
+    auto roots = configuredRoots;
+    for (const auto& root : sessionRoots) roots.push_back(root);
+    for (const auto& root : projectRoots(project.snapshot())) roots.push_back(root);
+    return roots;
+}
+
+void McpServer::allow(const juce::File& file)
+{
+    const auto folder = file.isDirectory() ? file : file.getParentDirectory();
+    if (folder == juce::File() || !folder.isDirectory()) return;
+    for (const auto& known : sessionRoots) if (known == folder) return;
+    sessionRoots.push_back(folder);
+}
+
 juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
 {
+    const auto result = dispatch(name, args);
+    // A tool that was handed a path and did its work makes that folder one the
+    // session may read afterwards: it is where the work it was asked to do
+    // lives.  Only on success, so a path that failed grants nothing.
+    if (!static_cast<bool>(result.getProperty("isError", false)))
+        for (const auto* key : { "path", "audio_path", "oto_path", "voicebank_path",
+                                 "voicebank_directory" })
+            if (const auto given = string(args, key); given.isNotEmpty())
+                allow(juce::File(given));
+    return result;
+}
+
+juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
+{
     juce::String error;
+    if (audio == nullptr && (name.startsWith("transport_") || name.startsWith("render_")
+        || name == "export_wav" || name == "utau_render_selection" || name == "set_utau_resampler"))
+    {
+        ownedAudio = std::make_unique<AudioEngine>();
+        audio = ownedAudio.get();
+    }
     if (name == "project_new")
     {
         project.clear();
@@ -365,8 +970,14 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
         {
             if (auto imported = MelodyneImporter::importProject(file, error))
             {
+                juce::StringArray annotationWarnings;
+                SampleSettings::convertMelodyneProject(imported->project,
+                                                       annotationWarnings);
                 project.replace(std::move(imported->project));
-                return toolResult(summary(project.snapshot()));
+                return toolResult(summary(project.snapshot())
+                    + (annotationWarnings.isEmpty() ? juce::String()
+                        : "; annotation_warnings="
+                            + annotationWarnings.joinIntoString(" | ")));
             }
         }
         else if (file.hasFileExtension("mid;midi"))
@@ -426,6 +1037,20 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
     {
         if (project.addMidiFile(juce::File(string(args, "path")), error)) return toolResult("ok");
     }
+    else if (name == "export_midi")
+    {
+        const juce::File file(string(args, "path"));
+        if (ProjectModel::writeMidiFile(project.snapshot(), file, error))
+            return toolResult("written=" + file.getFullPathName());
+    }
+    else if (name == "import_ust")
+    {
+        juce::StringArray warnings;
+        if (project.addUstFile(juce::File(string(args, "path")), error, warnings))
+            return toolResult(warnings.isEmpty()
+                ? juce::String("ok")
+                : "ok; " + warnings.joinIntoString("; "));
+    }
     else if (name == "import_melodyne")
     {
         MelodyneImportOptions options;
@@ -445,8 +1070,14 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
                 (void) AnalysisService::reanalyseProjectSourcePitch(
                     imported->project, analysisConfig(args), pitchError);
             }
+            juce::StringArray annotationWarnings;
+            SampleSettings::convertMelodyneProject(imported->project,
+                                                   annotationWarnings);
             project.replace(std::move(imported->project));
-            return toolResult(summary(project.snapshot()));
+            return toolResult(summary(project.snapshot())
+                + (annotationWarnings.isEmpty() ? juce::String()
+                    : "; annotation_warnings="
+                        + annotationWarnings.joinIntoString(" | ")));
         }
     }
     else if (name == "set_tempo")
@@ -458,13 +1089,37 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
     else if (name == "add_track")
     {
         const auto compose = static_cast<bool>(args.getProperty("compose", true));
-        const auto id = project.addTrack(string(args, "name"), compose);
+        const auto id = project.addTrack(string(args, "name"), compose, false,
+            static_cast<bool>(args.getProperty("accompaniment", false)));
         return toolResult("track_id=" + id);
     }
     else if (name == "set_track")
     {
         const auto id = string(args, "track_id");
+        for (const auto& track : project.snapshot().tracks)
+            if (track.id == id && track.accompaniment
+                && ((args.hasProperty("compose") && static_cast<bool>(args["compose"]))
+                    || args.hasProperty("pitch_algorithm") || args.hasProperty("stretch_algorithm")
+                    || args.hasProperty("render_order") || args.hasProperty("voicebank_directory")
+                    || args.hasProperty("utau_global_flags")))
+                return toolResult("Accompaniment tracks play original audio and cannot enable tuning engines", true);
+        if (args.hasProperty("pitch_algorithm"))
+        {
+            const auto chosen = string(args, "pitch_algorithm").toLowerCase();
+            if (chosen == "mld5" || chosen == "mld3")
+                return toolResult(chosen + " is disabled (incomplete algorithm)", true);
+            if (chosen == "vslib")
+                return toolResult("vslib native implementation is not integrated", true);
+            if (chosen != "nsf-hifigan" && chosen != "world" && chosen != "llsm2"
+                && chosen != "utau" && chosen != "utau4" && chosen != "utaumou")
+                return toolResult("Unknown pitch algorithm: " + chosen, true);
+        }
         if (args.hasProperty("name")) project.setTrackName(id, string(args, "name"));
+        if (args.hasProperty("utau_global_flags"))
+            project.setTrackUtauGlobalFlags(id, string(args, "utau_global_flags"));
+        if (args.hasProperty("voicebank_directory"))
+            project.setTrackVoicebankDirectory(id,
+                juce::File(string(args, "voicebank_directory")));
         if (args.hasProperty("compose")) project.setTrackCompose(id, static_cast<bool>(args["compose"]));
         if (args.hasProperty("muted")) project.setTrackMuted(id, static_cast<bool>(args["muted"]));
         if (args.hasProperty("solo")) project.setTrackSolo(id, static_cast<bool>(args["solo"]));
@@ -482,7 +1137,10 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
                 : value == "world" ? PitchAlgorithm::world
                 : value == "vslib" ? PitchAlgorithm::vocalShifter
                 : value == "mld3" ? PitchAlgorithm::mld3
-                : value == "llsm2" ? PitchAlgorithm::llsm2 : PitchAlgorithm::mld5);
+                : value == "llsm2" ? PitchAlgorithm::llsm2
+                : value.startsWith("utau") ? PitchAlgorithm::utau
+                : PitchAlgorithm::mld5);
+            project.setTrackUtauMode(id, parseUtauMode(value));
         }
         if (args.hasProperty("stretch_algorithm"))
         {
@@ -589,6 +1247,101 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
     else if (name == "set_note")
     {
         const auto id = string(args, "note_id");
+        if (args.hasProperty("label")) project.setNoteLabel(id, string(args, "label"));
+        if (args.hasProperty("jie_split"))
+        {
+            // Three cumulative fractions of the note, or null to hand the note
+            // back to the engine's own allocation.
+            const auto value = args["jie_split"];
+            if (const auto* fractions = value.getArray(); fractions != nullptr
+                && fractions->size() == 3)
+                project.setNotesUtauJieSplit({ id },
+                    static_cast<double>((*fractions)[0]),
+                    static_cast<double>((*fractions)[1]),
+                    static_cast<double>((*fractions)[2]));
+            else
+                project.clearNotesUtauJieSplit({ id });
+        }
+        if (args.hasProperty("region_flags") || args.hasProperty("flag_split"))
+        {
+            // The four-region flags, as ["f1","f2","f3","f4"]; an empty entry
+            // means that region keeps the note's own flags.
+            juce::String parts[4];
+            if (const auto* given = args["region_flags"].getArray(); given != nullptr)
+                for (int index = 0; index < 4 && index < given->size(); ++index)
+                    parts[index] = (*given)[index].toString();
+            project.setNotesRegionFlags({ id },
+                static_cast<bool>(args.getProperty("flag_split", true)),
+                parts[0], parts[1], parts[2], parts[3]);
+        }
+        if (args.hasProperty("flag_curve_enabled"))
+            project.setNotesUtauFlagCurveEnabled({ id },
+                static_cast<bool>(args["flag_curve_enabled"]));
+        if (args.hasProperty("flag_curve"))
+        {
+            // {"flag": "Mt", "points": [[seconds, value, shape?], ...]}; an
+            // empty list drops that flag's curve and leaves the others.
+            const auto flag = args["flag_curve"].getProperty("flag", "g").toString();
+            std::vector<FlagCurvePoint> points;
+            if (const auto* given = args["flag_curve"].getProperty("points", {})
+                                        .getArray(); given != nullptr)
+                for (const auto& entry : *given)
+                    if (const auto* pair = entry.getArray(); pair != nullptr
+                        && pair->size() >= 2)
+                    {
+                        FlagCurvePoint point;
+                        point.timeSeconds = static_cast<double>((*pair)[0]);
+                        point.value = static_cast<float>(
+                            static_cast<double>((*pair)[1]));
+                        if (pair->size() >= 3)
+                            point.shape = parsePitchCurveShape((*pair)[2].toString());
+                        points.push_back(point);
+                    }
+            project.setNoteUtauFlagCurve(id, flag, std::move(points));
+        }
+        if (args.hasProperty("flag_curve_g"))
+        {
+            // [[seconds, value], ...] against the note start, or an empty list
+            // to drop the curve.  Seconds may be negative to reach into the
+            // preutterance, exactly like an amplitude envelope point.
+            std::vector<FlagCurvePoint> points;
+            if (const auto* given = args["flag_curve_g"].getArray(); given != nullptr)
+                for (const auto& entry : *given)
+                    if (const auto* pair = entry.getArray(); pair != nullptr
+                        && pair->size() >= 2)
+                    {
+                        FlagCurvePoint point;
+                        point.timeSeconds = static_cast<double>((*pair)[0]);
+                        point.value = static_cast<float>(
+                            static_cast<double>((*pair)[1]));
+                        // An optional third entry names the shape of the segment
+                        // arriving here: linear (the default), smooth, ease-in,
+                        // ease-out or custom-bezier.
+                        if (pair->size() >= 3)
+                            point.shape = parsePitchCurveShape((*pair)[2].toString());
+                        points.push_back(point);
+                    }
+            project.setNoteUtauFlagCurve(id, "g", std::move(points));
+        }
+        if (args.hasProperty("utau_consonant_velocity"))
+            project.setNotesUtauConsonantVelocity({ id },
+                static_cast<int>(number(args, "utau_consonant_velocity", 100)));
+        if (args.hasProperty("amplitude_envelope"))
+        {
+            // Pairs of [seconds, dB], relative to the note start.
+            std::vector<AmplitudeEnvelopePoint> points;
+            if (const auto* rows = args["amplitude_envelope"].getArray())
+                for (const auto& row : *rows)
+                    if (const auto* pair = row.getArray(); pair != nullptr
+                        && pair->size() == 2)
+                        points.push_back({ static_cast<double>((*pair)[0]),
+                                           static_cast<float>((*pair)[1]) });
+            project.setNoteAmplitudeEnvelope(id, std::move(points));
+        }
+        if (args.hasProperty("utau_splice"))
+            project.setNotesUtauSplice({ id }, static_cast<bool>(args["utau_splice"]));
+        if (args.hasProperty("utau_flags"))
+            project.setNoteUtauFlags(id, string(args, "utau_flags"));
         if (args.hasProperty("modulation"))
             project.setNoteModulation(id, static_cast<float>(number(args, "modulation", 1.0)));
         if (args.hasProperty("drift"))
@@ -601,6 +1354,9 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
             project.setNoteFormant(id, static_cast<float>(number(args, "formant_semitones")));
         if (args.hasProperty("gain"))
             project.setNoteGain(id, static_cast<float>(number(args, "gain", 1.0)));
+        if (args.hasProperty("amplitude_envelope_base"))
+            project.setNotesAmplitudeEnvelopeBase({ id },
+                static_cast<float>(number(args, "amplitude_envelope_base", 100.0)));
         if (args.hasProperty("robust_pitch_curve"))
             project.setNoteRobustPitchCurve(id,
                 static_cast<bool>(args["robust_pitch_curve"]));
@@ -670,6 +1426,34 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
         const auto ok = project.redo();
         return toolResult(ok ? "ok" : "history_empty", !ok);
     }
+    else if (name == "set_utau_resampler")
+    {
+        const juce::File executable(string(args, "path"));
+        if (!executable.existsAsFile())
+            return toolResult("Resampler executable not found", true);
+        audio->setUtauResamplerFile(executable);
+        audioPrepared = false;
+        return toolResult("ok");
+    }
+    else if (name == "utau_render_selection")
+    {
+        // UTAU rendering is selection-driven, so without this a headless
+        // caller can only ever export silence from a UTAU track.
+        auto ids = strings(args, "note_ids");
+        if (ids.empty())
+            if (const auto id = string(args, "note_id"); id.isNotEmpty()) ids.push_back(id);
+        if (ids.empty())
+        {
+            const auto data = project.snapshot();
+            for (const auto& track : data.tracks)
+                if (track.pitchAlgorithm == PitchAlgorithm::utau)
+                    for (const auto& clip : track.clips)
+                        for (const auto& note : clip.notes) ids.push_back(note.id);
+        }
+        audio->setUtauRenderNoteSelection(ids);
+        audioPrepared = false;
+        return toolResult("note_ids=" + juce::String(static_cast<int>(ids.size())));
+    }
     else if (name == "render_prepare")
     {
         syncAudio();
@@ -686,12 +1470,26 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
     }
     else if (name == "export_wav")
     {
-        syncAudio();
+        // Export renders the whole song, as it does from the window: rendering
+        // is selection-driven, so exporting what happened to be selected would
+        // write one phrase and silence everywhere else.
+        audio->selectEveryUtauNote(project.snapshot());
+        audioPrepared = false;
+        syncAudio(true);
         const auto timeout = juce::jlimit(0.1, 3600.0, number(args, "timeout_seconds", 300.0));
         if (!waitForRender(timeout, error)) return toolResult(error, true);
         const juce::File file(string(args, "path"));
         if (file.getFullPathName().isEmpty()) return toolResult("WAV output path is empty", true);
-        if (audio->exportWav(file, error))
+        // A track id exports that track alone, for one file per track; a
+        // range writes only that stretch, as "export the last render" does.
+        WavExportOptions options;
+        options.channels = static_cast<int>(number(args, "channels", 2));
+        options.sampleRate = static_cast<int>(number(args, "sample_rate", 0));
+        options.bitDepth = static_cast<int>(number(args, "bit_depth", 24));
+        if (!options.isValid()) return toolResult("Invalid WAV format", true);
+        if (audio->exportWav(file, error, string(args, "track_id"),
+                             number(args, "from_seconds", 0.0),
+                             number(args, "to_seconds", 0.0), options))
         {
             auto value = object();
             set(value, "path", file.getFullPathName());
@@ -707,6 +1505,10 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
         if (!waitForRender(timeout, error)) return toolResult(error, true);
         if (args.hasProperty("position_seconds"))
             audio->setPosition(number(args, "position_seconds"));
+        // Playing a selection stops where the selection ends; the window sets
+        // this from the marquee, and it stays set after the transport stops.
+        if (args.hasProperty("play_until_seconds"))
+            audio->setPlayUntil(number(args, "play_until_seconds"));
         audio->play();
         return toolResult(juce::JSON::toString(transportStatusJson(), false));
     }
@@ -773,6 +1575,15 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
             return toolResult("saved=" + otoFile.getFullPathName()
                               + "; regions=" + juce::String(static_cast<juce::int64>(rows.size())));
     }
+    else if (name == "jie_oto_create")
+    {
+        const juce::File root(string(args, "voicebank_path"));
+        auto written = 0;
+        auto kept = 0;
+        if (SampleSettings::createJieOto(root, written, kept, error))
+            return toolResult("written=" + juce::String(written)
+                              + "; kept=" + juce::String(kept));
+    }
     else if (name == "voicebank_import")
     {
         juce::StringArray audioFiles;
@@ -798,6 +1609,8 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
     else if (name == "read_file")
     {
         const juce::File file(string(args, "path"));
+        if (!pathWithinRoots(allowedRoots(), file))
+            return toolResult(outsideRootsMessage(file, allowedRoots()), true);
         auto input = file.createInputStream();
         if (input != nullptr)
         {
@@ -819,6 +1632,8 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
     else if (name == "list_directory")
     {
         const juce::File directory(string(args, "path"));
+        if (!pathWithinRoots(allowedRoots(), directory))
+            return toolResult(outsideRootsMessage(directory, allowedRoots()), true);
         juce::Array<juce::File> entries;
         directory.findChildFiles(entries, juce::File::findFilesAndDirectories, false);
         std::vector<juce::var> values;
@@ -837,6 +1652,114 @@ juce::var McpServer::callTool(const juce::String& name, const juce::var& args)
     return toolResult(error.isNotEmpty() ? error : "Operation failed", true);
 }
 
+juce::var McpServer::noteJson(const NoteData& note, bool includeCurves)
+{
+    auto noteValue = object();
+    set(noteValue, "id", note.id);
+    set(noteValue, "label", note.label);
+    set(noteValue, "diffsinger_pronunciation", note.diffSingerPronunciation);
+    set(noteValue, "diffsinger_timing", juce::JSON::parse(note.diffSingerTiming));
+    if (includeCurves)
+    {
+        auto pitchPoints = [](const auto& points) {
+            juce::Array<juce::var> values;
+            for (const auto& p : points) values.add(juce::Array<juce::var>{p.timeSeconds, p.targetMidi});
+            return juce::var(values);
+        };
+        set(noteValue, "pitch_control_points", pitchPoints(note.pitchControlPoints));
+        set(noteValue, "diffsinger_pitch_reference", pitchPoints(note.diffSingerPitchReference));
+        set(noteValue, "diffsinger_pitch_offset", pitchPoints(note.diffSingerPitchOffset));
+    }
+    set(noteValue, "native_role", nativeSegmentRoleName(note.nativeRole));
+    set(noteValue, "native_provenance", note.nativeProvenance);
+    set(noteValue, "native_confidence", note.nativeConfidence);
+    if (includeCurves)
+    {
+        std::vector<juce::var> nativeSegments;
+        for (const auto& segment : note.nativeSegments)
+        {
+            auto segmentValue = object();
+            set(segmentValue, "id", segment.id);
+            set(segmentValue, "alias", segment.alias);
+            set(segmentValue, "role", nativeSegmentRoleName(segment.role));
+            set(segmentValue, "source_start_seconds", segment.sourceStartSeconds);
+            set(segmentValue, "source_end_seconds", segment.sourceEndSeconds);
+            set(segmentValue, "provenance", segment.provenance);
+            set(segmentValue, "confidence", segment.confidence);
+            set(segmentValue, "alignment_seconds", segment.alignmentSeconds);
+            set(segmentValue, "overlap_seconds", segment.overlapSeconds);
+            set(segmentValue, "stretchable", segment.stretchable);
+            set(segmentValue, "stretch_weight", segment.stretchWeight);
+            nativeSegments.push_back(std::move(segmentValue));
+        }
+        set(noteValue, "native_segments", array(std::move(nativeSegments)));
+    }
+    set(noteValue, "start_seconds", note.startSeconds);
+    set(noteValue, "duration_seconds", note.durationSeconds);
+    set(noteValue, "consonant_seconds", note.consonantSeconds);
+    set(noteValue, "midi", note.midiNote);
+    set(noteValue, "source_midi_center", note.sourceMidiCenter);
+    set(noteValue, "modulation", note.modulation);
+    set(noteValue, "flattened", note.modulation <= 1.0e-4f);
+    set(noteValue, "drift", note.drift);
+    set(noteValue, "tension", note.tension);
+    set(noteValue, "breath", note.breath);
+    set(noteValue, "formant_semitones", note.formantSemitones);
+    set(noteValue, "gain", note.gain);
+    set(noteValue, "attack_speed", note.attackSpeed);
+    set(noteValue, "robust_pitch_curve", note.robustPitchCurve);
+    set(noteValue, "connected_previous", note.connectedToPrevious);
+    set(noteValue, "connected_next", note.connectedToNext);
+    // The flag state, all of it: the plain text, the four-region
+    // split, and the per-frame curve.  These are kept side by side
+    // rather than one replacing another, so a caller has to be able
+    // to see that nothing was lost when the switch was thrown.
+    set(noteValue, "utau_flags", note.utauFlags);
+    set(noteValue, "flag_split", note.utauFlagSplit);
+    std::vector<juce::var> regionFlags;
+    for (const auto& text : { note.utauRegionFlags1, note.utauRegionFlags2,
+                              note.utauRegionFlags3, note.utauRegionFlags4 })
+        regionFlags.emplace_back(text);
+    set(noteValue, "region_flags", array(std::move(regionFlags)));
+    set(noteValue, "flag_curve_enabled", note.utauFlagCurveEnabled);
+    if (includeCurves)
+    {
+        auto flagCurves = object();
+        for (const auto& curve : note.utauFlagCurves)
+        {
+            std::vector<juce::var> written;
+            for (const auto& point : curve.points)
+            {
+                std::vector<juce::var> pair;
+                pair.emplace_back(point.timeSeconds);
+                pair.emplace_back(static_cast<double>(point.value));
+                pair.emplace_back(pitchCurveShapeName(point.shape));
+                written.push_back(array(std::move(pair)));
+            }
+            set(flagCurves, curve.flag.toRawUTF8(), array(std::move(written)));
+        }
+        set(noteValue, "flag_curves", flagCurves);
+        std::vector<juce::var> contour;
+        for (const auto& point : note.contour)
+        {
+            auto pointValue = object();
+            set(pointValue, "time_seconds", point.timeSeconds);
+            set(pointValue, "relative_cents", point.relativeCents);
+            set(pointValue, "without_vibrato_cents", point.withoutVibratoCents);
+            set(pointValue, "rendered_target_cents", renderedPitchCents(note, point));
+            set(pointValue, "voiced", point.voiced);
+            set(pointValue, "manual_target_cents", point.manualTargetCents);
+            set(pointValue, "has_manual_target", point.hasManualTarget);
+            contour.push_back(std::move(pointValue));
+        }
+        set(noteValue, "contour", array(std::move(contour)));
+    }
+    std::vector<juce::var> markers;
+    for (const auto marker : note.sibilantMarkers) markers.emplace_back(marker);
+    set(noteValue, "sibilant_markers", array(std::move(markers)));
+    return noteValue;
+}
+
 juce::var McpServer::projectJson() const
 {
     const auto data = project.snapshot();
@@ -848,21 +1771,39 @@ juce::var McpServer::projectJson() const
     set(root, "denominator", data.denominator);
     set(root, "grid", data.gridDivision);
     set(root, "base_scale", data.baseScale);
+    std::vector<juce::var> nativeConnections;
+    for (const auto& connection : data.nativeConnections)
+    {
+        auto value = object();
+        set(value, "id", connection.id);
+        set(value, "left_note_id", connection.leftNoteId);
+        set(value, "right_note_id", connection.rightNoteId);
+        set(value, "type", connection.type);
+        set(value, "boundary_seconds", connection.boundarySeconds);
+        nativeConnections.push_back(std::move(value));
+    }
+    set(root, "native_connections", array(std::move(nativeConnections)));
     std::vector<juce::var> tracks;
     for (const auto& track : data.tracks)
     {
         auto trackValue = object();
         set(trackValue, "id", track.id);
         set(trackValue, "name", track.name);
-        set(trackValue, "compose", track.compose);
+        set(trackValue, "voicebank_directory", track.voicebankDirectory.getFullPathName());
+        set(trackValue, "diffsinger", trackIsDiffSinger(track));
+        set(trackValue, "compose", track.compose && !track.accompaniment);
+        set(trackValue, "accompaniment", track.accompaniment);
         set(trackValue, "muted", track.muted);
         set(trackValue, "solo", track.solo);
         set(trackValue, "volume", track.volume);
         set(trackValue, "pan", track.pan);
         set(trackValue, "smooth_overlaps", track.smoothOverlaps);
         set(trackValue, "normalize_volume", track.normalizeVolume);
-        set(trackValue, "pitch_algorithm", pitchAlgorithmText(track.pitchAlgorithm));
-        set(trackValue, "stretch_algorithm", stretchAlgorithmText(track.stretchAlgorithm));
+        set(trackValue, "pitch_algorithm",
+            track.accompaniment ? juce::String("none") : track.pitchAlgorithm == PitchAlgorithm::utau
+                ? utauModeKey(track.utauMode)
+                : pitchAlgorithmText(track.pitchAlgorithm));
+        set(trackValue, "stretch_algorithm", track.accompaniment ? juce::String("none") : stretchAlgorithmText(track.stretchAlgorithm));
         set(trackValue, "render_order", renderOrderText(track.renderOrder));
         std::vector<juce::var> clips;
         for (const auto& clip : track.clips)
@@ -874,6 +1815,8 @@ juce::var McpServer::projectJson() const
             set(clipValue, "source_offset_seconds", clip.sourceOffsetSeconds);
             set(clipValue, "source_duration_seconds", clip.sourceDurationSeconds);
             set(clipValue, "duration_seconds", clip.durationSeconds);
+            set(clipValue, "audio_start_seconds", clip.audioStartSeconds);
+            set(clipValue, "audio_duration_seconds", clip.audioLength());
             set(clipValue, "fade_in_seconds", clip.fadeInSeconds);
             set(clipValue, "fade_out_seconds", clip.fadeOutSeconds);
             set(clipValue, "crossfade_in_seconds", clip.crossfadeInSeconds);
@@ -893,43 +1836,7 @@ juce::var McpServer::projectJson() const
             std::vector<juce::var> notes;
             for (const auto& note : clip.notes)
             {
-                auto noteValue = object();
-                set(noteValue, "id", note.id);
-                set(noteValue, "label", note.label);
-                set(noteValue, "start_seconds", note.startSeconds);
-                set(noteValue, "duration_seconds", note.durationSeconds);
-                set(noteValue, "consonant_seconds", note.consonantSeconds);
-                set(noteValue, "midi", note.midiNote);
-                set(noteValue, "source_midi_center", note.sourceMidiCenter);
-                set(noteValue, "modulation", note.modulation);
-                set(noteValue, "flattened", note.modulation <= 1.0e-4f);
-                set(noteValue, "drift", note.drift);
-                set(noteValue, "tension", note.tension);
-                set(noteValue, "breath", note.breath);
-                set(noteValue, "formant_semitones", note.formantSemitones);
-                set(noteValue, "gain", note.gain);
-                set(noteValue, "attack_speed", note.attackSpeed);
-                set(noteValue, "robust_pitch_curve", note.robustPitchCurve);
-                set(noteValue, "connected_previous", note.connectedToPrevious);
-                set(noteValue, "connected_next", note.connectedToNext);
-                std::vector<juce::var> contour;
-                for (const auto& point : note.contour)
-                {
-                    auto pointValue = object();
-                    set(pointValue, "time_seconds", point.timeSeconds);
-                    set(pointValue, "relative_cents", point.relativeCents);
-                    set(pointValue, "without_vibrato_cents", point.withoutVibratoCents);
-                    set(pointValue, "rendered_target_cents", renderedPitchCents(note, point));
-                    set(pointValue, "voiced", point.voiced);
-                    set(pointValue, "manual_target_cents", point.manualTargetCents);
-                    set(pointValue, "has_manual_target", point.hasManualTarget);
-                    contour.push_back(std::move(pointValue));
-                }
-                set(noteValue, "contour", array(std::move(contour)));
-                std::vector<juce::var> markers;
-                for (const auto marker : note.sibilantMarkers) markers.emplace_back(marker);
-                set(noteValue, "sibilant_markers", array(std::move(markers)));
-                notes.push_back(std::move(noteValue));
+                notes.push_back(noteJson(note));
             }
             set(clipValue, "notes", array(std::move(notes)));
             clips.push_back(std::move(clipValue));
@@ -937,21 +1844,29 @@ juce::var McpServer::projectJson() const
         set(trackValue, "clips", array(std::move(clips)));
         tracks.push_back(std::move(trackValue));
     }
+    set(root, "revision", static_cast<juce::int64>(project.revisionNumber()));
     set(root, "tracks", array(std::move(tracks)));
     return root;
 }
 
 juce::int64 McpServer::currentProjectFingerprint() const
 {
-    return juce::JSON::toString(projectJson(), false).hashCode64();
+    // Hash what the project serialiser writes, not the JSON view.  That view
+    // is a hand-maintained projection and never carried Flags, vibrato, the
+    // UTAU timing overrides or the region splits, so editing any of them left
+    // the fingerprint unchanged and syncAudio() skipped the re-render -- the
+    // engine then replayed the previous audio for an edit it never saw.
+    return project.contentFingerprint();
 }
 
-void McpServer::syncAudio()
+void McpServer::syncAudio(bool diffSingerExport)
 {
     const auto fingerprint = currentProjectFingerprint();
-    if (audioPrepared && fingerprint == preparedFingerprint) return;
+    const auto ds = juce::JSON::toString(DiffSingerRenderer::inferenceOptions(diffSingerExport));
+    if (audioPrepared && fingerprint == preparedFingerprint && ds == preparedDiffSingerOptions) return;
     audio->stop();
-    audio->syncProject(project.snapshot());
+    audio->syncProject(project.snapshot(), diffSingerExport);
+    preparedDiffSingerOptions = ds;
     preparedFingerprint = fingerprint;
     audioPrepared = true;
 }
@@ -968,7 +1883,8 @@ bool McpServer::waitForRender(double timeoutSeconds, juce::String& error)
         }
         juce::Thread::sleep(10);
     }
-    return true;
+    error = audio->activeRenderWarnings();
+    return error.isEmpty();
 }
 
 juce::var McpServer::transportStatusJson() const
@@ -978,6 +1894,7 @@ juce::var McpServer::transportStatusJson() const
     const auto prepared = audioPrepared && fingerprint == preparedFingerprint;
     const auto progress = prepared ? audio->renderProgress() : std::optional<double>();
     set(value, "prepared", prepared);
+    set(value, "merged_phrase_count", audio->diagnosticMergedPhraseCount());
     set(value, "rendering", progress.has_value());
     set(value, "render_progress", progress.has_value() ? *progress : (prepared ? 1.0 : 0.0));
     set(value, "backend", prepared ? audio->activeRenderBackends() : juce::String());

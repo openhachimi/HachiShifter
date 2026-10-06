@@ -1,6 +1,8 @@
 #pragma once
+#include <functional>
 
 #include "OrtExecution.h"
+#include "UtauRenderer.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_core/juce_core.h>
 #include <vector>
@@ -51,6 +53,7 @@ struct NsfHifiganEdgeGuard
 class NsfHifiganRenderer final
 {
 public:
+    [[nodiscard]] static bool modelAvailable(const juce::File& configuredModelDirectory);
     static NsfHifiganRenderResult render(
         const juce::AudioBuffer<float>& source,
         double sampleRate,
@@ -65,4 +68,90 @@ public:
         bool normalizeVolume = false,
         const NsfHifiganEdgeGuard& edgeGuard = NsfHifiganEdgeGuard{});
 };
+
+// UTAU voicebank synthesis on the one NSF-HiFiGAN renderer (no separate
+// renderer): these are the native building blocks that let the NSF-HiFiGAN
+// path reproduce the UTAU backend's non-flag behaviour -- OTO timing, consonant
+// velocity, preutterance/overlap, vibrato/pitch as the model's F0 input, and
+// overlap crossfade mixing -- in the spirit of hifisampler but without the
+// classic time-domain resampler or an external executable.  Split out as pure
+// functions so the timing/F0/mix maths can be checked without the ONNX model.
+
+// One note's OTO timing (STP already folded into offset/end), in seconds.
+struct NsfUtauSampleTiming
+{
+    double offsetSeconds = 0.0;
+    double endSeconds = 0.0;
+    double consonantSeconds = 0.0;
+    double preutteranceSeconds = 0.0;
+    double overlapSeconds = 0.0;
+    double fileSeconds = 0.0;
+};
+
+// The plan for feeding one note to NSF-HiFiGAN: the source region and a pure
+// target->source time warp (pitch is the F0 input, never a resample).
+struct NsfUtauNotePlan
+{
+    bool valid = false;
+    double sourceStartSeconds = 0.0;
+    double sourceEndSeconds = 0.0;
+    double soundStartOffsetSeconds = 0.0;
+    double outputSeconds = 0.0;
+    std::vector<NsfHifiganTimeMapPoint> timeMap;
+};
+
+[[nodiscard]] NsfUtauNotePlan buildNsfUtauNotePlan(
+    const NsfUtauSampleTiming& timing, double noteStartSeconds,
+    double noteDurationSeconds, double consonantVelocityScale, double tailSeconds);
+
+// A pitch handle on a note, cents from its MIDI pitch (vibrato folded in).
+struct NsfUtauPitchPoint
+{
+    double timeSeconds = 0.0;
+    float cents = 0.0f;
+};
+
+[[nodiscard]] std::vector<float> buildNsfUtauTargetMidi(
+    float midiNote, const std::vector<NsfUtauPitchPoint>& pitchCurve,
+    double framePeriodMs, double outputSeconds, double soundStartOffsetSeconds,
+    const std::function<float(double)>& timelinePitchCents = {});
+
+// One synthesised note laid into the phrase (audio at soundStartSeconds,
+// crossfading its head over overlapSeconds; a rest holds its place).
+struct NsfUtauMixNote
+{
+    juce::AudioBuffer<float> audio;
+    double soundStartSeconds = 0.0;
+    double overlapSeconds = 0.0;
+    bool rest = false;
+};
+
+[[nodiscard]] juce::AudioBuffer<float> mixNsfUtauNotes(
+    const std::vector<NsfUtauMixNote>& notes, double totalSeconds, double sampleRate,
+    int channels = 1);
+
+// Synthesise one voicebank note through NSF-HiFiGAN (empty audio + reason when
+// the model is unavailable, so the caller warns rather than failing silently).
+struct NsfUtauSynthResult
+{
+    juce::AudioBuffer<float> audio;
+    double sampleRate = 0.0;
+    bool usedModel = false;
+    juce::String error;
+};
+
+[[nodiscard]] NsfUtauSynthResult synthesizeNsfUtauNote(
+    const juce::File& sampleFile, const NsfUtauNotePlan& plan,
+    float midiNote, const std::vector<NsfUtauPitchPoint>& pitchCurve,
+    const juce::File& modelDirectory, const OrtExecutionConfig& execution,
+    const std::function<float(double)>& timelinePitchCents = {});
+
+// Render a whole UTAU voicebank phrase through the one NSF-HiFiGAN renderer:
+// resolve each note's sample by alias (and prefix-mapped pitch bank), plan its
+// OTO timing, synthesise it with the note's F0, and overlap-mix the phrase.
+// The request type is the shared UtauRenderRequest so the editor/model build it
+// the same way; synthesis never touches the classic resampler or an external
+// executable.  Empty buffer + warning when the model is unavailable.
+[[nodiscard]] UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
+    const juce::File& modelDirectory, const OrtExecutionConfig& execution);
 }

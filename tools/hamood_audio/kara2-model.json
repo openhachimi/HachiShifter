@@ -1,0 +1,19 @@
+{
+  "model": "UVR_MDXNET_KARA_2",
+  "file": "models/UVR_MDXNET_KARA_2.onnx",
+  "bytes": 52786726,
+  "sha256": "bf32e15105a09c0f7dddd2b67346146334d6f3ecb399ed7638eba2ab07cbf5f4",
+  "source": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR_MDXNET_KARA_2.onnx",
+  "sample_rate": 44100,
+  "n_fft": 5120,
+  "hop": 1024,
+  "dim_f": 2048,
+  "dim_t": 256,
+  "compensation": 1.065,
+  "default_provider": "cpu",
+  "input": "isolated_vocals",
+  "outputs": [
+    "lead",
+    "backing"
+  ]
+}

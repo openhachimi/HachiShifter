@@ -1,8 +1,45 @@
 #include "SettingsComponent.h"
+#include "backend/NsfHifiganRenderer.h"
+#include "backend/DiffSingerRenderer.h"
 #include <cmath>
 
 namespace hachi
 {
+SettingsComponent::PathPicker::PathPicker()
+{
+    addAndMakeVisible(editor);
+    addAndMakeVisible(browseButton);
+    editor.setSelectAllWhenFocused(true);
+    browseButton.onClick = [this]
+    {
+        if (onBrowse) onBrowse();
+    };
+}
+
+void SettingsComponent::PathPicker::resized()
+{
+    auto area = getLocalBounds();
+    auto buttonArea = area.removeFromRight(38);
+    area.removeFromRight(5);
+    editor.setBounds(area);
+    browseButton.setBounds(buttonArea);
+}
+
+void SettingsComponent::PathPicker::setText(const juce::String& text)
+{
+    editor.setText(text, false);
+}
+
+juce::String SettingsComponent::PathPicker::getText() const
+{
+    return editor.getText().trim();
+}
+
+void SettingsComponent::PathPicker::setBrowseTooltip(const juce::String& text)
+{
+    browseButton.setTooltip(text);
+}
+
 void SettingsComponent::FormPage::addRow(juce::Label& label, juce::Component& editor)
 {
     addAndMakeVisible(label);
@@ -55,6 +92,9 @@ SettingsComponent::SettingsComponent(I18n& stringsToUse,
     interfacePage.addRow(accentLightLabel, accentLight);
     interfacePage.addRow(noteColourLabel, noteColour);
     interfacePage.addWide(showNoteLabels);
+   #if JUCE_WINDOWS
+    interfacePage.addWide(softwareRendering);
+   #endif
     uiScale.setRange(0.6, 2.0, 0.1);
     uiScale.setSliderStyle(juce::Slider::LinearHorizontal);
     uiScale.setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 20);
@@ -98,15 +138,20 @@ SettingsComponent::SettingsComponent(I18n& stringsToUse,
     algorithmPage.addRow(hifiganPathLabel, hifiganPath);
     algorithmPage.addRow(inferenceLabel, inference);
     algorithmPage.addRow(inferenceDeviceLabel, inferenceDevice);
+    algorithmPage.addRow(utauVoicebankLabel, utauVoicebankPath);
+    algorithmPage.addRow(utauWavtoolLabel, utauWavtoolPath);
     algorithmPage.addRow(utauResamplerLabel, utauResamplerPath);
+    utauVoicebankPath.onBrowse = [this] { chooseUtauVoicebank(); };
+    utauWavtoolPath.onBrowse = [this] { chooseUtauWavtool(); };
+    utauResamplerPath.onBrowse = [this] { chooseUtauResampler(); };
 
     shortcutPreset.addItem("HachiShifter", 1);
     shortcutPreset.addItem("Melodyne", 2);
     shortcutPreset.addItem("UTAU", 3);
-    wheelAction.addItem("Zoom", 1);
-    wheelAction.addItem("Scroll", 2);
+    // The wheel-action choice is gone: the wheel scrolls and ctrl zooms, so
+    // there is no longer a decision to offer.  Leaving the box would be a
+    // control that changes nothing, which is worse than one less setting.
     operationPage.addRow(shortcutLabel, shortcutPreset);
-    operationPage.addRow(wheelLabel, wheelAction);
     operationPage.addWide(spacePlayback);
     operationPage.addWide(confirmDestructive);
 
@@ -116,13 +161,13 @@ SettingsComponent::SettingsComponent(I18n& stringsToUse,
     melodyneCompose.addItem("Audio only", 4);
     melodynePitchSource.addItem("Project data", 1);
     melodynePitchSource.addItem("GAME + FCPE / Native fallback", 2);
-    importedAlgorithm.addItem("mld5", 1);
     importedAlgorithm.addItem("nsf-hifigan", 2);
     importedAlgorithm.addItem("WORLD", 3);
-    importedAlgorithm.addItem("vslib", 4);
-    importedAlgorithm.addItem("mld3", 5);
     importedAlgorithm.addItem("llsm2", 6);
-    refreshImportedStretchItems(1);
+    const auto configuredHifigan = juce::File(properties.getValue("algorithm.hifiganPath"));
+    const auto defaultImportedAlgorithm = backend::NsfHifiganRenderer::modelAvailable(
+        configuredHifigan) ? 2 : 6;
+    refreshImportedStretchItems(defaultImportedAlgorithm);
     importedAlgorithm.onChange = [this]
     {
         refreshImportedStretchItems(importedStretchAlgorithm.getSelectedId());
@@ -134,6 +179,45 @@ SettingsComponent::SettingsComponent(I18n& stringsToUse,
     importPage.addWide(preserveProjectEdits);
     importPage.addWide(locateMediaRecursively);
 
+    const auto u8 = [](const char* s) { return juce::String::fromUTF8(s); };
+    dsBackend.addItem(u8("自动（优先 GPU，失败时使用 CPU）"), 1);
+    dsBackend.addItem("CPU", 2); dsBackend.addItem("DirectML GPU", 3);
+    for (int i = 0; i < 32; ++i) dsDevice.addItem("GPU " + juce::String(i), i + 1);
+    for (auto* box : { &dsPreview, &dsExport })
+    {
+        box->addItem(u8("快速"), 1); box->addItem(u8("标准"), 2);
+        box->addItem(u8("精细"), 3); box->addItem(u8("自定义"), 4);
+        box->onChange = [this] { refreshDiffSingerControls(); };
+    }
+    dsBackend.onChange = [this] { refreshDiffSingerControls(); };
+    for (auto* slider : { &dsAcoustic, &dsPitch, &dsVariance, &dsDepth })
+    {
+        slider->setSliderStyle(juce::Slider::LinearHorizontal);
+        slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 70, 24);
+        slider->setRange(1, slider == &dsDepth ? 100 : 1000, 1);
+    }
+    dsDepth.setTextValueSuffix(" %");
+    dsBackendLabel.setText(u8("DS 推理设备"), juce::dontSendNotification);
+    dsDeviceLabel.setText(u8("显卡编号"), juce::dontSendNotification);
+    dsPreviewLabel.setText(u8("试听 / pitch 预测质量"), juce::dontSendNotification);
+    dsExportLabel.setText(u8("导出质量"), juce::dontSendNotification);
+    dsAcousticLabel.setText(u8("自定义：声学步数"), juce::dontSendNotification);
+    dsPitchLabel.setText(u8("自定义：pitch 步数"), juce::dontSendNotification);
+    dsVarianceLabel.setText(u8("自定义：表现参数步数"), juce::dontSendNotification);
+    dsDepthLabel.setText(u8("自定义：声学深度"), juce::dontSendNotification);
+    diffSingerPage.addRow(dsBackendLabel, dsBackend); diffSingerPage.addRow(dsDeviceLabel, dsDevice);
+    diffSingerPage.addRow(dsPreviewLabel, dsPreview); diffSingerPage.addRow(dsExportLabel, dsExport);
+    diffSingerPage.addRow(dsAcousticLabel, dsAcoustic); diffSingerPage.addRow(dsPitchLabel, dsPitch);
+    diffSingerPage.addRow(dsVarianceLabel, dsVariance); diffSingerPage.addRow(dsDepthLabel, dsDepth);
+    dsHelp.setText(u8("步数（声学 / pitch / 表现参数）：快速 8 / 8 / 8，标准 20 / 20 / 20，精细 50 / 40 / 40。导出使用现有 pitch，不重新改动音高；深度按音源上限限制。"), juce::dontSendNotification);
+    dsHelp.setJustificationType(juce::Justification::centredLeft);
+    diffSingerPage.addWide(dsHelp, 58); diffSingerPage.addWide(dsStatus, 42);
+    dsBackend.setComponentID("ds.backend"); dsPreview.setComponentID("ds.preview");
+    dsExport.setComponentID("ds.export"); dsDevice.setComponentID("ds.device");
+    dsAcoustic.setComponentID("ds.acoustic"); dsPitch.setComponentID("ds.pitch");
+    dsVariance.setComponentID("ds.variance"); dsDepth.setComponentID("ds.depth");
+    applyButton.setComponentID("settings.apply");
+
     // JUCE does not create a tab button for an empty caption on every backend.
     // Adding empty names and renaming them later therefore produced a valid
     // dialog shell with zero pages.  Seed translated names immediately.
@@ -142,6 +226,7 @@ SettingsComponent::SettingsComponent(I18n& stringsToUse,
     tabs.addTab(strings.text("settings.algorithm"), Palette::panel, &algorithmPage, false);
     tabs.addTab(strings.text("settings.operation"), Palette::panel, &operationPage, false);
     tabs.addTab(strings.text("settings.import"), Palette::panel, &importPage, false);
+    tabs.addTab("DiffSinger", Palette::panel, &diffSingerPage, false);
     // Select a concrete page before the dialog is attached to a peer.  On
     // headless/device-delayed startup JUCE may otherwise keep index -1 until a
     // tab click, making the settings dialog appear completely empty.
@@ -183,6 +268,8 @@ void SettingsComponent::loadValues()
     noteColour.setText(properties.getValue("ui.noteColour", "F4C000"), false);
     showNoteLabels.setToggleState(properties.getBoolValue("ui.showNoteLabels", false),
                                   juce::dontSendNotification);
+    softwareRendering.setToggleState(properties.getBoolValue("ui.softwareRendering", false),
+                                     juce::dontSendNotification);
     uiScale.setValue(properties.getDoubleValue("ui.uiScale", 1.0), juce::dontSendNotification);
     gamePath.setText(properties.getValue("algorithm.gamePath"), false);
     gameModel.setSelectedId(properties.getValue("algorithm.gameModel", "large") == "small" ? 2 : 1,
@@ -191,18 +278,48 @@ void SettingsComponent::loadValues()
     hifiganPath.setText(properties.getValue("algorithm.hifiganPath"), false);
     inference.setSelectedId(properties.getIntValue("algorithm.inference", 1), juce::dontSendNotification);
     inferenceDevice.setSelectedId(properties.getIntValue("algorithm.device", 1), juce::dontSendNotification);
-    utauResamplerPath.setText(properties.getValue("algorithm.utauResampler"), false);
+    utauVoicebankPath.setText(properties.getValue("algorithm.utauVoicebank"));
+    utauWavtoolPath.setText(properties.getValue("algorithm.utauWavtool"));
+    utauResamplerPath.setText(properties.getValue("algorithm.utauResampler"));
     shortcutPreset.setSelectedId(properties.getIntValue("operation.shortcutPreset", 1), juce::dontSendNotification);
-    wheelAction.setSelectedId(properties.getIntValue("operation.wheelAction", 1), juce::dontSendNotification);
     spacePlayback.setToggleState(properties.getBoolValue("operation.spacePlayback", true), juce::dontSendNotification);
     confirmDestructive.setToggleState(properties.getBoolValue("operation.confirmDestructive", true), juce::dontSendNotification);
-    melodyneCompose.setSelectedId(properties.getIntValue("import.melodyneCompose", 1), juce::dontSendNotification);
+    melodyneCompose.setSelectedId(juce::jlimit(1, 4,
+        properties.getIntValue("import.melodyneCompose", 1)), juce::dontSendNotification);
     melodynePitchSource.setSelectedId(properties.getIntValue("import.melodynePitchSource", 1), juce::dontSendNotification);
-    importedAlgorithm.setSelectedId(properties.getIntValue("import.algorithm", 1), juce::dontSendNotification);
+    const auto configuredHifigan = juce::File(properties.getValue("algorithm.hifiganPath"));
+    const auto defaultImportedAlgorithm = backend::NsfHifiganRenderer::modelAvailable(
+        configuredHifigan) ? 2 : 6;
+    const auto importedAlgorithmId = properties.getIntValue("import.algorithm",
+        defaultImportedAlgorithm);
+    importedAlgorithm.setSelectedId(importedAlgorithm.indexOfItemId(importedAlgorithmId) >= 0
+        ? importedAlgorithmId : defaultImportedAlgorithm, juce::dontSendNotification);
     refreshImportedStretchItems(properties.getIntValue("import.stretchAlgorithm", 1));
     preserveProjectEdits.setToggleState(properties.getBoolValue("import.preserveEdits", true), juce::dontSendNotification);
     locateMediaRecursively.setToggleState(properties.getBoolValue("import.recursiveMedia", true), juce::dontSendNotification);
+    const auto ds = backend::DiffSingerOptions::read(properties);
+    dsBackend.setSelectedId(ds.backend, juce::dontSendNotification);
+    dsDevice.setSelectedId(ds.device + 1, juce::dontSendNotification);
+    dsPreview.setSelectedId(ds.preview, juce::dontSendNotification);
+    dsExport.setSelectedId(ds.exportQuality, juce::dontSendNotification);
+    dsAcoustic.setValue(ds.acousticSteps, juce::dontSendNotification);
+    dsPitch.setValue(ds.pitchSteps, juce::dontSendNotification);
+    dsVariance.setValue(ds.varianceSteps, juce::dontSendNotification);
+    dsDepth.setValue(ds.depth * 100, juce::dontSendNotification);
+    refreshDiffSingerControls();
     refreshAudioValues();
+}
+
+void SettingsComponent::refreshDiffSingerControls()
+{
+    dsDevice.setEnabled(dsBackend.getSelectedId() != 2);
+    const auto custom = dsPreview.getSelectedId() == 4 || dsExport.getSelectedId() == 4;
+    for (auto* slider : { &dsAcoustic, &dsPitch, &dsVariance, &dsDepth }) slider->setEnabled(custom);
+    const auto status = backend::DiffSingerRenderer::inferenceStatus();
+    const auto text = status.isEmpty() ? juce::String::fromUTF8("尚未运行 DS；应用后在音源预检、预测或试听时检查设备。")
+        : juce::String::fromUTF8("最近运行：") + status;
+    dsStatus.setText(text.upToFirstOccurrenceOf("\n", false, false), juce::dontSendNotification);
+    dsStatus.setTooltip(text);
 }
 
 void SettingsComponent::saveValues()
@@ -214,6 +331,7 @@ void SettingsComponent::saveValues()
     properties.setValue("ui.accentLight", accentLight.getText().trim());
     properties.setValue("ui.noteColour", noteColour.getText().trim());
     properties.setValue("ui.showNoteLabels", showNoteLabels.getToggleState());
+    properties.setValue("ui.softwareRendering", softwareRendering.getToggleState());
     properties.setValue("ui.uiScale", uiScale.getValue());
     properties.setValue("algorithm.gamePath", gamePath.getText());
     properties.setValue("algorithm.gameModel", gameModel.getSelectedId() == 2 ? "small" : "large");
@@ -221,17 +339,25 @@ void SettingsComponent::saveValues()
     properties.setValue("algorithm.hifiganPath", hifiganPath.getText());
     properties.setValue("algorithm.inference", inference.getSelectedId());
     properties.setValue("algorithm.device", inferenceDevice.getSelectedId());
+    properties.setValue("algorithm.utauVoicebank", utauVoicebankPath.getText());
+    properties.setValue("algorithm.utauWavtool", utauWavtoolPath.getText());
     properties.setValue("algorithm.utauResampler", utauResamplerPath.getText());
     properties.setValue("operation.shortcutPreset", shortcutPreset.getSelectedId());
-    properties.setValue("operation.wheelAction", wheelAction.getSelectedId());
     properties.setValue("operation.spacePlayback", spacePlayback.getToggleState());
     properties.setValue("operation.confirmDestructive", confirmDestructive.getToggleState());
-    properties.setValue("import.melodyneCompose", melodyneCompose.getSelectedId());
+    properties.setValue("import.melodyneCompose", juce::jlimit(1, 4, melodyneCompose.getSelectedId()));
     properties.setValue("import.melodynePitchSource", melodynePitchSource.getSelectedId());
-    properties.setValue("import.algorithm", importedAlgorithm.getSelectedId());
+    properties.setValue("import.algorithm", importedAlgorithm.getSelectedId() > 0
+        ? importedAlgorithm.getSelectedId() : 1);
     properties.setValue("import.stretchAlgorithm", importedStretchAlgorithm.getSelectedId());
     properties.setValue("import.preserveEdits", preserveProjectEdits.getToggleState());
     properties.setValue("import.recursiveMedia", locateMediaRecursively.getToggleState());
+    backend::DiffSingerOptions ds;
+    ds.backend = dsBackend.getSelectedId(); ds.device = dsDevice.getSelectedId() - 1;
+    ds.preview = dsPreview.getSelectedId(); ds.exportQuality = dsExport.getSelectedId();
+    ds.acousticSteps = (int) dsAcoustic.getValue(); ds.pitchSteps = (int) dsPitch.getValue();
+    ds.varianceSteps = (int) dsVariance.getValue(); ds.depth = dsDepth.getValue() / 100.0;
+    ds.write(properties);
     properties.saveIfNeeded();
     strings.setLanguage(static_cast<I18n::Language>(juce::jlimit(1, 5, language.getSelectedId()) - 1));
     Palette::applyTheme(theme.getSelectedId() == 2 ? "light" : "dark",
@@ -253,6 +379,7 @@ void SettingsComponent::setTexts()
     accentLightLabel.setText(strings.text("settings.accentLight"), juce::dontSendNotification);
     noteColourLabel.setText(strings.text("settings.noteColour"), juce::dontSendNotification);
     showNoteLabels.setButtonText(strings.text("settings.showNoteLabels"));
+    softwareRendering.setButtonText(strings.text("settings.softwareRendering"));
     uiScaleLabel.setText(strings.text("settings.uiScale"), juce::dontSendNotification);
     theme.changeItemText(1, strings.text("settings.themeDark"));
     theme.changeItemText(2, strings.text("settings.themeLight"));
@@ -268,11 +395,14 @@ void SettingsComponent::setTexts()
     inferenceDeviceLabel.setText(strings.text("settings.device"), juce::dontSendNotification);
     inference.changeItemText(1, strings.text("settings.auto"));
     inferenceDevice.changeItemText(1, strings.text("settings.auto"));
+    utauVoicebankLabel.setText(strings.text("settings.utauVoicebank"), juce::dontSendNotification);
+    utauWavtoolLabel.setText(strings.text("settings.utauWavtool"), juce::dontSendNotification);
     utauResamplerLabel.setText(strings.text("settings.utauResampler"), juce::dontSendNotification);
+    const auto browseText = strings.text("settings.browse");
+    utauVoicebankPath.setBrowseTooltip(browseText);
+    utauWavtoolPath.setBrowseTooltip(browseText);
+    utauResamplerPath.setBrowseTooltip(browseText);
     shortcutLabel.setText(strings.text("settings.shortcuts"), juce::dontSendNotification);
-    wheelLabel.setText(strings.text("settings.wheel"), juce::dontSendNotification);
-    wheelAction.changeItemText(1, strings.text("settings.wheelZoom"));
-    wheelAction.changeItemText(2, strings.text("settings.wheelScroll"));
     spacePlayback.setButtonText(strings.text("settings.spacePlayback"));
     confirmDestructive.setButtonText(strings.text("settings.confirmDestructive"));
     melodyneComposeLabel.setText(strings.text("settings.melodyneCompose"), juce::dontSendNotification);
@@ -309,6 +439,64 @@ void SettingsComponent::refreshImportedStretchItems(int preferredId)
         || importedAlgorithm.getSelectedId() == 2;
     importedStretchAlgorithm.setSelectedId(canUsePreferred && previous > 0 ? previous : 1,
                                              juce::dontSendNotification);
+}
+
+juce::File SettingsComponent::initialPathFor(const PathPicker& picker,
+                                             bool directory) const
+{
+    const juce::File selected(picker.getText());
+    if (directory && selected.isDirectory()) return selected;
+    if (!directory && selected.existsAsFile()) return selected;
+    if (selected.getParentDirectory().isDirectory()) return selected.getParentDirectory();
+    return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
+}
+
+void SettingsComponent::chooseUtauVoicebank()
+{
+    pathChooser = std::make_unique<juce::FileChooser>(
+        strings.text("settings.chooseUtauVoicebank"),
+        initialPathFor(utauVoicebankPath, true));
+    juce::Component::SafePointer<SettingsComponent> safe(this);
+    pathChooser->launchAsync(juce::FileBrowserComponent::openMode
+                                 | juce::FileBrowserComponent::canSelectDirectories,
+        [safe](const juce::FileChooser& chooser)
+        {
+            if (safe == nullptr) return;
+            const auto directory = chooser.getResult();
+            if (directory.isDirectory()) safe->utauVoicebankPath.setText(directory.getFullPathName());
+        });
+}
+
+void SettingsComponent::chooseUtauWavtool()
+{
+    pathChooser = std::make_unique<juce::FileChooser>(
+        strings.text("settings.chooseUtauWavtool"),
+        initialPathFor(utauWavtoolPath, false), "*.exe;*.bat;*.cmd");
+    juce::Component::SafePointer<SettingsComponent> safe(this);
+    pathChooser->launchAsync(juce::FileBrowserComponent::openMode
+                                 | juce::FileBrowserComponent::canSelectFiles,
+        [safe](const juce::FileChooser& chooser)
+        {
+            if (safe == nullptr) return;
+            const auto file = chooser.getResult();
+            if (file.existsAsFile()) safe->utauWavtoolPath.setText(file.getFullPathName());
+        });
+}
+
+void SettingsComponent::chooseUtauResampler()
+{
+    pathChooser = std::make_unique<juce::FileChooser>(
+        strings.text("settings.chooseUtauResampler"),
+        initialPathFor(utauResamplerPath, false), "*.exe;*.bat;*.cmd");
+    juce::Component::SafePointer<SettingsComponent> safe(this);
+    pathChooser->launchAsync(juce::FileBrowserComponent::openMode
+                                 | juce::FileBrowserComponent::canSelectFiles,
+        [safe](const juce::FileChooser& chooser)
+        {
+            if (safe == nullptr) return;
+            const auto file = chooser.getResult();
+            if (file.existsAsFile()) safe->utauResamplerPath.setText(file.getFullPathName());
+        });
 }
 
 void SettingsComponent::resized()

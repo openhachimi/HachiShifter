@@ -1,0 +1,14 @@
+[
+  {
+    "file": "cmudict-1.1.1-py3-none-any.whl",
+    "sha256": "4b4737c0fa52375b1601d7b63824f155879a824064b6ecac07d347eae60fc046"
+  },
+  {
+    "file": "g2p_en-2.1.0-py3-none-any.whl",
+    "sha256": "2a7aabf1fc7f270fcc3349881407988c9245173c2413debbe5432f4a4f31319f"
+  },
+  {
+    "file": "pypinyin-0.55.0-py2.py3-none-any.whl",
+    "sha256": "d53b1e8ad2cdb815fb2cb604ed3123372f5a28c6f447571244aca36fc62a286f"
+  }
+]

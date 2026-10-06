@@ -22,6 +22,7 @@ public:
         const std::vector<float>& sourceMidi,
         const std::vector<float>& targetMidi,
         const std::vector<float>& formantSemitones,
-        const std::vector<WorldTimeMapPoint>& timeMap);
+        const std::vector<WorldTimeMapPoint>& timeMap,
+        juce::AudioBuffer<float>* noiseOutput = nullptr);
 };
 }

@@ -31,6 +31,12 @@ void Synthesis(const double *f0, int f0_length,
     const double * const *spectrogram, const double * const *aperiodicity, 
     int fft_size, double frame_period, int fs, int y_length, double *y);
 
+// Hachi extension: the unmodified aperiodic contribution from the SAME synthesis
+// pass. A null noise output is identical to upstream Synthesis.
+void SynthesisWithNoiseOutput(const double *f0, int f0_length,
+    const double * const *spectrogram, const double * const *aperiodicity,
+    int fft_size, double frame_period, int fs, int y_length, double *y, double *noise);
+
 WORLD_END_C_DECLS
 
 #endif  // WORLD_SYNTHESIS_H_

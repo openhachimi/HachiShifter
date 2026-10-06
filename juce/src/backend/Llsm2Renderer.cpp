@@ -204,9 +204,11 @@ juce::AudioBuffer<float> Llsm2Renderer::render(
     const juce::AudioBuffer<float>& source, int targetSamples, double sampleRate,
     double framePeriodMs, const std::vector<float>& sourceMidi,
     const std::vector<float>& targetMidi, const std::vector<float>& formantSemitones,
-    const std::vector<float>& tension, const std::vector<TimeMapPoint>& timeMap)
+    const std::vector<float>& tension, const std::vector<TimeMapPoint>& timeMap,
+    juce::AudioBuffer<float>* noiseOutput)
 {
     juce::AudioBuffer<float> empty;
+    if (noiseOutput != nullptr) noiseOutput->setSize(0, 0);
     if (source.getNumSamples() < 8 || targetSamples < 1
         || !std::isfinite(sampleRate) || sampleRate <= 0.0
         || !std::isfinite(framePeriodMs) || framePeriodMs < 1.0 || framePeriodMs > 100.0)
@@ -217,7 +219,18 @@ juce::AudioBuffer<float> Llsm2Renderer::render(
     const auto targetDuration = static_cast<double>(targetSamples) / sampleRate;
     const auto sourceFrameEstimate = std::ceil(sourceDuration / hopSeconds) + 1.0;
     const auto targetFrameEstimate = std::ceil(targetDuration / hopSeconds) + 1.0;
-    constexpr auto maxLlsmFrames = 1'200;
+    // LLSM2 holds every frame at once, so the bound is on memory rather than
+    // on anything musical.  Measured on this machine, the whole path is linear
+    // and stays linear: 1000 frames cost 38 MB and 1.9 s, 8000 cost 185 MB and
+    // 10.6 s, 64000 cost 1.37 GB and 83 s, with the output level unchanged
+    // throughout -- about 21 KB and 1.2 ms per frame.  So the old 1200 was not
+    // holding back a blow-up; at the default 5 ms hop it just refused anything
+    // past six seconds, and a held note or a sung phrase goes past that often.
+    // 24000 frames is two minutes at that hop for about half a gigabyte, which
+    // covers the material this renders and still bounds a nonsense request.
+    // Past it the render returns nothing and RenderService reports failure.
+    // No other backend may be substituted for the user's selection.
+    constexpr auto maxLlsmFrames = 24'000;
     if (!std::isfinite(sourceFrameEstimate) || !std::isfinite(targetFrameEstimate)
         || sourceFrameEstimate > maxLlsmFrames || targetFrameEstimate > maxLlsmFrames) return empty;
     const auto sourceFrames = std::max(2, static_cast<int>(sourceFrameEstimate));
@@ -344,6 +357,14 @@ juce::AudioBuffer<float> Llsm2Renderer::render(
     juce::AudioBuffer<float> rendered(std::max(1, source.getNumChannels()), targetSamples);
     rendered.clear();
     const auto copySamples = std::min(targetSamples, output->ny);
+    if (noiseOutput != nullptr)
+    {
+        if (output->y_noise == nullptr) return empty;
+        noiseOutput->setSize(rendered.getNumChannels(), targetSamples);
+        noiseOutput->clear();
+        for (int channel = 0; channel < rendered.getNumChannels(); ++channel)
+            std::copy_n(output->y_noise, copySamples, noiseOutput->getWritePointer(channel));
+    }
     for (int channel = 0; channel < rendered.getNumChannels(); ++channel)
         std::copy_n(output->y, copySamples, rendered.getWritePointer(channel));
     for (int sample = 0; sample < copySamples; ++sample)

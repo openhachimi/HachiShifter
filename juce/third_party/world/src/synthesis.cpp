@@ -188,7 +188,7 @@ static void GetOneFrameSegment(double current_vuv, int noise_size,
     const ForwardRealFFT *forward_real_fft,
     const InverseRealFFT *inverse_real_fft,
     const MinimumPhaseAnalysis *minimum_phase, const double *dc_remover,
-    double *response, RandnState* randn_state) {
+    double *response, RandnState* randn_state, double *noise_response) {
   double *aperiodic_response = new double[fft_size];
   double *periodic_response = new double[fft_size];
 
@@ -214,6 +214,10 @@ static void GetOneFrameSegment(double current_vuv, int noise_size,
     response[i] =
       (periodic_response[i] * sqrt_noise_size + aperiodic_response[i]) /
       fft_size;
+
+  if (noise_response != nullptr)
+    for (int i = 0; i < fft_size; ++i)
+      noise_response[i] = aperiodic_response[i] / fft_size;
 
   delete[] spectral_envelope;
   delete[] aperiodic_ratio;
@@ -339,6 +343,15 @@ static void GetDCRemover(int fft_size, double *dc_remover) {
 void Synthesis(const double *f0, int f0_length,
     const double * const *spectrogram, const double * const *aperiodicity,
     int fft_size, double frame_period, int fs, int y_length, double *y) {
+  SynthesisWithNoiseOutput(f0, f0_length, spectrogram, aperiodicity, fft_size,
+      frame_period, fs, y_length, y, nullptr);
+}
+
+void SynthesisWithNoiseOutput(const double *f0, int f0_length,
+    const double * const *spectrogram, const double * const *aperiodicity,
+    int fft_size, double frame_period, int fs, int y_length, double *y, double *noise) {
+  double *noise_response = noise != nullptr ? new double[fft_size] : nullptr;
+  if (noise != nullptr) for (int i = 0; i < y_length; ++i) noise[i] = 0.0;
   RandnState randn_state = {};
   randn_reseed(&randn_state);
 
@@ -375,13 +388,14 @@ void Synthesis(const double *f0, int f0_length,
         spectrogram, fft_size, aperiodicity, f0_length, frame_period,
         pulse_locations[i], pulse_locations_time_shift[i], fs,
         &forward_real_fft, &inverse_real_fft, &minimum_phase, dc_remover,
-        impulse_response, &randn_state);
+        impulse_response, &randn_state, noise_response);
     offset = pulse_locations_index[i] - fft_size / 2 + 1;
     lower_limit = MyMaxInt(0, -offset);
     upper_limit = MyMinInt(fft_size, y_length - offset);
     for (int j = lower_limit; j < upper_limit; ++j) {
       index = j + offset;
       y[index] += impulse_response[j];
+      if (noise != nullptr) noise[index] += noise_response[j];
     }
   }
 
@@ -396,4 +410,5 @@ void Synthesis(const double *f0, int f0_length,
   DestroyForwardRealFFT(&forward_real_fft);
 
   delete[] impulse_response;
+  delete[] noise_response;
 }

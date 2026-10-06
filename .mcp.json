@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "hachishifter": {
+      "command": "build-integrated/HachiShifterNext_artefacts/RelWithDebInfo/HachiShifter Next.exe",
+      "args": [
+        "--mcp-live"
+      ]
+    }
+  }
+}

@@ -121,15 +121,20 @@ def main() -> int:
             project = json.loads(client.call("project_snapshot"))
             track = project["tracks"][0]
             clip = track["clips"][0]
-            client.call(
-                "add_note",
-                {
-                    "clip_id": clip["id"],
-                    "start_seconds": 0.0,
-                    "duration_seconds": 0.55,
-                    "midi": 62.0,
-                },
-            )
+            # Import analysis may already fill the clip. Reuse the first note:
+            # deleting its last note also removes the clip in the editor.
+            client.call("set_track", {"track_id": track["id"], "compose": True})
+            for note in clip["notes"][1:]:
+                client.call("remove_note", {"note_id": note["id"]})
+            if clip["notes"]:
+                note_id = clip["notes"][0]["id"]
+                client.call("resize_note", {"note_id": note_id,
+                    "start_seconds": 0.0, "duration_seconds": 0.35})
+                client.call("edit_notes_pitch", {"note_id": note_id,
+                    "action": "set", "midi": 62.0})
+            else:
+                client.call("add_note", {"clip_id": clip["id"],
+                    "start_seconds": 0.0, "duration_seconds": 0.35, "midi": 62.0})
             client.call(
                 "resize_clip",
                 {"clip_id": clip["id"], "start_seconds": 0.0, "duration_seconds": 0.55},
