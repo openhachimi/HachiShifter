@@ -8,9 +8,11 @@ namespace hachi
 {
 namespace
 {
-juce::String algorithmLabel(const TrackData& track)
+juce::String algorithmLabel(const TrackData& track, const juce::String& outputName)
 {
-    const auto pitch = track.pitchAlgorithm == PitchAlgorithm::nsfHifigan ? juce::String("nsf-hifigan")
+    const auto pitch = track.pitchAlgorithm == PitchAlgorithm::nsfHifigan
+        ? juce::String("nsf-hifigan") + (utauModeUsesRegions(track.utauMode)
+            ? " · " + utauModeLabel(track.utauMode) : juce::String())
         : track.pitchAlgorithm == PitchAlgorithm::world ? juce::String("WORLD")
         : track.pitchAlgorithm == PitchAlgorithm::vocalShifter ? juce::String("vslib")
         : track.pitchAlgorithm == PitchAlgorithm::mld3 ? juce::String("mld3 (disabled)")
@@ -25,6 +27,8 @@ juce::String algorithmLabel(const TrackData& track)
         : track.stretchAlgorithm == StretchAlgorithm::nsfShiftThenSplice
             ? juce::String("nsf-shift-then-splice")
         : juce::String("melodyne-hybrid");
+    if (trackUsesVoicebankSynthesis(track) && !trackIsDiffSinger(track))
+        return pitch + (outputName.isEmpty() ? juce::String{} : " / " + outputName);
     return pitch + " / " + stretch;
 }
 }
@@ -228,7 +232,7 @@ void TrackListComponent::paint(juce::Graphics& g)
         g.setFont(13.0f);
         const auto displayedName = track.name
             + (track.accompaniment ? "  [" + strings.text("track.accompaniment") + "]"
-                : track.compose ? "  [" + algorithmLabel(track) + "]" : juce::String());
+                : track.compose ? "  [" + algorithmLabel(track, outputEngineNameProvider ? outputEngineNameProvider(track) : juce::String{}) + "]" : juce::String());
         g.drawText(displayedName, row.getX() + 24, row.getY() + 5, row.getWidth() - 60, 23,
                    juce::Justification::centredLeft, true);
 
@@ -405,6 +409,11 @@ void TrackListComponent::mouseDown(const juce::MouseEvent& event)
     refreshUtauEditors();
     resized();
     repaint();
+    if (event.mods.isPopupMenu())
+    {
+        if (onTrackMenu) onTrackMenu(track.id, event.getScreenPosition());
+        return;
+    }
     const auto localY = event.y - rulerHeight - index * rowHeight;
     switch (toggleAt(event.x, localY))
     {

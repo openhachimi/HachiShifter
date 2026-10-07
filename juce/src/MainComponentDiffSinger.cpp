@@ -154,9 +154,17 @@ bool MainComponent::refreshDiffSingerFlagContext()
     if (!enabled)
     {
         pianoRoll.setDiffSingerFlagContext(false, {});
+        const auto hifi = track != data.tracks.end() && trackUsesVoicebankSynthesis(*track)
+            && effectiveUtauOutputEngine(*track, audio.currentUtauOutputEngine()) == UtauOutputEngine::pcNsfHifigan;
+        pianoRoll.setHifisamplerFlagContext(hifi);
+        if (hifi) {
+            flagCurveButton.setTooltip(juce::String::fromUTF8("启用 HiFisampler 参数曲线：g / Hb / Hv / Ht / HG / P / t / A；G、He 在 FLAG 文本中输入") + modeHelp);
+            flagEnvelopeButton.setTooltip(juce::String::fromUTF8("在底部绘制 HiFisampler FLAG 曲线，曲线覆盖同名文本参数") + modeHelp);
+        }
         diffSingerParameterLanePendingBank.clear();
         return false;
     }
+    pianoRoll.setHifisamplerFlagContext(false);
     const auto key = track->voicebankDirectory.getFullPathName();
     const auto found = diffSingerCapabilities.find(key);
     pianoRoll.setDiffSingerFlagContext(true,

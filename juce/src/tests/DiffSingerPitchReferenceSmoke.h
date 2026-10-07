@@ -66,7 +66,9 @@ inline bool runDiffSingerPitchReferenceSmoke(const juce::File& folder)
     if(auto stream=shot.createOutputStream()) {
         stream->setPosition(0);stream->truncate();juce::PNGImageFormat().writeImageToStream(roll.createComponentSnapshot(area),*stream);
     }
-    roll.setShowPitchLine(false);check("pitch_visibility_switch",roll.diagnosticDiffSingerPitchReference("n0").isEmpty());roll.setShowPitchLine(true);
+    roll.setShowPitchLine(false);check("target_switch_keeps_original_reference",!roll.diagnosticDiffSingerPitchReference("n0").isEmpty());
+    roll.setShowOriginalPitchLine(false);check("original_visibility_switch",roll.diagnosticDiffSingerPitchReference("n0").isEmpty());
+    roll.setShowOriginalPitchLine(true);roll.setShowPitchLine(true);
     roll.setTool(PianoRollComponent::Tool::amplitude);check("envelope_mode_hides_reference",roll.diagnosticDiffSingerPitchReference("n0").isEmpty());
     roll.setTool(PianoRollComponent::Tool::points);
     model.setNotePitchCurve("n0",{{.1,65},{.4,63}},false);

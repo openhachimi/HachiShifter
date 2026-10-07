@@ -107,7 +107,8 @@ private:
                 utauResamplerLabel;
     juce::TextEditor gamePath, fcpePath, hifiganPath;
     PathPicker utauVoicebankPath, utauWavtoolPath, utauResamplerPath;
-    juce::ComboBox gameModel, inference, inferenceDevice;
+    juce::ComboBox gameModel, inference, inferenceDevice, utauOutputEngine;
+    juce::Label utauOutputEngineLabel;
     std::unique_ptr<juce::FileChooser> pathChooser;
 
     juce::Label shortcutLabel;

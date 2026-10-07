@@ -1,5 +1,8 @@
 #include "NsfHifiganRenderer.h"
 #include "AmplitudeEnvelopeCurve.h"
+#include "AdvancedEnvelope.h"
+#include "HifisamplerFlags.h"
+#include <juce_cryptography/juce_cryptography.h>
 
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_dsp/juce_dsp.h>
@@ -9,6 +12,9 @@
 #include <complex>
 #include <memory>
 #include <mutex>
+#include <condition_variable>
+#include <thread>
+#include <chrono>
 #include <optional>
 #include <stdexcept>
 #include <unordered_map>
@@ -22,6 +28,71 @@ namespace hachi::backend
 #if defined(HACHI_HAS_ONNX_ANALYSIS) && HACHI_HAS_ONNX_ANALYSIS
 namespace
 {
+// Each render owns its cancellation callback.  Nested helper calls (including
+// HN-SEP) use the same token without cancelling another engine's session.
+thread_local const std::function<bool()>* currentCancellation = nullptr;
+struct NsfCancellationScope
+{
+    explicit NsfCancellationScope(const std::function<bool()>& callback)
+        : previous(currentCancellation) { currentCancellation = &callback; }
+    ~NsfCancellationScope() { currentCancellation = previous; }
+    const std::function<bool()>* previous;
+};
+void checkNsfCancellation()
+{
+    if (currentCancellation && *currentCancellation && (*currentCancellation)())
+        throw std::runtime_error("NSF-HiFiGAN render cancelled");
+}
+std::unique_lock<std::mutex> cancellableNsfLock(std::mutex& mutex)
+{
+    std::unique_lock<std::mutex> lock(mutex, std::defer_lock);
+    while (!lock.try_lock())
+    {
+        checkNsfCancellation();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    checkNsfCancellation();
+    return lock;
+}
+// ORT Run is synchronous; signal its own RunOptions from a short-lived watcher
+// so closing the editor interrupts an active decode rather than waiting for it.
+class CancellableNsfRun final
+{
+public:
+    CancellableNsfRun()
+    {
+        checkNsfCancellation();
+        if (!currentCancellation || !*currentCancellation) return;
+        const auto cancelled = *currentCancellation;
+        watcher = std::thread([this, cancelled]
+        {
+            std::unique_lock lock(mutex);
+            while (!changed.wait_for(lock, std::chrono::milliseconds(10), [this] { return finished; }))
+            {
+                lock.unlock();
+                try
+                {
+                    if (cancelled()) { options.SetTerminate(); return; }
+                }
+                catch (...) { try { options.SetTerminate(); } catch (...) {} return; }
+                lock.lock();
+            }
+        });
+    }
+    ~CancellableNsfRun()
+    {
+        { const std::scoped_lock lock(mutex); finished = true; }
+        changed.notify_all();
+        if (watcher.joinable()) watcher.join();
+    }
+    Ort::RunOptions options;
+private:
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool finished = false;
+    std::thread watcher;
+};
+
 struct Config
 {
     int sampleRate = 44'100;
@@ -175,6 +246,7 @@ std::vector<float> resample(const float* input, int samples, int inputRate, int 
     };
     for (int index = 0; index < outputSamples; ++index)
     {
+        if ((index & 255) == 0) checkNsfCancellation();
         const auto position = static_cast<double>(index) / ratio;
         const auto centre = static_cast<int>(std::floor(position));
         auto value = 0.0;
@@ -311,6 +383,7 @@ MelData buildMelWithHop(const std::vector<float>& waveform, const Config& config
     std::vector<float> mel(static_cast<std::size_t>(config.melBands) * frames);
     for (std::size_t frame = 0; frame < frames; ++frame)
     {
+        checkNsfCancellation();
         std::fill(input.begin(), input.end(), std::complex<float>{});
         for (int index = 0; index < config.windowSize; ++index)
             input[static_cast<std::size_t>(index)] = {
@@ -425,10 +498,11 @@ MelData spliceMelToTimeMap(const MelData& source, int melBands,
     std::size_t segment = 0;
     for (std::size_t frame = 0; frame < targetFrames; ++frame)
     {
+        checkNsfCancellation();
         const auto targetSeconds = (static_cast<double>(frame) + targetFrameOffset)
             * targetHopSeconds;
         while (segment + 1 < timeMap.size()
-               && targetSeconds > timeMap[segment + 1].targetSeconds)
+               && targetSeconds >= timeMap[segment + 1].targetSeconds)
             ++segment;
         const auto rightIndex = std::min(segment + 1, timeMap.size() - 1);
         const auto& leftPoint = timeMap[std::min(segment, timeMap.size() - 1)];
@@ -464,6 +538,7 @@ void normalizeMelToReference(MelData& mel, const MelData& reference, int melBand
     std::vector<float> correction(mel.frames, 0.0f);
     for (std::size_t frame = 0; frame < mel.frames; ++frame)
     {
+        checkNsfCancellation();
         auto current = 0.0;
         auto target = 0.0;
         for (int band = 0; band < melBands; ++band)
@@ -483,6 +558,7 @@ void normalizeMelToReference(MelData& mel, const MelData& reference, int melBand
     constexpr std::ptrdiff_t radius = 2;
     for (std::size_t frame = 0; frame < mel.frames; ++frame)
     {
+        checkNsfCancellation();
         auto sum = 0.0f;
         auto count = 0;
         const auto centre = static_cast<std::ptrdiff_t>(frame);
@@ -541,10 +617,11 @@ MelData buildVariableHopSplicedMel(const std::vector<float>& waveform,
     std::size_t segment = 0;
     for (std::size_t frame = 0; frame < targetFrames; ++frame)
     {
+        checkNsfCancellation();
         const auto targetSeconds = (static_cast<double>(frame) + 0.5)
             * targetHopSeconds;
         while (segment + 1 < timeMap.size()
-               && targetSeconds > timeMap[segment + 1].targetSeconds)
+               && targetSeconds >= timeMap[segment + 1].targetSeconds)
             ++segment;
         const auto rightIndex = std::min(segment + 1, timeMap.size() - 1);
         const auto& leftPoint = timeMap[std::min(segment, timeMap.size() - 1)];
@@ -659,6 +736,7 @@ void addModelEdgeContext(MelData& mel, std::vector<float>& f0, int melBands,
     std::vector<float> paddedF0(padded.frames);
     for (std::size_t frame = 0; frame < padded.frames; ++frame)
     {
+        checkNsfCancellation();
         const auto relative = static_cast<std::ptrdiff_t>(frame)
             - static_cast<std::ptrdiff_t>(contextFrames);
         const auto sourceFrame = reflectIndex(relative, originalFrames);
@@ -712,6 +790,7 @@ void shiftMelFormants(MelData& mel, const Config& config,
     const auto curvePeriod = std::max(0.1, framePeriodMs);
     for (std::size_t frame = 0; frame < mel.frames; ++frame)
     {
+        checkNsfCancellation();
         const auto shift = scalarCurveAt(formantSemitones,
             static_cast<double>(frameOffset + frame) * hopSeconds * 1000.0 / curvePeriod);
         if (!std::isfinite(shift) || std::abs(shift) < 5.0e-4f) continue;
@@ -836,11 +915,23 @@ struct SessionEntry
     juce::String activeInference;
 };
 
+struct NsfSessionCache
+{
+    std::mutex mutex;
+    std::unordered_map<std::string, SessionEntry> sessions;
+};
+NsfSessionCache& nsfSessionCache()
+{
+    // Construct the environment first so sessions are destroyed before it.
+    (void)environment();
+    static NsfSessionCache value;
+    return value;
+}
 SessionEntry session(const juce::File& model, const OrtExecutionConfig& execution)
 {
-    static std::mutex mutex;
-    static std::unordered_map<std::string, SessionEntry> sessions;
-    std::scoped_lock lock(mutex);
+    auto& cache = nsfSessionCache();
+    const auto lock = cancellableNsfLock(cache.mutex);
+    auto& sessions = cache.sessions;
     const auto key = (model.getFullPathName() + "#"
         + juce::String(model.getLastModificationTime().toMilliseconds()) + "#"
         + juce::String(model.getSize()) + "#"
@@ -853,6 +944,7 @@ SessionEntry session(const juce::File& model, const OrtExecutionConfig& executio
     auto options = makeOrtSessionOptions(execution, value.activeInference);
     value.model = std::make_shared<Ort::Session>(
         environment(), ortPath(model).c_str(), options);
+    checkNsfCancellation();
     if (value.activeInference.startsWith("directml"))
         value.runMutex = std::make_shared<std::mutex>();
     sessions[key] = value;
@@ -902,6 +994,7 @@ std::vector<float> infer(Ort::Session& model, const Config& config,
     std::vector<float> weight(output.size());
     for (std::size_t coreStart = 0; coreStart < mel.frames; coreStart += stepFrames)
     {
+        checkNsfCancellation();
         const auto coreEnd = std::min(mel.frames, coreStart + coreFrames);
         const auto inputStart = coreStart > contextFrames ? coreStart - contextFrames : 0;
         const auto inputEnd = std::min(mel.frames, coreEnd + contextFrames);
@@ -932,9 +1025,11 @@ std::vector<float> infer(Ort::Session& model, const Config& config,
                                                          f0Shape.data(), f0Shape.size());
         std::array<Ort::Value, 2> inputs { std::move(melTensor), std::move(f0Tensor) };
         std::unique_lock<std::mutex> runLock;
-        if (runMutex != nullptr) runLock = std::unique_lock<std::mutex>(*runMutex);
-        auto rendered = model.Run(Ort::RunOptions{ nullptr }, inputNames, inputs.data(),
+        if (runMutex != nullptr) runLock = cancellableNsfLock(*runMutex);
+        CancellableNsfRun run;
+        auto rendered = model.Run(run.options, inputNames, inputs.data(),
                                   inputs.size(), outputNames, 1);
+        checkNsfCancellation();
         if (rendered.empty()) return {};
         const auto info = rendered[0].GetTensorTypeAndShapeInfo();
         const auto count = info.GetElementCount();
@@ -976,8 +1071,18 @@ std::vector<float> infer(Ort::Session& model, const Config& config,
         if (weight[sample] > 1.0e-8f) output[sample] /= weight[sample];
     return output;
 }
+#include "HifisamplerDsp.inc"
 }
 #endif
+
+void NsfHifiganRenderer::shutdown()
+{
+#if defined(HACHI_HAS_ONNX_ANALYSIS) && HACHI_HAS_ONNX_ANALYSIS
+    auto& cache = nsfSessionCache();
+    const std::scoped_lock lock(cache.mutex);
+    cache.sessions.clear();
+#endif
+}
 
 bool NsfHifiganRenderer::modelAvailable(const juce::File& configuredModelDirectory)
 {
@@ -996,12 +1101,15 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
     const std::vector<NsfHifiganTimeMapPoint>& timeMap,
     const juce::File& configuredModelDirectory,
     const OrtExecutionConfig& execution, NsfHifiganStretchOrder stretchOrder,
-    bool normalizeVolume, const NsfHifiganEdgeGuard& edgeGuard)
+    bool normalizeVolume, const NsfHifiganEdgeGuard& edgeGuard,
+    const std::function<bool()>& cancelled)
 {
     NsfHifiganRenderResult result;
 #if defined(HACHI_HAS_ONNX_ANALYSIS) && HACHI_HAS_ONNX_ANALYSIS
+    const NsfCancellationScope cancellation(cancelled);
     try
     {
+        checkNsfCancellation();
         const auto files = modelFiles(configuredModelDirectory);
         if (!files)
         {
@@ -1160,6 +1268,7 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
             conditionNeuralBoundary(destination, targetSamples, sampleRate,
                 edgeGuard.startSeconds, edgeGuard.endSeconds);
         }
+        checkNsfCancellation();
         result.usedModel = true;
         return result;
     }
@@ -1174,9 +1283,10 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
 #else
     juce::ignoreUnused(source, sampleRate, targetSamples, framePeriodMs, targetMidi,
                        formantSemitones, timeMap, configuredModelDirectory, execution,
-                       stretchOrder, normalizeVolume);
+                       stretchOrder, normalizeVolume, edgeGuard, cancelled);
     result.error = "NSF-HiFiGAN ONNX runtime is not included";
 #endif
+    if (!result.usedModel) result.buffer.setSize(0, 0);
     return result;
 }
 
@@ -1194,11 +1304,13 @@ NsfUtauNotePlan buildNsfUtauNotePlan(const NsfUtauSampleTiming& timing,
                                      double noteStartSeconds,
                                      double noteDurationSeconds,
                                      double consonantVelocityScale,
-                                     double tailSeconds)
+                                     double tailSeconds,
+                                     const std::array<double, 3>* manualFractions,
+                                     bool firstTwoRegionsOnly, double soundingOutputSeconds)
 {
     NsfUtauNotePlan plan;
     const auto regionStart = std::max(0.0, timing.offsetSeconds);
-    const auto regionEnd = std::max(regionStart + 0.001,
+    auto regionEnd = std::max(regionStart + 0.001,
         timing.fileSeconds > 0.0 ? std::min(timing.endSeconds, timing.fileSeconds)
                                  : timing.endSeconds);
     if (regionEnd <= regionStart) return plan;
@@ -1215,15 +1327,72 @@ NsfUtauNotePlan buildNsfUtauNotePlan(const NsfUtauSampleTiming& timing,
     const auto consonantSourceEnd = std::min(regionEnd, regionStart + consonant);
 
     const auto tail = std::max(0.0, tailSeconds);
-    const auto outputSeconds = std::max(0.01, preutterance + noteDurationSeconds + tail);
+    const auto outputSeconds = soundingOutputSeconds > 0.0
+        ? std::max(0.001, soundingOutputSeconds)
+        : std::max(0.01, preutterance + noteDurationSeconds + tail);
+
+    if (timing.hasRegions)
+    {
+        auto sourceRegions = firstTwoRegionsOnly
+            ? UtauRenderer::firstTwoRegions(timing.regionSeconds) : timing.regionSeconds;
+        const auto annotated = timing.mouClasses.length() >= 2 && timing.mouClasses.length() <= 4;
+        const auto count = firstTwoRegionsOnly ? 2 : annotated ? timing.mouClasses.length() : 4;
+        // Clip cumulative source boundaries, including an STP entry clipped at the file edge.
+        auto sourceTotal = 0.0;
+        for (int i = 0; i < count; ++i)
+        {
+            auto& value = sourceRegions[static_cast<std::size_t>(i)];
+            if (!std::isfinite(value) || value < 0.0) value = 0.0;
+            value = std::min(value, std::max(0.0, regionEnd - regionStart - sourceTotal));
+            sourceTotal += value;
+        }
+        if (sourceTotal > 1.0e-9)
+        {
+            if (firstTwoRegionsOnly) regionEnd = regionStart + sourceTotal;
+            else sourceRegions[static_cast<std::size_t>(count - 1)] +=
+                std::max(0.0, regionEnd - regionStart - sourceTotal);
+            const auto velocity = static_cast<int>(std::lround(100.0 * (1.0 - std::log2(scale))));
+            const juce::String spellingClasses("CV");
+            const auto classes = firstTwoRegionsOnly ? &spellingClasses
+                : annotated ? &timing.mouClasses : nullptr;
+            const auto split = UtauRenderer::regionSplit(sourceRegions, outputSeconds,
+                velocity, preutterance, manualFractions, classes);
+            if (split.valid)
+            {
+                plan.regionClasses = classes != nullptr ? *classes : juce::String("CVVV");
+                // Equal target coordinates are intentional: a zero-length output region
+                // skips its source. The Mel mapper takes the last anchor at that time.
+                // Keeping both endpoints preserves the preceding region at the beat.
+                plan.timeMap.push_back({ 0.0, regionStart });
+                auto target = 0.0, source = regionStart;
+                for (int i = 0; i < count; ++i)
+                {
+                    const auto index = static_cast<std::size_t>(i);
+                    target += split.seconds[index];
+                    source += sourceRegions[index];
+                    plan.timeMap.push_back({ target, source });
+                }
+                plan.timeMap.back() = { outputSeconds, regionEnd };
+                plan.valid = true;
+                plan.sourceStartSeconds = regionStart;
+                plan.sourceEndSeconds = regionEnd;
+                plan.soundStartOffsetSeconds = -preutterance;
+                plan.outputSeconds = outputSeconds;
+                plan.usesRegions = true;
+                plan.regionCount = count;
+                plan.outputRegionSeconds = split.seconds;
+                return plan;
+            }
+        }
+    }
 
     const auto consonantOutput = consonant * scale;
     std::vector<NsfHifiganTimeMapPoint> map;
     map.push_back({ 0.0, regionStart });
     if (consonantOutput > 1.0e-4 && consonantSourceEnd > regionStart + 1.0e-6)
         map.push_back({ consonantOutput, consonantSourceEnd });
-    // The vowel is linearly stretched to fill the rest; the model's variable
-    // hop does the spectral stretch, and a longer note reads held final frames.
+    // The vowel traverses its whole source once over the remaining target span.
+    // Mel frames are interpolated through this map at the decoder's fixed hop.
     map.push_back({ outputSeconds, regionEnd });
 
     std::vector<NsfHifiganTimeMapPoint> cleaned;
@@ -1289,7 +1458,7 @@ std::vector<float> buildNsfUtauTargetMidi(float midiNote,
 
 juce::AudioBuffer<float> mixNsfUtauNotes(const std::vector<NsfUtauMixNote>& notes,
                                          double totalSeconds, double sampleRate,
-                                         int channels)
+                                         int channels, const std::function<bool()>& cancelled)
 {
     const auto chans = juce::jlimit(1, 2, channels);
     const auto totalSamples = std::max(1, static_cast<int>(std::ceil(
@@ -1307,6 +1476,7 @@ juce::AudioBuffer<float> mixNsfUtauNotes(const std::vector<NsfUtauMixNote>& note
 
     for (std::size_t oi = 0; oi < order.size(); ++oi)
     {
+        if (cancelled && cancelled()) return {};
         const auto& note = notes[order[oi]];
         if (note.rest || note.audio.getNumSamples() <= 0) continue;
         const auto startSample = static_cast<int>(std::lround(
@@ -1317,6 +1487,7 @@ juce::AudioBuffer<float> mixNsfUtauNotes(const std::vector<NsfUtauMixNote>& note
         const auto srcChannels = note.audio.getNumChannels();
         for (int index = 0; index < noteSamples; ++index)
         {
+            if ((index & 1023) == 0 && cancelled && cancelled()) return {};
             const auto target = startSample + index;
             if (target < 0 || target >= totalSamples) continue;
             auto gain = 1.0f;
@@ -1358,9 +1529,12 @@ NsfUtauSynthResult synthesizeNsfUtauNote(const juce::File& sampleFile,
                                          const std::vector<NsfUtauPitchPoint>& pitchCurve,
                                          const juce::File& modelDirectory,
                                          const OrtExecutionConfig& execution,
-                                         const std::function<float(double)>& timelinePitchCents)
+                                         const std::function<float(double)>& timelinePitchCents,
+                                         const UtauNoteRenderSpec* flagsNote,
+                                         const std::function<bool()>& cancelled)
 {
     NsfUtauSynthResult result;
+    if (cancelled && cancelled()) { result.error = "NSF-HiFiGAN render cancelled"; return result; }
     if (!plan.valid)
     {
         result.error = "invalid note plan";
@@ -1382,13 +1556,27 @@ NsfUtauSynthResult synthesizeNsfUtauNote(const juce::File& sampleFile,
         return result;
     }
     const auto sourceRate = reader->sampleRate;
+#if !defined(HACHI_HAS_ONNX_ANALYSIS) || !HACHI_HAS_ONNX_ANALYSIS
     const auto regionStart = static_cast<juce::int64>(std::llround(
         plan.sourceStartSeconds * sourceRate));
     const auto regionEnd = static_cast<juce::int64>(std::llround(
         plan.sourceEndSeconds * sourceRate));
     const auto regionSamples = static_cast<int>(std::max<juce::int64>(1,
         regionEnd - regionStart));
+#endif
     const auto channels = juce::jlimit(1, 2, static_cast<int>(reader->numChannels));
+#if defined(HACHI_HAS_ONNX_ANALYSIS) && HACHI_HAS_ONNX_ANALYSIS
+    // Analyse the complete recording. OTO remains an output/time-map boundary;
+    // cutting before STFT/HNSEP discards the real consonant and tail context.
+    if (reader->lengthInSamples <= 0 || reader->lengthInSamples > std::numeric_limits<int>::max()) {
+        result.error = "voice recording is empty or too large"; return result;
+    }
+    const auto sourceSamples = static_cast<int>(reader->lengthInSamples);
+    juce::AudioBuffer<float> source(channels, sourceSamples);
+    source.clear();
+    reader->read(&source, 0, sourceSamples, 0, true, channels > 1);
+    const auto& timeMap = plan.timeMap;
+#else
     juce::AudioBuffer<float> source(channels, regionSamples);
     source.clear();
     reader->read(&source, 0, regionSamples, regionStart, true, channels > 1);
@@ -1398,6 +1586,7 @@ NsfUtauSynthResult synthesizeNsfUtauNote(const juce::File& sampleFile,
     for (const auto& point : plan.timeMap)
         timeMap.push_back({ point.targetSeconds,
                             point.sourceSeconds - plan.sourceStartSeconds });
+#endif
 
     constexpr auto framePeriodMs = 5.0;
     const auto targetMidi = buildNsfUtauTargetMidi(midiNote, pitchCurve, framePeriodMs,
@@ -1406,9 +1595,16 @@ NsfUtauSynthResult synthesizeNsfUtauNote(const juce::File& sampleFile,
     const auto targetSamples = std::max(1, static_cast<int>(std::lround(
         plan.outputSeconds * sourceRate)));
 
-    auto neural = NsfHifiganRenderer::render(source, sourceRate, targetSamples,
+    NsfHifiganRenderResult neural;
+#if defined(HACHI_HAS_ONNX_ANALYSIS) && HACHI_HAS_ONNX_ANALYSIS
+    UtauNoteRenderSpec defaults;
+    neural = renderHifisamplerNote(source, sourceRate, targetSamples, framePeriodMs,
+        targetMidi, timeMap, plan, flagsNote != nullptr ? *flagsNote : defaults, modelDirectory, execution, cancelled);
+#else
+    neural = NsfHifiganRenderer::render(source, sourceRate, targetSamples,
         framePeriodMs, targetMidi, formant, timeMap, modelDirectory, execution,
-        NsfHifiganStretchOrder::fixedHop);
+        NsfHifiganStretchOrder::fixedHop, false, {}, cancelled);
+#endif
     if (!neural.usedModel || neural.buffer.getNumSamples() != targetSamples)
     {
         result.error = neural.error.isNotEmpty() ? neural.error
@@ -1426,7 +1622,7 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
                                      const OrtExecutionConfig& execution)
 {
     UtauRenderResult result;
-    result.backend = "nsf-hifigan-native-voicebank";
+    result.backend = "hifisampler-native-voicebank";
     if (!NsfHifiganRenderer::modelAvailable(modelDirectory))
     {
         result.warning = "NSF-HiFiGAN model pack unavailable";
@@ -1443,18 +1639,27 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
     double phraseRate = 0.0;
     std::vector<NsfUtauMixNote> mixNotes;
     mixNotes.reserve(request.notes.size());
+    std::vector<UtauRenderer::ResolvedSample> samples;
+    samples.reserve(request.notes.size());
     for (const auto& note : request.notes)
     {
+        if (request.cancelled && request.cancelled()) return result;
+        samples.push_back(UtauRenderer::resolveVoiceSample(
+            request.voicebankDirectory, note.alias, note.midiNote,
+            note.consonantVelocity, request.fourRegion, request.consonantClasses,
+            note.stpSeconds, note.preutteranceOverrideEnabled, note.preutteranceSeconds,
+            note.overlapOverrideEnabled, note.overlapSeconds, &note.oto));
+    }
+    for (std::size_t noteIndex = 0; noteIndex < request.notes.size(); ++noteIndex)
+    {
+        const auto& note = request.notes[noteIndex];
+        if (request.cancelled && request.cancelled()) return result;
         if (isRestLyric(note.alias))
         {
             mixNotes.push_back({ {}, note.startSeconds, 0.0, true });
             continue;
         }
-        const auto resolved = UtauRenderer::resolveVoiceSample(
-            request.voicebankDirectory, note.alias, note.midiNote,
-            note.consonantVelocity, request.fourRegion, request.consonantClasses,
-            note.stpSeconds, note.preutteranceOverrideEnabled, note.preutteranceSeconds,
-            note.overlapOverrideEnabled, note.overlapSeconds, &note.oto);
+        const auto& resolved = samples[noteIndex];
         if (!resolved.found) { ++missing; continue; }
 
         NsfUtauSampleTiming timing;
@@ -1464,8 +1669,28 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
         timing.preutteranceSeconds = resolved.preutteranceSeconds;
         timing.overlapSeconds = resolved.overlapSeconds;
         timing.fileSeconds = resolved.fileSeconds;
+        timing.hasRegions = resolved.hasRegions;
+        timing.regionSeconds = resolved.regionSeconds;
+        timing.mouClasses = resolved.mouClasses;
+        auto soundEnd = note.startSeconds + note.durationSeconds;
+        if (noteIndex + 1 < samples.size() && samples[noteIndex + 1].found)
+        {
+            const auto& next = request.notes[noteIndex + 1];
+            const auto& nextSample = samples[noteIndex + 1];
+            const auto nextStart = next.startSeconds - std::min(
+                std::max(0.0, nextSample.preutteranceSeconds), std::max(0.0, next.startSeconds));
+            if (UtauRenderer::crossfadesInto(nextStart, soundEnd))
+                soundEnd = UtauRenderer::crossfadeEnd(nextStart, nextSample.overlapSeconds,
+                    next.startSeconds + next.durationSeconds);
+        }
+        const auto pre = std::min(std::max(0.0, timing.preutteranceSeconds),
+                                   std::max(0.0, note.startSeconds));
+        const auto soundingLength = std::max(0.001, soundEnd - note.startSeconds + pre);
         const auto plan = buildNsfUtauNotePlan(timing, note.startSeconds,
-            note.durationSeconds, velocityScaleOf(note.consonantVelocity), 0.0);
+            note.durationSeconds, velocityScaleOf(note.consonantVelocity), 0.0,
+            note.jieSplitSet ? &note.jieSplit : nullptr,
+            UtauRenderer::readsOnlyFirstTwoRegions(request.fourRegion, request.consonantClasses,
+                note.durationSeconds), timing.hasRegions ? soundingLength : 0.0);
         if (!plan.valid) { ++missing; continue; }
 
         std::vector<NsfUtauPitchPoint> pitch;
@@ -1477,7 +1702,8 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
         // the target MIDI is simply the note's pitch (the recording's own pitch
         // is what the mel carries; no source-vs-target ratio is applied here).
         auto synth = synthesizeNsfUtauNote(resolved.file, plan, note.midiNote,
-                                           pitch, modelDirectory, execution, note.timelinePitchCents);
+                                           pitch, modelDirectory, execution, note.timelinePitchCents, &note, request.cancelled);
+        if (request.cancelled && request.cancelled()) return result;
         if (!synth.usedModel || synth.audio.getNumSamples() <= 0)
         {
             if (result.warning.isEmpty() && synth.error.isNotEmpty())
@@ -1485,33 +1711,62 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
             ++missing;
             continue;
         }
-        // Preserve the local editor's envelope, including linear-amplitude
-        // segments, when switching an existing voicebank track to native NSF.
-        if (!note.amplitudeEnvelope.empty())
-        {
-            const auto& points = note.amplitudeEnvelope;
-            for (int i = 0; i < synth.audio.getNumSamples(); ++i)
-            {
-                const auto time = plan.soundStartOffsetSeconds + i / synth.sampleRate;
-                auto db = points.front().gainDb;
-                if (time >= points.back().timeSeconds) db = points.back().gainDb;
-                else for (std::size_t j = 1; j < points.size(); ++j)
-                {
-                    if (time > points[j].timeSeconds) continue;
-                    const auto& left = points[j - 1];
-                    const auto& right = points[j];
-                    const auto span = right.timeSeconds - left.timeSeconds;
-                    const auto u = static_cast<float>(juce::jlimit(0.0, 1.0,
-                        (time - left.timeSeconds) / std::max(1.0e-9, span)));
-                    db = envelopeDbBetween(left.gainDb, right.gainDb, u, left.linearToNext);
-                    break;
-                }
-                const auto gain = envelopeGainFromDb(db);
-                for (int c = 0; c < synth.audio.getNumChannels(); ++c)
-                    synth.audio.setSample(c, i, synth.audio.getSample(c, i) * gain);
+        // Resizing leaves the editing envelope's release at its original time.
+        // Fit it to the actual OTO/neighbor overlap span before applying gain,
+        // exactly as the traditional UTAU mixer does (including notePiece).
+        const auto fittedEnvelope = UtauRenderer::fitAmplitudeEnvelope(note.amplitudeEnvelope,
+            -plan.soundStartOffsetSeconds, plan.soundStartOffsetSeconds + plan.outputSeconds);
+        const auto baseGainAt = [&fittedEnvelope](double time) {
+            const auto& points = fittedEnvelope;
+            if (points.empty()) return 1.0f;
+            if (time <= points.front().timeSeconds) return envelopeGainFromDb(points.front().gainDb);
+            if (time >= points.back().timeSeconds) return envelopeGainFromDb(points.back().gainDb);
+            for (std::size_t j = 1; j < points.size(); ++j) {
+                if (time > points[j].timeSeconds) continue;
+                const auto& left = points[j - 1]; const auto& right = points[j];
+                const auto u = static_cast<float>(juce::jlimit(0.0, 1.0,
+                    (time - left.timeSeconds) / std::max(1.0e-9, right.timeSeconds - left.timeSeconds)));
+                return envelopeGainFromDb(envelopeDbBetween(left.gainDb, right.gainDb, u, left.linearToNext));
             }
+            return 1.0f;
+        };
+        auto headEnd = std::min(note.durationSeconds, resolved.consonantSeconds);
+        auto tailStart = headEnd;
+        const auto envelopeEnd = plan.soundStartOffsetSeconds + plan.outputSeconds;
+        if (plan.usesRegions) {
+            headEnd = plan.soundStartOffsetSeconds + plan.outputRegionSeconds[0];
+            tailStart = envelopeEnd - plan.outputRegionSeconds[static_cast<std::size_t>(plan.regionCount - 1)];
         }
-        if (note.gain != 1.0f) synth.audio.applyGain(juce::jlimit(0.0f, 4.0f, note.gain));
+        const auto envelopeAt = [&](double time) {
+            return advancedEnvelopeGain(note.tailFadeMode, time, tailStart, envelopeEnd,
+                plan.soundStartOffsetSeconds, headEnd, note.tailFadeSettings, baseGainAt);
+        };
+        const auto noteGain = juce::jlimit(0.0f, 4.0f, note.gain);
+        if (request.notePhonemes && plan.usesRegions)
+        {
+            std::vector<UtauPhonemeSpan> spans;
+            auto start = plan.soundStartOffsetSeconds;
+            static const char* names[] { "onset", "glide", "nucleus", "coda" };
+            for (int i = 0; i < plan.regionCount; ++i)
+            {
+                const auto end = start + plan.outputRegionSeconds[static_cast<std::size_t>(i)];
+                spans.push_back({ note.alias, timing.mouClasses.isEmpty() ? names[i]
+                    : timing.mouClasses.substring(i, i + 1), start, end });
+                start = end;
+            }
+            request.notePhonemes(noteIndex, spans);
+        }
+        if (request.cancelled && request.cancelled()) return result;
+        if (request.notePiece)
+            request.notePiece(noteIndex, synth.audio, synth.sampleRate, -plan.soundStartOffsetSeconds,
+                [&](double time) { return envelopeAt(time) * noteGain; },
+                [noteGain](double) { return noteGain; });
+        for (int i = 0; i < synth.audio.getNumSamples(); ++i) {
+            if ((i & 1023) == 0 && request.cancelled && request.cancelled()) return result;
+            const auto gain = envelopeAt(plan.soundStartOffsetSeconds + i / synth.sampleRate) * noteGain;
+            for (int c = 0; c < synth.audio.getNumChannels(); ++c)
+                synth.audio.setSample(c, i, synth.audio.getSample(c, i) * gain);
+        }
         phraseRate = synth.sampleRate;
         mixNotes.push_back({ std::move(synth.audio),
                              note.startSeconds + plan.soundStartOffsetSeconds,
@@ -1522,7 +1777,7 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
     if (phraseRate <= 0.0) phraseRate = 44100.0;
     result.sampleRate = phraseRate;
     result.buffer = mixNsfUtauNotes(mixNotes,
-        std::max(0.001, request.targetDurationSeconds), phraseRate, 2);
+        std::max(0.001, request.targetDurationSeconds), phraseRate, 2, request.cancelled);
     if (missing > 0)
         result.warning = (result.warning.isEmpty() ? juce::String()
                                                      : result.warning + "; ")
@@ -1530,4 +1785,6 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
     juce::ignoreUnused(synthesised);
     return result;
 }
+#include "HifisamplerSmoke.inc"
+
 }

@@ -368,6 +368,7 @@ std::vector<NoteData> NativeAnalyzer::analyse(const juce::File& file, juce::Stri
         note.consonantSeconds = static_cast<double>((voicedBegin - startFrame) * hopSamples)
             / analysisRate;
         note.sourceMidiCenter = median(pitches);
+        note.sourcePitchMeasured = true;
         note.midiNote = note.sourceMidiCenter;
         auto breathEvidence = 0.0f;
         auto breathFrames = 0;

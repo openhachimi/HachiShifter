@@ -68,6 +68,7 @@ struct VoicebankOtoEntry
     // is what UTAU and 界•UTAU always send: those two modes have no notion
     // of the annotation and the engine must not be told about one.
     juce::String mouClasses;
+    juce::String sourceEncoding, sourceFingerprint;
 };
 
 class SampleSettings final
@@ -139,7 +140,8 @@ public:
     // in the folder is never even opened.
     static std::vector<VoicebankOtoEntry> loadVoicebankOto(
         const juce::File& root, juce::StringArray& warnings,
-        bool jieMode = false, bool mouMode = false);
+        bool jieMode = false, bool mouMode = false,
+        const juce::File& onlyOtoFile = {});
     // Counts the writes made here to the files a voicebank is read from --
     // oto.ini, oto.jie.ini, oto4.ini, otomou.ini and the sample sidecars.  The
     // renderer keys its voicebank index on it, so what is written here is what
@@ -205,6 +207,11 @@ public:
     // apart.  Existing rows are kept, so this is safe to run again.
     static bool createJieOto(const juce::File& root, int& written, int& kept,
                              juce::String& error);
+    struct JieFromMouResult { int written = 0, unchanged = 0, skipped = 0; };
+    // Copy only explicit four-region Mou records matching the Jie sample and
+    // offset. Preserve unrelated Jie rows and the source Mou annotations.
+    static bool createJieOtoFromMou(const juce::File& root, JieFromMouResult& result,
+                                    juce::String& error);
     static bool updateJieOtoEntry(const VoicebankOtoEntry& original,
                                   const VoicebankOtoEntry& updated,
                                   juce::String& error);

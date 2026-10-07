@@ -3,6 +3,7 @@
 #include "Mld5Renderer.h"
 #include "UtauRenderer.h"
 #include "OrtExecution.h"
+#include "PlaybackRenderQueue.h"
 #include <juce_events/juce_events.h>
 #include <functional>
 #include <memory>
@@ -43,6 +44,9 @@ struct Mld5FileRenderRequest
     int stretchAlgorithm = 0;
     bool normalizeVolume = false;
     bool matchNsfSourceLevel = false;
+    // Source F0 is measured rather than a hand-created absolute target.
+    // An identity request can play PCM directly, without vocoder coloration.
+    bool preserveUneditedSource = false;
     // Per-edge neural guard overrides for the nsf-hifigan backend.  A negative
     // value keeps the renderer default (3 ms both sides).  A connected seam
     // sets the matching edge to 0 so the mixer crossfade owns the hand-off
@@ -66,6 +70,11 @@ struct RenderedAudio
     juce::String warning;
 };
 
+// Shared with the mixer so preserving source PCM also preserves its edges.
+[[nodiscard]] bool canPreserveNativeSource(const Mld5FileRenderRequest& request,
+                                          double sampleRate, int sourceSamples,
+                                          int targetSamples);
+
 class RenderService final
 {
 public:
@@ -75,21 +84,30 @@ public:
     RenderService();
     ~RenderService();
     void renderMld5(Mld5RenderRequest request, Completion completion);
-    void renderMld5File(Mld5FileRenderRequest request, FileCompletion completion);
-    void renderUtau(UtauRenderRequest request, FileCompletion completion);
+    void renderMld5File(Mld5FileRenderRequest request, FileCompletion completion,
+                       RenderSchedule schedule = {});
+    void renderUtau(UtauRenderRequest request, FileCompletion completion,
+                    RenderSchedule schedule = {});
     // Native NSF-HiFiGAN voicebank synthesis of a whole UTAU phrase.  Same
     // request the classic UTAU path uses; the one NSF-HiFiGAN renderer does the
     // synthesis (renderNsfUtauPhrase), so a voicebank track on NSF-HiFiGAN is a
     // native render, not the classic resampler.
     void renderNsfUtau(UtauRenderRequest request, juce::File modelDirectory,
-                       OrtExecutionConfig execution, FileCompletion completion);
+                       OrtExecutionConfig execution, FileCompletion completion,
+                       RenderSchedule schedule = {});
     void cancelAll();
+    [[nodiscard]] bool hasActiveJobs() { return queue.hasActiveJobs(); }
+    void setPlaybackPosition(double seconds) noexcept { queue.setPosition(seconds); }
+    void beginUpdate() { queue.beginUpdate(); }
+    void endUpdate(const std::unordered_set<std::string>& keys) { queue.endUpdate(keys); }
+    [[nodiscard]] double playbackPriorityPosition() const
+    { return queue.positionClock()->load(std::memory_order_relaxed); }
 
 private:
     class RenderJob;
     class FileRenderJob;
     class UtauRenderJob;
     class NsfUtauRenderJob;
-    juce::ThreadPool pool;
+    PlaybackRenderQueue queue;
 };
 }

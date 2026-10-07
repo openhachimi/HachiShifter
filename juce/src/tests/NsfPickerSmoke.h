@@ -18,17 +18,18 @@ inline bool MainComponent::diagnosticNsfPicker()
     project.dispatchPendingMessages();
     diagnosticSelectTrack(selected);
     bool ok = true;
-    for (const auto id : { 3, 2, 6, 2 })
+    for (const auto id : { 3, 2, 6, 2, 8, 9, 7, 2 })
     {
         pitchAlgorithm.setSelectedId(id, juce::sendNotificationSync);
         project.dispatchPendingMessages();
         refreshProjectControls();
         const auto expected = id == 2 ? PitchAlgorithm::nsfHifigan
-            : id == 3 ? PitchAlgorithm::world : PitchAlgorithm::llsm2;
+            : id == 3 ? PitchAlgorithm::world : id >= 7 ? PitchAlgorithm::utau : PitchAlgorithm::llsm2;
         bool trackChanged = false, otherUnchanged = false;
         for (const auto& track : project.snapshot().tracks)
         {
-            if (track.id == selected) trackChanged = track.pitchAlgorithm == expected;
+            if (track.id == selected) trackChanged = track.pitchAlgorithm == expected
+                && track.utauMode == (id == 8 ? UtauMode::jie : id == 9 ? UtauMode::mou : UtauMode::classic);
             if (track.id == other) otherUnchanged = track.pitchAlgorithm == PitchAlgorithm::world;
         }
         const auto passed = trackChanged && otherUnchanged && pitchAlgorithm.getSelectedId() == id;

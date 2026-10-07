@@ -70,3 +70,6 @@ cmake-build-*/
 /.deps/
 /integration-tests/
 /*-integration.log
+
+# Machine-specific Python configuration
+/tools/hamood_audio/runtime.json

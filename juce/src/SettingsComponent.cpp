@@ -1,6 +1,7 @@
 #include "SettingsComponent.h"
 #include "backend/NsfHifiganRenderer.h"
 #include "backend/DiffSingerRenderer.h"
+#include "backend/AnalysisService.h"
 #include <cmath>
 
 namespace hachi
@@ -118,6 +119,7 @@ SettingsComponent::SettingsComponent(I18n& stringsToUse,
 
     gameModel.addItem("large", 1);
     gameModel.addItem("small", 2);
+    gameModel.addItem("medium", 3);
     inference.addItem("Auto", 1);
     inference.addItem("CPU", 2);
     inference.addItem("DirectML", 3);
@@ -139,6 +141,10 @@ SettingsComponent::SettingsComponent(I18n& stringsToUse,
     algorithmPage.addRow(inferenceLabel, inference);
     algorithmPage.addRow(inferenceDeviceLabel, inferenceDevice);
     algorithmPage.addRow(utauVoicebankLabel, utauVoicebankPath);
+    utauOutputEngine.setComponentID("settings-utau-output-engine");
+    utauOutputEngine.addItem("UTAU resampler / wavtool", 1);
+    utauOutputEngine.addItem(juce::String::fromUTF8("HiFisampler（PC-NSF-HiFiGAN）"), 2);
+    algorithmPage.addRow(utauOutputEngineLabel, utauOutputEngine);
     algorithmPage.addRow(utauWavtoolLabel, utauWavtoolPath);
     algorithmPage.addRow(utauResamplerLabel, utauResamplerPath);
     utauVoicebankPath.onBrowse = [this] { chooseUtauVoicebank(); };
@@ -272,7 +278,9 @@ void SettingsComponent::loadValues()
                                      juce::dontSendNotification);
     uiScale.setValue(properties.getDoubleValue("ui.uiScale", 1.0), juce::dontSendNotification);
     gamePath.setText(properties.getValue("algorithm.gamePath"), false);
-    gameModel.setSelectedId(properties.getValue("algorithm.gameModel", "large") == "small" ? 2 : 1,
+    const auto analysisConfig = backend::AnalysisService::configFromProperties(&properties);
+    gameModel.setSelectedId(analysisConfig.gameModel == "small" ? 2
+                            : analysisConfig.gameModel == "large" ? 1 : 3,
                             juce::dontSendNotification);
     fcpePath.setText(properties.getValue("algorithm.fcpePath"), false);
     hifiganPath.setText(properties.getValue("algorithm.hifiganPath"), false);
@@ -281,6 +289,8 @@ void SettingsComponent::loadValues()
     utauVoicebankPath.setText(properties.getValue("algorithm.utauVoicebank"));
     utauWavtoolPath.setText(properties.getValue("algorithm.utauWavtool"));
     utauResamplerPath.setText(properties.getValue("algorithm.utauResampler"));
+    utauOutputEngine.setSelectedId(properties.getValue("algorithm.utauOutputEngine") == "pc-nsf-hifigan" ? 2 : 1,
+                                  juce::dontSendNotification);
     shortcutPreset.setSelectedId(properties.getIntValue("operation.shortcutPreset", 1), juce::dontSendNotification);
     spacePlayback.setToggleState(properties.getBoolValue("operation.spacePlayback", true), juce::dontSendNotification);
     confirmDestructive.setToggleState(properties.getBoolValue("operation.confirmDestructive", true), juce::dontSendNotification);
@@ -334,7 +344,8 @@ void SettingsComponent::saveValues()
     properties.setValue("ui.softwareRendering", softwareRendering.getToggleState());
     properties.setValue("ui.uiScale", uiScale.getValue());
     properties.setValue("algorithm.gamePath", gamePath.getText());
-    properties.setValue("algorithm.gameModel", gameModel.getSelectedId() == 2 ? "small" : "large");
+    properties.setValue("algorithm.gameModel", gameModel.getSelectedId() == 2 ? "small"
+        : gameModel.getSelectedId() == 1 ? "large" : "medium");
     properties.setValue("algorithm.fcpePath", fcpePath.getText());
     properties.setValue("algorithm.hifiganPath", hifiganPath.getText());
     properties.setValue("algorithm.inference", inference.getSelectedId());
@@ -342,6 +353,7 @@ void SettingsComponent::saveValues()
     properties.setValue("algorithm.utauVoicebank", utauVoicebankPath.getText());
     properties.setValue("algorithm.utauWavtool", utauWavtoolPath.getText());
     properties.setValue("algorithm.utauResampler", utauResamplerPath.getText());
+    properties.setValue("algorithm.utauOutputEngine", utauOutputEngine.getSelectedId() == 2 ? "pc-nsf-hifigan" : "resampler");
     properties.setValue("operation.shortcutPreset", shortcutPreset.getSelectedId());
     properties.setValue("operation.spacePlayback", spacePlayback.getToggleState());
     properties.setValue("operation.confirmDestructive", confirmDestructive.getToggleState());
@@ -398,6 +410,7 @@ void SettingsComponent::setTexts()
     utauVoicebankLabel.setText(strings.text("settings.utauVoicebank"), juce::dontSendNotification);
     utauWavtoolLabel.setText(strings.text("settings.utauWavtool"), juce::dontSendNotification);
     utauResamplerLabel.setText(strings.text("settings.utauResampler"), juce::dontSendNotification);
+    utauOutputEngineLabel.setText(strings.text("settings.utauOutputEngine"), juce::dontSendNotification);
     const auto browseText = strings.text("settings.browse");
     utauVoicebankPath.setBrowseTooltip(browseText);
     utauWavtoolPath.setBrowseTooltip(browseText);

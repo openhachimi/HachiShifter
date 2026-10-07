@@ -1,5 +1,7 @@
 #include "AnalysisService.h"
 #include "GameAnalyzer.h"
+#include "../NativeSourceTimeMap.h"
+#include "../ClipParts.h"
 #include <algorithm>
 #include <array>
 #include <map>
@@ -44,37 +46,43 @@ InferenceBackend inferenceFromId(int id)
     return InferenceBackend::automatic;
 }
 
+juce::String normalizedGameModel(const juce::String& value)
+{
+    const auto variant = value.trim().toLowerCase();
+    return variant == "small" || variant == "large" ? variant : juce::String("medium");
+}
+
 std::optional<std::pair<float, float>> absolutePitchAt(
     const std::vector<NoteData>& notes, double sourceSeconds)
 {
-    for (const auto& note : notes)
+    const auto nextNote = std::upper_bound(notes.begin(), notes.end(), sourceSeconds + 1.0e-6,
+        [](double t, const NoteData& note) { return t < note.startSeconds; });
+    if (nextNote == notes.begin()) return std::nullopt;
+    const auto& note = *(nextNote - 1);
+    const auto local = sourceSeconds - note.startSeconds;
+    if (local < -1.0e-6 || local > note.durationSeconds + 1.0e-6
+        || note.contour.empty())
+        return std::nullopt;
+    const auto right = std::lower_bound(note.contour.begin(), note.contour.end(), local,
+        [](const PitchPoint& point, double time) { return point.timeSeconds < time; });
+    const auto rightIndex = right == note.contour.end() ? note.contour.size() - 1
+        : static_cast<std::size_t>(std::distance(note.contour.begin(), right));
+    const auto leftIndex = rightIndex > 0 && note.contour[rightIndex].timeSeconds > local
+        ? rightIndex - 1 : rightIndex;
+    const auto& left = note.contour[leftIndex];
+    const auto& next = note.contour[rightIndex];
+    if (!left.voiced || !next.voiced) return std::nullopt;
+    const auto amount = next.timeSeconds > left.timeSeconds
+        ? static_cast<float>(juce::jlimit(0.0, 1.0,
+            (local - left.timeSeconds) / (next.timeSeconds - left.timeSeconds))) : 0.0f;
+    const auto interpolate = [amount](float first, float second)
     {
-        const auto local = sourceSeconds - note.startSeconds;
-        if (local < -1.0e-6 || local > note.durationSeconds + 1.0e-6
-            || note.contour.empty())
-            continue;
-        const auto right = std::lower_bound(note.contour.begin(), note.contour.end(), local,
-            [](const PitchPoint& point, double time) { return point.timeSeconds < time; });
-        const auto rightIndex = right == note.contour.end() ? note.contour.size() - 1
-            : static_cast<std::size_t>(std::distance(note.contour.begin(), right));
-        const auto leftIndex = rightIndex > 0 && note.contour[rightIndex].timeSeconds > local
-            ? rightIndex - 1 : rightIndex;
-        const auto& left = note.contour[leftIndex];
-        const auto& next = note.contour[rightIndex];
-        if (!left.voiced || !next.voiced) return std::nullopt;
-        const auto amount = next.timeSeconds > left.timeSeconds
-            ? static_cast<float>(juce::jlimit(0.0, 1.0,
-                (local - left.timeSeconds) / (next.timeSeconds - left.timeSeconds))) : 0.0f;
-        const auto interpolate = [amount](float first, float second)
-        {
-            return first + (second - first) * amount;
-        };
-        const auto centre = note.sourceMidiCenter * 100.0f;
-        return std::pair { centre + interpolate(left.relativeCents, next.relativeCents),
-                           centre + interpolate(left.withoutVibratoCents,
-                                                next.withoutVibratoCents) };
-    }
-    return std::nullopt;
+        return first + (second - first) * amount;
+    };
+    const auto centre = note.sourceMidiCenter * 100.0f;
+    return std::pair { centre + interpolate(left.relativeCents, next.relativeCents),
+                       centre + interpolate(left.withoutVibratoCents,
+                                            next.withoutVibratoCents) };
 }
 
 float median(std::vector<float> values)
@@ -94,7 +102,16 @@ AnalysisConfig AnalysisService::configFromProperties(const juce::PropertiesFile*
     const auto fcpe = properties->getValue("algorithm.fcpePath").trim();
     if (game.isNotEmpty()) config.gameModelDirectory = juce::File(game);
     if (fcpe.isNotEmpty()) config.fcpeModelPath = juce::File(fcpe);
-    config.performanceMode = properties->getValue("algorithm.gameModel", "large") == "small";
+    config.gameModel = normalizedGameModel(properties->getValue("algorithm.gameModel", "medium"));
+    // Older settings wrote "large" even when no model was installed. Adopt
+    // the bundled default only in that case; keep working/custom selections.
+    if (game.isEmpty() && config.gameModel == "large"
+        && resolveGameDirectory(config) == juce::File{})
+    {
+        auto bundled = config;
+        bundled.gameModel = "medium";
+        if (resolveGameDirectory(bundled) != juce::File{}) config = bundled;
+    }
     config.inference = inferenceFromId(properties->getIntValue("algorithm.inference", 1));
     const auto device = properties->getIntValue("algorithm.device", 1);
     config.deviceIndex = device <= 1 ? -1 : device - 2;
@@ -104,9 +121,9 @@ AnalysisConfig AnalysisService::configFromProperties(const juce::PropertiesFile*
 AnalysisConfig AnalysisService::configFromEnvironment()
 {
     AnalysisConfig config;
-    config.performanceMode = juce::SystemStats::getEnvironmentVariable(
-        "HACHISHIFTER_GAME_MODEL", "large").equalsIgnoreCase("small");
-    config.gameModelDirectory = environmentFile(config.performanceMode
+    config.gameModel = normalizedGameModel(juce::SystemStats::getEnvironmentVariable(
+        "HACHISHIFTER_GAME_MODEL", "medium"));
+    config.gameModelDirectory = environmentFile(config.gameModel == "small"
         ? "HACHISHIFTER_GAME_SMALL_MODEL_DIR" : "HACHISHIFTER_GAME_MODEL_DIR");
     auto fcpe = environmentFile("HACHISHIFTER_FCPE_ONNX");
     if (fcpe == juce::File{})
@@ -129,27 +146,18 @@ AnalysisConfig AnalysisService::configFromEnvironment()
 
 juce::File AnalysisService::resolveGameDirectory(const AnalysisConfig& config)
 {
-    const auto variant = config.performanceMode ? "small" : "large";
+    const auto variant = normalizedGameModel(config.gameModel);
     const auto resolveRoot = [&](const juce::File& root) -> juce::File
     {
         if (root == juce::File{}) return {};
         if (isGameDirectory(root)) return root;
         auto candidate = root.getChildFile(variant);
         if (isGameDirectory(candidate)) return candidate;
-        // Existing model packs commonly use models/game as the large folder
-        // and models/game/small for performance mode.
-        if (!config.performanceMode)
-        {
-            candidate = root.getChildFile("game");
-            if (isGameDirectory(candidate)) return candidate;
-            candidate = root.getChildFile("game").getChildFile("large");
-            if (isGameDirectory(candidate)) return candidate;
-        }
-        else
-        {
-            candidate = root.getChildFile("game").getChildFile("small");
-            if (isGameDirectory(candidate)) return candidate;
-        }
+        candidate = root.getChildFile("game").getChildFile(variant);
+        if (isGameDirectory(candidate)) return candidate;
+        // Continue accepting older flat model packs and explicit folders.
+        candidate = root.getChildFile("game");
+        if (isGameDirectory(candidate)) return candidate;
         return {};
     };
 
@@ -183,10 +191,19 @@ juce::File AnalysisService::resolveFcpePath(const AnalysisConfig& config,
 AnalysisStatus AnalysisService::status(const AnalysisConfig& config)
 {
     AnalysisStatus result;
-    result.performanceMode = config.performanceMode;
+    result.gameModel = normalizedGameModel(config.gameModel);
     result.requestedInference = inferenceBackendName(config.inference);
     result.activeInference = inferenceBackendName(resolvedInferenceBackend(config.inference));
     result.gameModelDirectory = resolveGameDirectory(config);
+    if (result.gameModelDirectory != juce::File{})
+    {
+        const auto metadata = juce::JSON::parse(result.gameModelDirectory
+            .getChildFile("model-info.json").loadFileAsString());
+        auto actualVariant = metadata.getProperty("variant", {}).toString().toLowerCase();
+        if (actualVariant.isEmpty()) actualVariant = result.gameModelDirectory.getFileName().toLowerCase();
+        if (actualVariant == "small" || actualVariant == "medium" || actualVariant == "large")
+            result.gameModel = actualVariant;
+    }
     result.fcpeModelPath = resolveFcpePath(config, result.gameModelDirectory);
     result.gameModelReady = result.gameModelDirectory != juce::File{};
     result.fcpeModelReady = result.fcpeModelPath != juce::File{};
@@ -194,7 +211,7 @@ AnalysisStatus AnalysisService::status(const AnalysisConfig& config)
     if (result.gameModelReady && result.onnxRuntimeReady)
     {
         result.activeBackend = result.fcpeModelReady ? "GAME+FCPE" : "GAME+native-hq";
-        result.message = "GAME " + juce::String(config.performanceMode ? "small" : "large")
+        result.message = "GAME " + result.gameModel
             + (result.fcpeModelReady ? " ready; FCPE model ready"
                                      : " ready; FCPE model missing")
             + "; inference=" + result.activeInference;
@@ -202,8 +219,7 @@ AnalysisStatus AnalysisService::status(const AnalysisConfig& config)
     else
     {
         juce::StringArray missing;
-        if (!result.gameModelReady) missing.add("GAME " + juce::String(
-            config.performanceMode ? "small" : "large") + " model pack");
+        if (!result.gameModelReady) missing.add("GAME " + result.gameModel + " model pack");
         if (!result.fcpeModelReady) missing.add("FCPE model");
         if (!result.onnxRuntimeReady) missing.add("ONNX analysis runtime");
         result.message = "native-hq fallback; missing: " + missing.joinIntoString(", ");
@@ -224,7 +240,7 @@ AnalysisResult AnalysisService::analyse(const juce::File& file,
     if (result.status.gameModelReady && result.status.onnxRuntimeReady)
     {
         GameAnalyzer::Options options;
-        options.performanceMode = config.performanceMode;
+        options.performanceMode = result.status.gameModel == "small";
         options.intraOpThreads = std::max(1, juce::SystemStats::getNumCpus());
         options.inference = config.inference;
         options.deviceIndex = config.deviceIndex;
@@ -253,6 +269,79 @@ AnalysisResult AnalysisService::analyse(const juce::File& file,
     return result;
 }
 
+std::size_t AnalysisService::applySourcePitch(ClipData& clip,
+                                               const std::vector<NoteData>& sourceNotes)
+{
+    if (sourceNotes.empty()) return 0;
+    const auto audio = nativeAudioPreviewClip(clip);
+    const auto map = nativeSourceTimeMap(audio);
+    auto updated = std::size_t(0);
+    for (auto& note : clip.notes)
+    {
+        const auto oldContour = note.contour;
+        std::vector<PitchPoint> contour;
+        std::vector<std::optional<std::pair<float, float>>> samples;
+        std::vector<float> voicedPitch;
+        const auto sample = [&](double local)
+        {
+            PitchPoint point;
+            point.timeSeconds = local;
+            const auto target = note.startSeconds + local - clip.audioStartSeconds;
+            auto pitch = target >= -1.0e-9 && target <= audio.durationSeconds + 1.0e-9
+                ? absolutePitchAt(sourceNotes, audio.sourceOffsetSeconds
+                    + nativeSourceTimeAt(map, target)) : std::nullopt;
+            if (pitch) voicedPitch.push_back(pitch->first);
+            samples.push_back(pitch);
+            // A source refresh replaces acoustic information, never an edit.
+            if (!oldContour.empty())
+            {
+                auto right = std::lower_bound(oldContour.begin(), oldContour.end(), local,
+                    [](const auto& p, double t) { return p.timeSeconds < t; });
+                if (right == oldContour.end()) right = oldContour.end() - 1;
+                const auto left = right != oldContour.begin() && right->timeSeconds > local
+                    ? right - 1 : right;
+                if (left->hasManualTarget && right->hasManualTarget)
+                {
+                    const auto span = right->timeSeconds - left->timeSeconds;
+                    const auto u = span > 1.0e-9 ? juce::jlimit(0.0, 1.0,
+                        (local - left->timeSeconds) / span) : 0.0;
+                    point.hasManualTarget = true;
+                    point.manualTargetCents = left->manualTargetCents
+                        + static_cast<float>(u) * (right->manualTargetCents - left->manualTargetCents);
+                }
+            }
+            contour.push_back(point);
+        };
+        for (double local = 0.0; local < note.durationSeconds - 1.0e-9; local += 0.005)
+            sample(local);
+        sample(note.durationSeconds);
+        const auto hasMeasuredPitch = !voicedPitch.empty();
+        const auto centreCents = !hasMeasuredPitch
+            ? (note.sourceMidiCenter >= 0.0f ? note.sourceMidiCenter : note.midiNote) * 100.0f
+            : median(std::move(voicedPitch));
+        // Timing-only OTO/HJM rows have no pitch centre. Their old C4 value is
+        // a placeholder; begin at the measured pitch, retaining transposition.
+        if (hasMeasuredPitch && note.sourceMidiCenter < 0.0f && note.pitchControlPoints.empty()
+            && std::none_of(oldContour.begin(), oldContour.end(),
+                [](const auto& p) { return p.hasManualTarget; }))
+            note.midiNote = juce::jlimit(0.0f, 127.0f, note.midiNote + centreCents / 100.0f - 60.0f);
+        if (hasMeasuredPitch)
+            note.sourceMidiCenter = juce::jlimit(0.0f, 127.0f, centreCents / 100.0f);
+        for (std::size_t i = 0; i < contour.size(); ++i)
+        {
+            auto& point = contour[i];
+            point.voiced = samples[i].has_value();
+            if (!point.voiced) continue;
+            point.relativeCents = samples[i]->first - centreCents;
+            point.withoutVibratoCents = samples[i]->second - centreCents;
+        }
+        note.contour = std::move(contour);
+        note.sourcePitchMeasured = true;
+        ++updated;
+    }
+    return updated;
+}
+
 bool AnalysisService::reanalyseProjectSourcePitch(ProjectData& project,
                                                    const AnalysisConfig& config,
                                                    juce::String& error,
@@ -262,8 +351,9 @@ bool AnalysisService::reanalyseProjectSourcePitch(ProjectData& project,
     std::map<juce::String, juce::File> files;
     for (const auto& track : project.tracks)
         for (const auto& clip : track.clips)
-            if (clip.sourceFile.existsAsFile())
-                files.try_emplace(clip.sourceFile.getFullPathName(), clip.sourceFile);
+            for (const auto* source : clipSourceRegions(clip))
+                if (source->sourceFile.existsAsFile())
+                    files.try_emplace(source->sourceFile.getFullPathName(), source->sourceFile);
     if (files.empty())
     {
         error = "Source-pitch reanalysis has no readable media";
@@ -293,50 +383,21 @@ bool AnalysisService::reanalyseProjectSourcePitch(ProjectData& project,
     for (auto& track : project.tracks)
         for (auto& clip : track.clips)
         {
-            const auto found = analyses.find(clip.sourceFile.getFullPathName());
-            if (found == analyses.end()) continue;
-            const auto sourceDuration = clip.sourceDurationSeconds > 1.0e-9
-                ? clip.sourceDurationSeconds : clip.durationSeconds;
-            for (auto& note : clip.notes)
+            auto parts = expandedClipParts(clip);
+            for (auto& part : parts)
             {
-                if (note.contour.empty())
-                {
-                    for (double local = 0.0; local < note.durationSeconds; local += 0.005)
+                const auto found = analyses.find(part.sourceFile.getFullPathName());
+                if (found == analyses.end()) continue;
+                updatedNotes += applySourcePitch(part, found->second);
+                for (auto& measured : part.notes)
+                    if (const auto note = std::find_if(clip.notes.begin(), clip.notes.end(),
+                        [&](const auto& n) { return n.id == measured.id; }); note != clip.notes.end())
                     {
-                        PitchPoint point;
-                        point.timeSeconds = local;
-                        note.contour.push_back(point);
+                        note->sourceMidiCenter = measured.sourceMidiCenter;
+                        note->sourcePitchMeasured = measured.sourcePitchMeasured;
+                        note->midiNote = measured.midiNote;
+                        note->contour = std::move(measured.contour);
                     }
-                    PitchPoint end;
-                    end.timeSeconds = note.durationSeconds;
-                    note.contour.push_back(end);
-                }
-                std::vector<std::optional<std::pair<float, float>>> samples;
-                samples.reserve(note.contour.size());
-                std::vector<float> voicedPitch;
-                for (const auto& point : note.contour)
-                {
-                    const auto clipLocal = note.startSeconds + point.timeSeconds;
-                    const auto sourceSeconds = clip.sourceOffsetSeconds
-                        + juce::jlimit(0.0, 1.0,
-                            clipLocal / std::max(0.001, clip.durationSeconds)) * sourceDuration;
-                    auto pitch = absolutePitchAt(found->second, sourceSeconds);
-                    if (pitch) voicedPitch.push_back(pitch->first);
-                    samples.push_back(pitch);
-                }
-                if (voicedPitch.size() < 2) continue;
-                const auto centreCents = median(std::move(voicedPitch));
-                note.sourceMidiCenter = juce::jlimit(0.0f, 127.0f, centreCents / 100.0f);
-                for (std::size_t index = 0; index < note.contour.size(); ++index)
-                {
-                    auto& point = note.contour[index];
-                    const auto& pitch = samples[index];
-                    point.voiced = pitch.has_value();
-                    if (!pitch) continue;
-                    point.relativeCents = pitch->first - centreCents;
-                    point.withoutVibratoCents = pitch->second - centreCents;
-                }
-                ++updatedNotes;
             }
         }
     if (usedStatus != nullptr) *usedStatus = current;
@@ -354,7 +415,7 @@ juce::String AnalysisService::backendText(const AnalysisStatus& value)
 {
     auto text = value.activeBackend;
     if (value.activeBackend.startsWith("GAME+"))
-        text << " (GAME " << (value.performanceMode ? "small" : "large")
+        text << " (GAME " << value.gameModel
              << ", " << value.activeInference << ")";
     return text;
 }

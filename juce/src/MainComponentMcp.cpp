@@ -1,6 +1,7 @@
 #include "MainComponent.h"
 #include "DiffSingerRequest.h"
 #include "Hamood.h"
+#include "HamoodProject.h"
 #include "HamoodAudio.h"
 #include "backend/McpServer.h"
 #include "backend/LiveMcpBridge.h"
@@ -28,7 +29,7 @@ bool in(const juce::String& name, const char* list)
 { return juce::StringArray::fromTokens(list, " ", "").contains(name); }
 bool readOnly(const juce::String& name)
 {
-    return in(name, "hamood_alignment_preview hamood_analyse_audio hamood_audio_context hamood_preview editor_selection editor_status editor_query editor_job_status project_snapshot render_status transport_status analysis_status analyse_audio read_file list_directory sample_settings_read ds_capabilities ds_query_phonemes");
+    return in(name, "hamood_get_context hamood_alignment_preview hamood_analyse_audio hamood_audio_context hamood_preview editor_selection editor_status editor_query editor_job_status project_snapshot render_status transport_status analysis_status analyse_audio read_file list_directory sample_settings_read ds_capabilities ds_query_phonemes");
 }
 juce::int64 renderEditFingerprint(const ProjectData& data)
 {
@@ -91,6 +92,9 @@ juce::var toolsForWindow()
         {"from_seconds",property("number","Project time range start")},{"to_seconds",property("number","Project time range end")},
         {"whole_clip",property("boolean","Read the complete clip explicitly")},
         {"offset",property("integer","Chord pagination offset, default 0")},{"limit",property("integer","Chords per page, 1..256, default 64")}});
+    add("hamood_get_context","Read project-persisted HAMOOD settings, manual key ranges, chord timeline, section labels and confirmation states. Timeline positions use quarter notes.",{});
+    add("hamood_set_context","Replace HAMOOD project metadata with one undo step; read hamood_get_context first and preserve unrelated entries. schema=1; settings object; chords, sections, key_predictions arrays. Chords require start_quarter/end_quarter, label, pitch_classes 0..11, score 0..1 and confirmed. Confirmed chords survive audio reanalysis.",{{"context",property("object","Complete HAMOOD context from hamood_get_context, with your edits")}});
+    {auto schema=tools.getArray()->getLast()["inputSchema"];put(schema,"required",juce::Array<juce::var>{"context"});}
     for(const auto* name:{"hamood_preview","hamood_generate"})
     {
         auto voiceSteps=property("array","Signed diatonic steps: +/-2 third, +/-3 fourth, +/-4 fifth, +/-5 sixth, +/-7 octave. Default [2]");
@@ -99,6 +103,7 @@ juce::var toolsForWindow()
         auto segmentSchema=property("object","One manual key segment"),segmentProps=obj();
         put(segmentProps,"start_bar",property("integer","First ruler bar, 1-based; 0 for pickup"));
         put(segmentProps,"end_bar",property("integer","Last ruler bar, inclusive"));
+        put(segmentProps,"confirmed",property("boolean","Whether this manual key range has been reviewed; default true"));
         put(segmentProps,"tonic",property("integer","C=0 ... B=11"));put(segmentProps,"minor",property("boolean","Natural minor, default false"));
         put(segmentSchema,"properties",segmentProps);put(segmentSchema,"required",juce::Array<juce::var>{"start_bar","end_bar","tonic"});put(segmentSchema,"additionalProperties",false);put(manualSections,"items",segmentSchema);
         add(name,juce::String(name)=="hamood_preview"
@@ -249,7 +254,8 @@ void MainComponent::stopLiveMcp()
 }
 juce::var MainComponent::liveMcpStatus() const
 {
-    auto v=obj();put(v,"mode","live");put(v,"project_name",project.snapshot().name);
+    const auto data=project.snapshot();
+    auto v=obj();put(v,"mode","live");put(v,"project_name",data.name);
     put(v,"project_path",currentProjectFile.getFullPathName());
     put(v,"revision",(juce::int64)project.revisionNumber());put(v,"unsaved",project.revisionNumber()!=savedProjectRevision);
     put(v,"session_id",mcp&&mcp->bridge?mcp->bridge->sessionId():juce::String());
@@ -260,6 +266,9 @@ juce::var MainComponent::liveMcpStatus() const
     for(const auto& id:timeline.selectedTrackIds()) lanes.add(id);
     put(v,"selected_clip_ids",clips);put(v,"selected_track_ids",lanes);
     juce::Array<juce::var> selected;for(const auto& id:pianoRoll.selectedNoteIds()) selected.add(id);put(v,"selected_note_ids",selected);
+    int selectedNotes=0,selectedRegions=0;const auto chosen=pianoRoll.selectedNoteIds();
+    for(const auto& track:data.tracks)for(const auto& clip:track.clips){int count=0;for(const auto& note:clip.notes)if(std::find(chosen.begin(),chosen.end(),note.id)!=chosen.end())++count;selectedNotes+=count;if(count)++selectedRegions;}
+    put(v,"selected_note_count",selectedNotes);put(v,"selected_region_count",selectedRegions);
     put(v,"playing",audio.isPlaying());put(v,"position_seconds",audio.position());
     const auto renderProgress=audio.renderProgress();put(v,"rendering",renderProgress.has_value());
     put(v,"render_progress",renderProgress.value_or(1.0));put(v,"backend",audio.activeRenderBackends());
@@ -319,6 +328,28 @@ juce::var MainComponent::liveMcpNotes(const juce::var& args, bool selectionOnly)
         put(n,"clip_id",row.clip->id);put(n,"project_start_seconds",row.start);
         put(n,"project_end_seconds",row.start+note.durationSeconds);
         put(n,"diffsinger",trackIsDiffSinger(*row.track));
+        put(n,"tail_fade",note.utauTailFadeMode==1?"linear":note.utauTailFadeMode==2?"smooth":"off");
+        put(n,"tail_fade_start_percent",note.utauTailFade.startFraction*100.0);
+        put(n,"tail_fade_end_percent",note.utauTailFade.endFraction*100.0);
+        put(n,"tail_fade_start_gain_percent",note.utauTailFade.startGain*100.0);
+        put(n,"tail_fade_end_gain_percent",note.utauTailFade.endGain*100.0);
+        put(n,"tail_fade_curve_power",note.utauTailFade.curvePower*1.0);
+        put(n,"tail_fade_custom_curve",note.utauTailFade.customCurve);
+        put(n,"head_envelope",note.utauTailFade.head.mode==0?"off":note.utauTailFade.head.mode==1?"linear":"curve");
+        put(n,"head_envelope_custom_curve",note.utauTailFade.head.customCurve);
+        put(n,"head_envelope_start_percent",note.utauTailFade.head.startFraction*100.0);
+        put(n,"head_envelope_end_percent",note.utauTailFade.head.endFraction*100.0);
+        put(n,"head_envelope_start_gain_percent",note.utauTailFade.head.startGain*100.0);
+        put(n,"head_envelope_end_gain_percent",note.utauTailFade.head.endGain*100.0);
+        put(n,"head_envelope_curve_power",note.utauTailFade.head.curvePower*1.0);
+        put(n,"head_envelope_control1_time_percent",note.utauTailFade.head.control1Time*100.0);
+        put(n,"head_envelope_control1_progress_percent",note.utauTailFade.head.control1Progress*100.0);
+        put(n,"head_envelope_control2_time_percent",note.utauTailFade.head.control2Time*100.0);
+        put(n,"head_envelope_control2_progress_percent",note.utauTailFade.head.control2Progress*100.0);
+        put(n,"tail_fade_control1_time_percent",note.utauTailFade.control1Time*100.0);
+        put(n,"tail_fade_control1_progress_percent",note.utauTailFade.control1Progress*100.0);
+        put(n,"tail_fade_control2_time_percent",note.utauTailFade.control2Time*100.0);
+        put(n,"tail_fade_control2_progress_percent",note.utauTailFade.control2Progress*100.0);
         put(n,"diffsinger_pronunciation",note.diffSingerPronunciation);
         out.add(n);
         if(summary.isNotEmpty())summary+="\n";
@@ -354,6 +385,8 @@ bool MainComponent::reportMcpDiffSingerError(const juce::String& message)
 
 void MainComponent::liveMcpDocumentChanged()
 {
+    // Single-note tools belong to this document; bank tools edit external files.
+    noteOtoWindows.clear();
     if(mcp)mcp->document=juce::Uuid().toString();
 }
 void MainComponent::showDiffSingerError(const juce::String& message)
@@ -383,7 +416,7 @@ void MainComponent::pollLiveMcp()
             if(j->args.hasProperty("play_until_seconds"))audio.setPlayUntil((double)j->args["play_until_seconds"]);
             juce::String deviceError;
             if(!audio.ensureOutputDevice(deviceError)){j->state="failed";j->result=fail(deviceError);continue;}
-            audio.play();j->result=ok(liveMcpStatus());
+            startPreparedPlayback();j->result=ok(liveMcpStatus());
         }
         else if(j->kind=="render:export_wav")
         {
@@ -485,12 +518,24 @@ juce::var MainComponent::handleLiveMcp(const juce::var& request,bool& respond)
             const auto result=hamoodaudio::context(data,*clip,hamoodaudio::cached(hamoodaudio::cacheFolder(currentProjectFile),*clip),from,to,offset,limit);
             return (bool)result["ok"]?ok(result):fail(result["error"].toString());
         }
+        if(name=="hamood_get_context")return ok(hamoodstate::read(project.snapshot()));
+        if(name=="hamood_set_context")
+        {
+            juce::String error;if(!project.setHamoodState(hamoodstate::encode(args["context"]),error))return fail(error);
+            return ok(liveMcpStatus());
+        }
         if(name=="hamood_preview"||name=="hamood_generate")
         {
             hamood::Options options;juce::String error;
-            if(!hamood::parseOptions(args,selectedTrackId,pianoRoll.selectedNoteIds(),options,error))return fail(error);
+            if(!hamood::parseOptions(hamoodstate::defaults(project.snapshot(),args),selectedTrackId,pianoRoll.selectedNoteIds(),options,error))return fail(error);
             auto data=project.snapshot();
-            if(str(args,"audio_clip_id").isNotEmpty() && !hamoodaudio::attach(data,str(args,"audio_clip_id"),hamoodaudio::cacheFolder(currentProjectFile),options,error))return fail(error);
+            if(str(args,"audio_clip_id").isNotEmpty())
+            {
+                if(!hamoodaudio::attach(data,str(args,"audio_clip_id"),hamoodaudio::cacheFolder(currentProjectFile),options,error))return fail(error);
+                auto evidence=hamoodstate::read(data);hamoodstate::importChords(data,evidence,options.chords,str(args,"audio_clip_id"));
+                options.chords.clear();hamoodstate::attach(data,evidence,options);
+            }
+            if(str(args,"audio_clip_id").isEmpty())hamoodstate::attach(data,hamoodstate::read(data),options);
             const auto plan=hamood::analyse(data,options);
             if(plan.error.isNotEmpty())return fail(plan.error);
             auto result=plan.json();
@@ -499,6 +544,8 @@ juce::var MainComponent::handleLiveMcp(const juce::var& request,bool& respond)
                 if(diffSingerBusy)return fail("Wait for the running DS task before generating harmonies");
                 const auto tracks=hamood::generate(data,options,plan);
                 if(tracks.empty())return fail("No harmony tracks generated");
+                data.hamoodState=hamoodstate::remember(data,options,plan);
+                if(str(args,"audio_clip_id").isNotEmpty()){auto state=hamoodstate::read(data);hamoodstate::importChords(data,state,options.chords,str(args,"audio_clip_id"));data.hamoodState=hamoodstate::encode(state);}
                 project.replace(std::move(data));juce::Array<juce::var> added;
                 for(const auto& id:tracks)added.add(id);put(result,"created_track_ids",added);
             }
@@ -576,6 +623,7 @@ juce::var MainComponent::handleLiveMcp(const juce::var& request,bool& respond)
             juce::String error;const juce::File file(str(args,"path"));
             if(!project.save(file,error))return fail(error);
             const bool cached=backend::DiffSingerRenderer::saveProjectCache(file);
+            discardProjectRecovery();
             currentProjectFile=file;savedProjectRevision=project.revisionNumber();addRecentProject(file);mcp->server->allowFile(file);
             auto v=liveMcpStatus();put(v,"cache_saved",cached);return ok(v);
         }
@@ -585,7 +633,7 @@ juce::var MainComponent::handleLiveMcp(const juce::var& request,bool& respond)
             return fail("UNSAVED_DOCUMENT: save first, or explicitly pass discard_unsaved=true");
         // Read/file/import operations may be slow. They run on a captured draft,
         // then compare revision before a single, undoable commit on the UI thread.
-        const bool background=in(name,"hamood_analyse_audio project_open import_audio analyse_audio analysis_status import_midi import_ust import_melodyne export_midi sample_settings_read sample_settings_save oto_import oto_export jie_oto_create voicebank_import read_file list_directory ds_capabilities ds_query_phonemes");
+        const bool background=in(name,"hamood_analyse_audio project_open import_audio analyse_audio analysis_status import_midi import_ust import_melodyne export_midi export_ust sample_settings_read sample_settings_save oto_import oto_export jie_oto_create voicebank_import read_file list_directory ds_capabilities ds_query_phonemes");
         auto draft=std::make_shared<ProjectModel>();draft->replace(project.snapshot());
         auto roots=mcp->roots;for(const auto& r:Server::projectRoots(project.snapshot()))roots.addIfNotAlreadyThere(r.getFullPathName());
         if(currentProjectFile!=juce::File())roots.addIfNotAlreadyThere(currentProjectFile.getParentDirectory().getFullPathName());
@@ -698,10 +746,13 @@ juce::var MainComponent::handleLiveMcp(const juce::var& request,bool& respond)
             if(name=="hamood_analyse_audio" && project.revisionNumber()!=revision)return fail("STALE_REVISION: audio cached, but project changed; query hamood_audio_context again");
             const bool changed=draft->contentFingerprint()!=before;
             if((changed||replacing)&&project.revisionNumber()!=revision)return fail("STALE_REVISION: document changed during processing; draft discarded");
-            if(changed||replacing)project.replace(draft->snapshot());
+            if(replacing)project.resetDocument(draft->snapshot());
+            else if(changed)project.replace(draft->snapshot());
             if(replacing)
             {
+                discardProjectRecovery();
                 audio.stop();audio.setPosition(0);audio.setUtauRenderNoteSelection({});pianoRoll.clearNoteSelection();selectedTrackId.clear();selectedClipId.clear();selectedNoteId.clear();
+                pianoRoll.setFocusedTrack({});pianoRoll.setFocusedClip({});
                 const juce::File file(str(args,"path"));
                 currentProjectFile=name=="project_open"&&file.hasFileExtension("hjpx;hspx")?file:juce::File();
                 backend::DiffSingerRenderer::openProjectCache(currentProjectFile);mcp->document=juce::Uuid().toString();

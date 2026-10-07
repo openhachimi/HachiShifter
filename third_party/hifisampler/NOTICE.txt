@@ -1,0 +1,10 @@
+Native FLAG processing adapted from openhachimi/hifisampler.
+https://github.com/openhachimi/hifisampler
+Revision: 8c34d86110edc3a72bac9378ea482c4ed69da9bf
+License: Apache-2.0 (LICENSE alongside).
+Modified for HachiShifter Next 0.2.4: C++ / JUCE FFT / ONNX instead of Python; region-specific OTO time mapping; frame flag curves; bounded in-memory caches; editor envelopes own head/tail fades; peak limiting follows all effects.
+Upstream P normalization is only invoked when P is present (bare P means 100); curve P also enables normalization. Silence trim affects measurement and does not add the upstream extra tail fade.
+Editor voicebank rendering stretches each OTO span linearly once by default, unlike the upstream standalone sampler loop_mode=true default. Legacy loop_mode is ignored to preserve this mapping; only an explicit He flag enables reflected looping.
+The HN-SEP weights are taken from the official v0.0.6 models.7z; exported as float32 ONNX using the upstream OnnxCompatibleCascadedNet wrapper.
+Editor amplitude envelopes fit the current sounding span and retain their attack/release ramp lengths, sharing the traditional UTAU mixer rule. Stored control points are preserved.
+Full recordings are analysed before OTO mapping. Decoder context uses real source features outside the cut (edge hold when unavailable), rather than reflected target frames; Mel is sampled at half-hop centres. Integer-hop F0/FLAG grids and editor output geometry are retained. WAV size/mtime invalidate phrase and duration caches; G also invalidates the phrase once per explicit render request without retriggering on ordinary UI sync.

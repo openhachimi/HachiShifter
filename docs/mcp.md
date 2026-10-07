@@ -58,7 +58,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | "HachiShifte
 
 每个工具的参数都写在 schema 里（名字、类型、说明、必填、取值只有几个词时列出那几个词），客户端里能直接看到。schema 保留 `additionalProperties: true`：几个会分析音频的工具共用一组分析设置参数，收紧了反而挡掉正常调用。
 
-分析类参数（`project_open` 打开录音、`import_audio`、`analyse_audio`、`analysis_status`、`import_melodyne` 都收）：`game_model_dir`、`fcpe_model`、`game_model`（large/small）、`inference`（automatic/cpu/directml/cuda/coreml）、`device_index`。不传就用环境里配置好的。
+分析类参数（`project_open` 打开录音、`import_audio`、`analyse_audio`、`analysis_status`、`import_melodyne` 都收）：`game_model_dir`、`fcpe_model`、`game_model`（medium/large/small，便携包默认 medium）、`inference`（automatic/cpu/directml/cuda/coreml）、`device_index`。不传就用环境里配置好的；没有环境覆盖时自动发现 EXE 同目录的 GAME Medium + FCPE。
 
 <!-- TOOLS -->
 

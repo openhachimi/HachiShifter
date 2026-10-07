@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - new
+      - next
   workflow_dispatch:
 
 jobs:
@@ -66,6 +67,16 @@ jobs:
 
           Copy-Item LICENSE "$stage/LICENSE"
 
+          # Preserve the DiffSinger bridge, pronunciation data and backend
+          # notices installed by CMake; neural model weights remain external.
+          $engines = Join-Path $runtimeDir "engines"
+          if (-not (Test-Path $engines -PathType Container)) {
+            throw "Missing engine resources: $engines"
+          }
+          Copy-Item $engines "$stage/engines" -Recurse
+          New-Item -ItemType Directory -Force -Path "$stage/licenses/hifisampler" | Out-Null
+          Copy-Item third_party/hifisampler/LICENSE, third_party/hifisampler/NOTICE.txt "$stage/licenses/hifisampler/"
+
           # Bundle the redistributable CRT required by both the application
           # and ONNX Runtime on machines without Visual Studio installed.
           $crt = Get-ChildItem "$env:VCToolsRedistDir/x64" -Directory -Filter "Microsoft.VC*.CRT" |
@@ -95,7 +106,7 @@ jobs:
         shell: pwsh
         run: |
           $exe = (Resolve-Path "HachiShifterNext-windows-x64/HachiShifterNext.exe").Path
-          $app = Start-Process $exe -PassThru -RedirectStandardError gui-startup.log
+          $app = Start-Process $exe -WindowStyle Hidden -PassThru -RedirectStandardError gui-startup.log
           try {
             $ready = $false
             for ($i = 0; $i -lt 30; $i++) {

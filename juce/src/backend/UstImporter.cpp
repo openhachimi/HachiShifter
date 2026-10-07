@@ -1,4 +1,6 @@
 #include "UstImporter.h"
+#include "LegacyTextCodec.h"
+#include "UstText.h"
 
 #if JUCE_WINDOWS
  // windows.h defines min and max as macros, which then eat std::max at
@@ -31,7 +33,8 @@ std::optional<double> number(const juce::String& value)
 {
     const auto trimmed = value.trim();
     if (trimmed.isEmpty()) return std::nullopt;
-    return trimmed.getDoubleValue();
+    const auto valueNumber=trimmed.getDoubleValue();
+    return std::isfinite(valueNumber) ? std::optional<double>(valueNumber) : std::nullopt;
 }
 
 std::vector<double> numberList(const juce::String& value)
@@ -184,6 +187,9 @@ juce::String UstImporter::decode(const juce::MemoryBlock& bytes,
 UstProject UstImporter::parse(const juce::String& text, juce::StringArray& warnings)
 {
     UstProject project;
+    project.sourceText=text;
+    const auto sections=usttext::sections(text);
+    int sectionIndex=-1; bool explicitMode=false, hasMode1=false;
     juce::StringArray lines;
     lines.addLines(text);
 
@@ -207,14 +213,16 @@ UstProject UstImporter::parse(const juce::String& text, juce::StringArray& warni
         if (line.startsWithChar('[') && line.endsWithChar(']'))
         {
             finishNote();
+            ++sectionIndex;
             const auto tag = line.substring(1, line.length() - 1);
             if (tag.equalsIgnoreCase("#VERSION")) section = Section::version;
             else if (tag.equalsIgnoreCase("#SETTING")) section = Section::setting;
             else if (tag.equalsIgnoreCase("#TRACKEND")) section = Section::end;
-            else if (tag.startsWithChar('#'))
+            else if (usttext::noteTag(tag))
             {
-                // Every other bracketed tag is a note: "#0000", and also
-                // "#PREV"/"#NEXT" in the fragment a plugin is handed.
+                // Context and vendor sections remain opaque, never audible notes.
+                current.sourceSectionIndex=sectionIndex;
+                if(sectionIndex>=0 && (size_t)sectionIndex<sections.size()) current.sourceSection=sections[(size_t)sectionIndex].text;
                 section = Section::note;
                 haveNote = true;
             }
@@ -236,6 +244,7 @@ UstProject UstImporter::parse(const juce::String& text, juce::StringArray& warni
             else if (key.equalsIgnoreCase("ProjectName")) project.name = value;
             else if (key.equalsIgnoreCase("VoiceDir")) project.voiceDirectory = value;
             else if (key.equalsIgnoreCase("Flags")) project.globalFlags = value;
+            else if (key.equalsIgnoreCase("Mode2")) {explicitMode=true;project.mode2=value.equalsIgnoreCase("True") || value=="1";}
             continue;
         }
         if (section != Section::note || !haveNote) continue;
@@ -264,6 +273,10 @@ UstProject UstImporter::parse(const juce::String& text, juce::StringArray& warni
             if (const auto intensity = number(value))
                 current.intensity = static_cast<int>(std::lround(*intensity));
         }
+        else if (key.equalsIgnoreCase("Modulation")) current.modulation=number(value);
+        else if (key.equalsIgnoreCase("STP")) current.stpMs=number(value);
+        else if (key.equalsIgnoreCase("PBStart")) current.mode1StartMs=number(value).value_or(0);
+        else if (key.equalsIgnoreCase("PitchBend") || key.equalsIgnoreCase("Pitches")) { current.mode1Cents=numberList(value); hasMode1=hasMode1 || !current.mode1Cents.empty(); }
         else if (key.equalsIgnoreCase("Flags")) current.flags = value;
         else if (key.equalsIgnoreCase("PBS"))
         {
@@ -355,6 +368,8 @@ UstProject UstImporter::parse(const juce::String& text, juce::StringArray& warni
     }
     finishNote();
 
+    if(!explicitMode && hasMode1)project.mode2=false;
+    for(auto& note:project.notes)note.mode2=project.mode2;
     if (project.notes.empty())
         warnings.add("no notes found");
     if (malformedEnvelopes > 0)
@@ -364,22 +379,19 @@ UstProject UstImporter::parse(const juce::String& text, juce::StringArray& warni
 }
 
 std::optional<UstProject> UstImporter::read(const juce::File& file, juce::String& error,
-                                            juce::StringArray& warnings)
+                                            juce::StringArray& warnings, int encodingOverride)
 {
-    juce::MemoryBlock bytes;
-    if (!file.loadFileAsData(bytes))
-    {
-        error = "Could not read " + file.getFullPathName();
-        return std::nullopt;
-    }
-    juce::String encoding;
-    const auto text = decode(bytes, encoding);
+    const auto document=LegacyTextCodec::read(file,error,encodingOverride,false);
+    if(!document)return std::nullopt;
+    const auto& text=document->text;
+    const auto& encoding=document->encoding;
     if (text.isEmpty())
     {
         error = "Empty UST file: " + file.getFullPathName();
         return std::nullopt;
     }
     auto project = parse(text, warnings);
+    project.sourceEncoding=document->encoding; project.sourceBom=document->bom; project.sourceBytes=document->bytes.toBase64Encoding();
     if (project.notes.empty())
     {
         error = "No notes in " + file.getFullPathName();

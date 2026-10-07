@@ -1,4 +1,6 @@
 #include "VoicebankSettingsComponent.h"
+#include <map>
+#include "backend/LegacyTextCodec.h"
 #include "OtoWaveformEditorComponent.h"
 #include "backend/UtauRenderer.h"
 #include <algorithm>
@@ -65,6 +67,18 @@ VoicebankSettingsComponent::VoicebankSettingsComponent(juce::File voicebankRoot,
         addAndMakeVisible(detailEditors[index]);
     }
 
+    if (jie && !mou)
+    {
+        createJieFromMouButton.setButtonText(utf8("根据谋 OTO 生成"));
+        createJieFromMouButton.setTooltip(utf8("读取同一采样及起点对应的四段谋 OTO，更新完整界分区；"
+            "跳过两段、三段及未匹配条目。更新前备份原有界分区。"));
+        createJieFromMouButton.onClick = [this]
+        {
+            juce::Component::SafePointer<VoicebankSettingsComponent> safe(this);
+            juce::MessageManager::callAsync([safe] { if (safe != nullptr) safe->createJieFromMou(); });
+        };
+        addAndMakeVisible(createJieFromMouButton);
+    }
     if (mou)
     {
         countLabel.setText(utf8("分区"), juce::dontSendNotification);
@@ -112,7 +126,7 @@ VoicebankSettingsComponent::VoicebankSettingsComponent(juce::File voicebankRoot,
     addAndMakeVisible(duplicateButton);
     if (jie)
     {
-        createJieButton.setButtonText(utf8("生成界•OTO"));
+        createJieButton.setButtonText(utf8("根据 OTO 生成"));
         createJieButton.setTooltip(utf8("按 oto.ini 复制出一份界•OTO（oto4.ini）；"
                                         "已有的条目不会被覆盖"));
         createJieButton.onClick = [this]
@@ -146,12 +160,31 @@ VoicebankSettingsComponent::VoicebankSettingsComponent(juce::File voicebankRoot,
     reloadButton.onClick = [this] { refreshFromDisk(); };
     addAndMakeVisible(reloadButton);
 
-    setSize(1040, 560);
+    encodingLabel.setText(utf8("目录读取编码"),juce::dontSendNotification);addAndMakeVisible(encodingLabel);
+    addAndMakeVisible(encodingFolder);addAndMakeVisible(encodingChoice);
+    encodingFolders.push_back(root);juce::Array<juce::File> otoFiles;root.findChildFiles(otoFiles,juce::File::findFiles,true,"oto.ini");
+    for(const auto& f:otoFiles)if(std::find(encodingFolders.begin(),encodingFolders.end(),f.getParentDirectory())==encodingFolders.end())encodingFolders.push_back(f.getParentDirectory());
+    for(size_t i=0;i<encodingFolders.size();++i)encodingFolder.addItem(i==0?utf8("音源根目录"):encodingFolders[i].getRelativePathFrom(root),(int)i+1);
+    encodingFolder.setSelectedId(1,juce::dontSendNotification);
+    encodingChoice.addItem(utf8("自动识别"),1);for(const auto cp:{65001,932,936,950,54936})encodingChoice.addItem(backend::LegacyTextCodec::name(cp),cp);
+    encodingChoice.setTooltip(utf8("仅改变该目录文本的读取方式并记住设置，不转换原文件；保存时保持读取编码。UTF-8 BOM / 声明优先。"));
+    encodingFolder.onChange=[this]{refreshEncodingChoice();};
+    encodingChoice.onChange=[this]
+    {
+        const auto i=encodingFolder.getSelectedId()-1;if(i<0||i>=(int)encodingFolders.size())return;
+        const auto dir=encodingFolders[(size_t)i];const auto cp=encodingChoice.getSelectedId();juce::String error;
+        if(!backend::LegacyTextCodec::setDirectoryCodePage(dir,cp==1?0:cp,error))
+        {juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,utf8("无法保存编码设置"),error);refreshEncodingChoice();return;}
+        refreshFromDisk();encodingFolder.setSelectedId(i+1,juce::dontSendNotification);refreshEncodingChoice();
+    };
+    refreshEncodingChoice();
+    setSize(1040, 600);
     reload();
 }
 
 VoicebankSettingsComponent::~VoicebankSettingsComponent()
 {
+    editorWindows.clear();
     table.setModel(nullptr);
 }
 
@@ -168,6 +201,7 @@ void VoicebankSettingsComponent::resized()
     searchLabel.setBounds(top.removeFromLeft(52));
     searchEditor.setBounds(top.reduced(0, 2));
     area.removeFromTop(8);
+    auto encodingRow=area.removeFromTop(30);encodingLabel.setBounds(encodingRow.removeFromLeft(116));encodingChoice.setBounds(encodingRow.removeFromRight(170));encodingRow.removeFromRight(8);encodingFolder.setBounds(encodingRow);area.removeFromTop(8);
     auto bottom = area.removeFromBottom(32);
     reloadButton.setBounds(bottom.removeFromRight(96).reduced(0, 2));
     bottom.removeFromRight(8);
@@ -177,7 +211,7 @@ void VoicebankSettingsComponent::resized()
     if (jie)
     {
         bottom.removeFromRight(8);
-        createJieButton.setBounds(bottom.removeFromRight(118).reduced(0, 2));
+        createJieButton.setBounds(bottom.removeFromRight(126).reduced(0, 2));
     }
     if (mou)
     {
@@ -185,6 +219,12 @@ void VoicebankSettingsComponent::resized()
         createMouButton.setBounds(bottom.removeFromRight(118).reduced(0, 2));
     }
     statusLabel.setBounds(bottom);
+    if (jie && !mou)
+    {
+        bottom.removeFromRight(8);
+        createJieFromMouButton.setBounds(bottom.removeFromRight(146).reduced(0, 2));
+        statusLabel.setBounds(bottom);
+    }
     area.removeFromBottom(8);
 
     auto details = area.removeFromRight(310);
@@ -272,6 +312,12 @@ void VoicebankSettingsComponent::cellDoubleClicked(int rowNumber, int,
     }
 }
 
+void VoicebankSettingsComponent::refreshEncodingChoice()
+{
+    const auto i=encodingFolder.getSelectedId()-1;if(i<0||i>=(int)encodingFolders.size())return;
+    const auto cp=backend::LegacyTextCodec::directoryCodePage(encodingFolders[(size_t)i]);encodingChoice.setSelectedId(cp==0?1:cp,juce::dontSendNotification);
+}
+
 void VoicebankSettingsComponent::refreshFromDisk()
 {
     // Reloading the table alone is not enough: the renderer keeps its own
@@ -281,10 +327,32 @@ void VoicebankSettingsComponent::refreshFromDisk()
     reload();
 }
 
-void VoicebankSettingsComponent::reload()
+void VoicebankSettingsComponent::reload(const juce::File& onlyOtoFile)
 {
-    // In 谋 mode the panel has to read otomou.ini too, or every entry comes
-    // back with no annotation and the region buttons have nothing to show.
+    const auto* selected = selectedEntry();
+    const auto preferred = selected ? std::optional<VoicebankOtoEntry>(*selected) : std::nullopt;
+    const auto scrollPosition = table.getViewport()->getViewPosition();
+    if (onlyOtoFile != juce::File{})
+    {
+        juce::StringArray fileWarnings;
+        auto refreshed = SampleSettings::loadVoicebankOto(root, fileWarnings, jie, mou, onlyOtoFile);
+        if (refreshed.empty() && !fileWarnings.isEmpty())
+        {
+            statusLabel.setText(fileWarnings.joinIntoString("; "),juce::dontSendNotification);
+            return;
+        }
+        // Retain unregistered audio rows without scanning any audio directories.
+        for (const auto& old : entries)
+            if (old.otoFile == onlyOtoFile && old.lineIndex < 0
+                && std::none_of(refreshed.begin(),refreshed.end(),[&](const auto& e){return e.audioFile==old.audioFile;}))
+                refreshed.push_back(old);
+        auto insertAt = std::find_if(entries.begin(),entries.end(),[&](const auto& e){return e.otoFile==onlyOtoFile;});
+        const auto position = static_cast<size_t>(insertAt-entries.begin());
+        entries.erase(std::remove_if(entries.begin(),entries.end(),[&](const auto& e){return e.otoFile==onlyOtoFile;}),entries.end());
+        entries.insert(entries.begin()+static_cast<std::ptrdiff_t>(std::min(position,entries.size())),refreshed.begin(),refreshed.end());
+        applyFilter(preferred,scrollPosition);
+        return;
+    }
     entries = SampleSettings::loadVoicebankOto(root, warnings, jie, mou);
 
     // A sample dropped into the folder without an oto row cannot be listed as
@@ -304,20 +372,24 @@ void VoicebankSettingsComponent::reload()
                 unregisteredAudio.add(file.getRelativePathFrom(root));
         unregisteredAudio.sortNatural();
     }
-    applyFilter();
+    applyFilter(preferred,scrollPosition);
 }
 
-void VoicebankSettingsComponent::applyFilter()
+void VoicebankSettingsComponent::applyFilter(std::optional<VoicebankOtoEntry> preferred,
+                                            std::optional<juce::Point<int>> scrollPosition)
 {
+    if (!preferred) if (const auto* e=selectedEntry()) preferred=*e;
     const auto filter = searchEditor.getText().trim();
     filteredRows.clear();
+    std::map<juce::String,juce::String> relativePaths;
     for (std::size_t index = 0; index < entries.size(); ++index)
     {
+        if (filter.isEmpty()) { filteredRows.push_back(static_cast<int>(index)); continue; }
         const auto& entry = entries[index];
-        const auto searchable = entry.sourceName + "\n" + entry.alias + "\n"
-            + entry.otoFile.getRelativePathFrom(root);
-        if (filter.isEmpty() || searchable.containsIgnoreCase(filter))
-            filteredRows.push_back(static_cast<int>(index));
+        auto [path,inserted]=relativePaths.try_emplace(entry.otoFile.getFullPathName());
+        if(inserted)path->second=entry.otoFile.getRelativePathFrom(root);
+        const auto searchable = entry.sourceName + "\n" + entry.alias + "\n" + path->second;
+        if (searchable.containsIgnoreCase(filter)) filteredRows.push_back(static_cast<int>(index));
     }
     table.updateContent();
     table.repaint();
@@ -342,15 +414,29 @@ void VoicebankSettingsComponent::applyFilter()
         return;
     }
     auto row = 0;
+    bool restored = false;
+    if (preferred)
+    {
+        for (size_t i=0;i<filteredRows.size();++i)
+        {
+            const auto& e=entries[(size_t)filteredRows[i]];
+            if (e.otoFile!=preferred->otoFile || e.sourceName!=preferred->sourceName) continue;
+            if (e.alias==preferred->alias) {row=(int)i;restored=true;}
+            if (e.lineIndex>=0 && e.lineIndex==preferred->lineIndex) {row=(int)i;restored=true;break;}
+        }
+    }
     if (pendingAlias.isNotEmpty())
     {
         const auto target = SampleSettings::findEntryForAlias(entries, pendingAlias);
         for (std::size_t index = 0; index < filteredRows.size(); ++index)
             if (filteredRows[index] == target) { row = static_cast<int>(index); break; }
         pendingAlias.clear();
+        restored = false;
     }
-    table.selectRow(row);
-    table.scrollToEnsureRowIsOnscreen(row);
+    table.selectRow(row,true,true);
+    refreshDetails(row);
+    if (restored && scrollPosition) table.getViewport()->setViewPosition(*scrollPosition);
+    else table.scrollToEnsureRowIsOnscreen(row);
 }
 
 void VoicebankSettingsComponent::refreshDetails(int filteredRow)
@@ -364,6 +450,9 @@ void VoicebankSettingsComponent::refreshDetails(int filteredRow)
     {
         const auto& entry = entries[static_cast<std::size_t>(
             filteredRows[static_cast<std::size_t>(filteredRow)])];
+        for(size_t i=0;i<encodingFolders.size();++i)if(encodingFolders[i]==entry.otoFile.getParentDirectory())
+        {encodingFolder.setSelectedId((int)i+1,juce::dontSendNotification);refreshEncodingChoice();break;}
+        encodingFolder.setTooltip(utf8("此条目实际读取编码：")+entry.sourceEncoding);
         values = { entry.sourceName, entry.alias,
             formatMilliseconds(entry.offsetMs) + " ms",
             formatMilliseconds(entry.consonantMs) + " ms",
@@ -447,12 +536,14 @@ void VoicebankSettingsComponent::setSelectedRegionCount(int count)
     // The row order does not change, so the same row is still this entry.
     // Selecting it again may not fire a change, so the details are refreshed
     // by hand -- otherwise the buttons keep showing the count before the click.
-    const auto row = table.getSelectedRow();
-    reload();
-    table.selectRow(row);
-    refreshDetails(row);
+    reload(original.otoFile);
     statusLabel.setText(original.sourceName + utf8(" 分区：") + edited.mouClasses,
                         juce::dontSendNotification);
+}
+
+juce::DialogWindow* VoicebankSettingsComponent::diagnosticEditorWindow() const
+{
+    return editorWindows.findVisible<OtoWaveformEditorComponent>();
 }
 
 void VoicebankSettingsComponent::openSelectedEditor()
@@ -462,6 +553,8 @@ void VoicebankSettingsComponent::openSelectedEditor()
     const auto entryIndex = filteredRows[static_cast<std::size_t>(selectedRow)];
     if (!juce::isPositiveAndBelow(entryIndex, static_cast<int>(entries.size()))) return;
     const auto entry = entries[static_cast<std::size_t>(entryIndex)];
+    const auto windowKey=entry.otoFile.getFullPathName()+"|"+juce::String(entry.lineIndex)+"|"+entry.sourceName+"|"+entry.alias;
+    if(editorWindows.showExisting(windowKey))return;
 
     juce::DialogWindow::LaunchOptions options;
     options.dialogTitle = (mou ? utf8("谋•OTO 分区编辑器 — ")
@@ -473,11 +566,13 @@ void VoicebankSettingsComponent::openSelectedEditor()
     options.useNativeTitleBar = true;
     options.resizable = true;
     juce::Component::SafePointer<VoicebankSettingsComponent> safe(this);
-    options.content.setOwned(new OtoWaveformEditorComponent(entry, jie, mou, [safe]
+    auto* editor = new OtoWaveformEditorComponent(entry, jie, mou, [safe, file=entry.otoFile]
     {
-        if (safe != nullptr) safe->reload();
-    }));
-    if (auto* window = options.launchAsync())
+        if (safe != nullptr) safe->reload(file);
+    });
+    if (configureOtoEditor) configureOtoEditor(*editor);
+    options.content.setOwned(editor);
+    if (auto* window = editorWindows.show(options,windowKey))
         window->setResizeLimits(720, 400, 1800, 1100);
 }
 
@@ -576,6 +671,25 @@ void VoicebankSettingsComponent::createMouOto()
         + (merged > 0 ? utf8("，合并重复 ") + juce::String(merged)
                         + utf8(" 条") : juce::String()),
         juce::dontSendNotification);
+}
+
+void VoicebankSettingsComponent::createJieFromMou()
+{
+    if (!jie || mou) return;
+    SampleSettings::JieFromMouResult result;
+    juce::String error;
+    if (!SampleSettings::createJieOtoFromMou(root, result, error))
+    {
+        if (result.written > 0) refreshFromDisk();
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+            utf8("无法根据谋•OTO生成界•OTO"), error);
+        return;
+    }
+    if (result.written > 0) refreshFromDisk();
+    const auto text = utf8("界•OTO：生成/更新 ") + juce::String(result.written)
+        + utf8("，相同 ") + juce::String(result.unchanged) + utf8("，跳过 ") + juce::String(result.skipped);
+    statusLabel.setText(text, juce::dontSendNotification);
+    statusLabel.setTooltip(text);
 }
 
 void VoicebankSettingsComponent::createJieOto()

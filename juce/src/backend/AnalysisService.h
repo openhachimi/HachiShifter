@@ -10,7 +10,7 @@ struct AnalysisConfig
 {
     juce::File gameModelDirectory;
     juce::File fcpeModelPath;
-    bool performanceMode = false;
+    juce::String gameModel { "medium" };
     InferenceBackend inference = InferenceBackend::automatic;
     int deviceIndex = -1;
 };
@@ -24,7 +24,7 @@ struct AnalysisStatus
     bool gameModelReady = false;
     bool fcpeModelReady = false;
     bool onnxRuntimeReady = false;
-    bool performanceMode = false;
+    juce::String gameModel { "medium" };
     juce::String requestedInference { "auto" };
     juce::String activeInference { "cpu" };
     juce::String message;
@@ -51,6 +51,10 @@ public:
     static AnalysisStatus status(const AnalysisConfig& config);
     static AnalysisResult analyse(const juce::File& file, const AnalysisConfig& config,
                                   juce::String& error, Progress progress = {});
+    // Attach measured F0 without replacing authored note regions or controls.
+    // Contours use the same source clock as native synthesis and waveform view.
+    static std::size_t applySourcePitch(ClipData& clip,
+                                       const std::vector<NoteData>& sourceNotes);
     static bool reanalyseProjectSourcePitch(ProjectData& project,
                                             const AnalysisConfig& config,
                                             juce::String& error,

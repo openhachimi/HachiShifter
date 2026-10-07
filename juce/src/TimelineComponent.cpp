@@ -1,3 +1,6 @@
+#include "NativeAudioFocus.h"
+#include "AudioEngine.h"
+#include "SourceWaveformPreview.h"
 #include "TimelineComponent.h"
 #include "ClipParts.h"
 #include "TrackGainEnvelope.h"
@@ -184,9 +187,43 @@ void TimelineComponent::timerCallback()
     repaint();
 }
 
+void TimelineComponent::setShowNativeRenderedWaveforms(bool show)
+{
+    if(show==showNativeRenderedWaveforms)return;
+    showNativeRenderedWaveforms=show;rebuildNativeWaveformHashes();repaint();
+}
+void TimelineComponent::rebuildNativeWaveformHashes()
+{
+    nativeClipHashes.clear();if(!showNativeRenderedWaveforms)return;
+    for(const auto& track:snapshot.tracks)
+        if(track.compose&&!track.accompaniment&&!trackUsesVoicebankSynthesis(track))
+            for(const auto& clip:track.clips)for(const auto& part:expandedClipParts(clip))
+                nativeClipHashes.emplace(part.id.toStdString(),AudioEngine::nativeClipWaveformHash(part,track));
+}
+
+void TimelineComponent::setNativeClipWaveforms(std::shared_ptr<const std::vector<NativeRenderedWaveform>> waveforms)
+{
+    if(nativeWaveforms==waveforms)return;
+    nativeWaveforms=std::move(waveforms);nativePeaksByHash.clear();
+    if(nativeWaveforms)for(const auto& waveform:*nativeWaveforms)
+        if(waveform.peaks)nativePeaksByHash.try_emplace(waveform.audioHash,waveform.peaks.get());
+    repaint();
+}
+
 void TimelineComponent::rebuild()
 {
+    const auto owners = [&](const ProjectData& data) {
+        std::vector<juce::String> ids;
+        for (const auto& track : data.tracks)
+            if (std::any_of(track.clips.begin(), track.clips.end(), [&](const auto& clip) { return isClipSelected(clip.id); }))
+                ids.push_back(track.id);
+        return ids;
+    };
+    const auto previousOwners = owners(snapshot);
     snapshot = model.snapshot();
+    const auto currentOwners = owners(snapshot);
+    const auto ownersChanged = previousOwners != currentOwners;
+    if (ownersChanged) selectedTracks = currentOwners;
     if (draggedEnvelopeClip.isNotEmpty())
     {
         const auto* clip = findEnvelopeClip(draggedEnvelopeClip);
@@ -218,7 +255,7 @@ void TimelineComponent::rebuild()
         });
     });
     if (!selectedStillExists) selectedClip.clear();
-    if (oldClipCount != selectedClips.size() || oldTrackCount != selectedTracks.size()) notifySelection();
+    if (ownersChanged || oldClipCount != selectedClips.size() || oldTrackCount != selectedTracks.size()) notifySelection();
     std::unordered_map<std::string, std::unique_ptr<juce::AudioThumbnail>> next;
     for (const auto& track : snapshot.tracks)
         for (const auto& parent : track.clips)
@@ -232,12 +269,13 @@ void TimelineComponent::rebuild()
                 next.emplace(key, std::move(found->second));
                 continue;
             }
-            auto thumbnail = std::make_unique<juce::AudioThumbnail>(256, formats, thumbnailCache);
+            auto thumbnail = std::make_unique<juce::AudioThumbnail>(nativeWaveformSamplesPerPeak, formats, thumbnailCache);
             if (clip.sourceFile.existsAsFile())
                 thumbnail->setSource(new juce::FileInputSource(clip.sourceFile));
             next.emplace(key, std::move(thumbnail));
         }
     thumbnails = std::move(next);
+    rebuildNativeWaveformHashes();
     const auto displayEnd = snapshot.durationSeconds();
     setSize(static_cast<int>(juce::jlimit(470.0, 3.2e7,
         static_cast<double>(timeToX(displayEnd)) + 400.0)),
@@ -311,6 +349,18 @@ void TimelineComponent::paint(juce::Graphics& g)
     const auto pitchTop = pitchCentre + pitchHalfRange;
     const auto pitchSpan = 2.0f * pitchHalfRange;
 
+    // Bucket previews into their destination lanes, drawing moving regions
+    // last so a destination region cannot obscure the drag preview.
+    std::vector<std::vector<const ClipData*>> displayedClips(snapshot.tracks.size());
+    for (const auto movingPass : { false, true })
+        for (std::size_t source = 0; source < snapshot.tracks.size(); ++source)
+            for (const auto& clip : snapshot.tracks[source].clips) {
+                const auto moving = dragMode == DragMode::move && draggedClip.isNotEmpty() && isClipSelected(clip.id);
+                if (moving != movingPass) continue;
+                const auto destination = static_cast<int>(source)+(moving ? draggedTrackDelta : 0);
+                if (destination >= 0 && destination < static_cast<int>(displayedClips.size()))
+                    displayedClips[static_cast<std::size_t>(destination)].push_back(&clip);
+            }
     for (std::size_t trackIndex = 0; trackIndex < snapshot.tracks.size(); ++trackIndex)
     {
         const auto& track = snapshot.tracks[trackIndex];
@@ -324,8 +374,14 @@ void TimelineComponent::paint(juce::Graphics& g)
             g.setColour(Palette::accent.withAlpha(0.06f));
             g.fillRect(row);
         }
-        for (const auto& clip : track.clips)
+        auto shown=track;shown.clips.clear();for(const auto* c:displayedClips[trackIndex])
+        {auto value=*c;if(dragMode==DragMode::move&&isClipSelected(value.id))value.startSeconds+=draggedClipPreviewStart-draggedClipStart;shown.clips.push_back(std::move(value));}
+        const auto opacity=[&](const auto* c){for(const auto& value:shown.clips)if(value.id==c->id)return nativeOverlapFocusOpacity(shown,value,nativeFocusedNote,selectedClip);return 1.f;};
+        std::stable_partition(displayedClips[trackIndex].begin(),displayedClips[trackIndex].end(),[&](const auto* c){return opacity(c)<1.f;});
+        for (const auto* displayedClip : displayedClips[trackIndex])
         {
+            const auto& clip = *displayedClip;
+            const NativeAudioFocusLayer focus(g,opacity(displayedClip));
             const auto showNotes = track.compose && !track.accompaniment && !clip.notes.empty();
             const auto moving = dragMode == DragMode::move && draggedClip.isNotEmpty() && isClipSelected(clip.id);
             const auto displayStart = moving ? clip.startSeconds + draggedClipPreviewStart - draggedClipStart
@@ -362,7 +418,12 @@ void TimelineComponent::paint(juce::Graphics& g)
                 g.drawRect(bounds.reduced(1.0f), 2.0f);
             }
 
-            for (const auto* part : clipSourceRegions(clip))
+            const auto nativePreview = track.compose && !track.accompaniment && !trackUsesVoicebankSynthesis(track);
+            const auto nativeParts = nativePreview ? expandedClipParts(clip) : std::vector<ClipData>{};
+            std::vector<const ClipData*> sourceParts;
+            if (nativePreview) for (const auto& part : nativeParts) sourceParts.push_back(&part);
+            else sourceParts = clipSourceRegions(clip);
+            for (const auto* part : sourceParts)
             if (const auto found = thumbnails.find(part->sourceFile.getFullPathName().toStdString()); found != thumbnails.end())
             {
                 g.setColour(colour.brighter(0.65f).withAlpha(
@@ -372,7 +433,7 @@ void TimelineComponent::paint(juce::Graphics& g)
                 // sources.  Playback still uses every source channel; only the
                 // compact waveform lane displays channel 1.
                 const auto partStart = part->startSeconds + part->audioStartSeconds
-                    + (clip.parts.empty() ? 0.0 : clip.startSeconds)
+                    + (nativePreview || clip.parts.empty() ? 0.0 : clip.startSeconds)
                     + (moving ? displayStart - clip.startSeconds : 0.0);
                 const auto partDuration = part->audioLength();
                 if (partDuration > 1.0e-9)
@@ -381,7 +442,18 @@ void TimelineComponent::paint(juce::Graphics& g)
                     g.reduceClipRegion(bounds.withTrimmedTop(17.0f).toNearestInt());
                     const auto audioBounds = bounds.withX(timeToX(partStart))
                         .withWidth(timeToX(partDuration)).withTrimmedTop(17.0f);
-                    found->second->drawChannel(g, audioBounds.toNearestInt(), part->sourceOffsetSeconds,
+                    if (nativePreview)
+                    {
+                        const auto audio = nativeAudioPreviewClip(*part);
+                        const NativeRenderedPeaks* rendered=nullptr;
+                        if(showNativeRenderedWaveforms)
+                            if(const auto hash=nativeClipHashes.find(part->id.toStdString());hash!=nativeClipHashes.end())
+                                if(const auto peaks=nativePeaksByHash.find(hash->second);peaks!=nativePeaksByHash.end())rendered=peaks->second;
+                        const auto opacity=track.muted||clip.muted||part->muted?.30f:(showNotes?.68f:.88f);
+                        if(rendered)drawNativeRenderedWaveform(g,*rendered,audio.durationSeconds,audioBounds,opacity);
+                        else drawNativeSourceWaveform(g,*found->second,audio,nativeSourceTimeMap(audio),audioBounds,opacity);
+                    }
+                    else found->second->drawChannel(g, audioBounds.toNearestInt(), part->sourceOffsetSeconds,
                         part->sourceOffsetSeconds + (track.accompaniment ? partDuration
                             : (part->sourceDurationSeconds > 1.0e-9 ? part->sourceDurationSeconds : partDuration)), 0, 1.0f);
                 }
@@ -465,9 +537,7 @@ void TimelineComponent::paint(juce::Graphics& g)
                 ? draggedClipPreviewGain : clip.gain;
             const auto gainControl = gainControlLayout(bounds);
             const auto knob = gainControl.knob;
-            g.drawText(clip.sourceFile.getFileNameWithoutExtension()
-                       + (clip.parts.empty() ? juce::String{} : " +" + juce::String(static_cast<int>(clip.parts.size())-1))
-                       + "  " + gainLabel(displayGain),
+            g.drawText(clipHeaderText(track, clip, displayGain),
                        bounds.toNearestInt().withTrimmedLeft(bounds.getHeight() < 34.0f && !gainControl.bounds.isEmpty()
                            ? static_cast<int>(std::ceil(gainControl.bounds.getRight()-bounds.getX()+3.0f)) : 19).withHeight(17),
                        juce::Justification::centredLeft, true);
@@ -533,6 +603,18 @@ void TimelineComponent::paint(juce::Graphics& g)
             }
             paintClipEnvelope(g,clip,track.muted,trackIndex);
         }
+        if(trackShowsAllNativeRegions(track))
+        {
+            const auto windows=nativeAudioWindows(shown);
+            for(std::size_t i=0;i<windows.size();++i)for(std::size_t j=i+1;j<windows.size();++j)
+            {
+                const auto first=std::max(windows[i].start,windows[j].start),last=std::min(windows[i].end,windows[j].end);if(last-first<=1.e-7)continue;
+                const juce::Rectangle<float> band(timeToX(first),static_cast<float>(row.getY()+19),timeToX(last)-timeToX(first),static_cast<float>(rowHeight-22));
+                const juce::Graphics::ScopedSaveState save(g);g.reduceClipRegion(band.toNearestInt());g.setColour(juce::Colour(0xffffbf69).withAlpha(.16f));g.fillRect(band);
+                g.setColour(juce::Colour(0xffffbf69).withAlpha(.7f));for(auto x=band.getX()-band.getHeight();x<band.getRight();x+=14)g.drawLine(x,band.getBottom(),x+band.getHeight(),band.getY(),1.f);
+                g.drawRect(band,1.3f);g.setFont(10.f);g.drawText(nativeOverlapLabel+" "+juce::String((last-first)*1000,0)+" ms",band.withHeight(18),juce::Justification::centred);
+            }
+        }
     }
 
     g.setColour(Palette::playhead);
@@ -561,6 +643,7 @@ void TimelineComponent::notifySelection()
 
 void TimelineComponent::setSelectedClips(std::vector<juce::String> ids, bool notify)
 {
+    nativeFocusedNote.clear();
     selectedClips.clear(); selectedTracks.clear();
     for (const auto& track : snapshot.tracks)
     {
@@ -656,10 +739,23 @@ void TimelineComponent::rememberPointer(const juce::MouseEvent& event)
         static_cast<double>(event.position.x) / pixelsPerSecond) };
 }
 
+juce::String TimelineComponent::clipHeaderText(const TrackData& track, const ClipData& clip, float gain) const
+{
+    const auto engine = outputEngineNameProvider ? outputEngineNameProvider(track) : juce::String{};
+    return (engine.isEmpty() ? juce::String{} : "[" + engine + "]  ")
+        + clip.sourceFile.getFileNameWithoutExtension()
+        + (clip.parts.empty() ? juce::String{} : " +" + juce::String(static_cast<int>(clip.parts.size())-1))
+        + "  " + gainLabel(gain);
+}
+
 void TimelineComponent::mouseMove(const juce::MouseEvent& event)
 {
     rememberPointer(event);
     setTooltip({});
+    for (const auto& hit : clipHits)
+        if (hit.bounds.contains(event.position) && event.position.y < hit.bounds.getY()+17.0f)
+            for (const auto& track : snapshot.tracks) for (const auto& clip : track.clips)
+                if (clip.id == hit.id) { setTooltip(clipHeaderText(track,clip,clip.gain)); return; }
     if (const auto hit = envelopeHit(event.position, true))
     {
         const auto* clip = findEnvelopeClip(hit->clipId);
@@ -863,7 +959,7 @@ void TimelineComponent::mouseDown(const juce::MouseEvent& event)
                 setSelectedClips(std::move(ids)); return;
             }
             if (!isClipSelected(it->id)) setSelectedClips({it->id});
-            selectedClip = it->id; notifySelection();
+            nativeFocusedNote.clear();selectedClip = it->id; notifySelection();
             if (event.mods.isPopupMenu())
             {
                 draggedClip.clear();
@@ -894,8 +990,17 @@ void TimelineComponent::mouseDown(const juce::MouseEvent& event)
             draggedAudioDuration = it->audioDurationSeconds;
             dragAnchorX = event.position.x;
             earliestDraggedStart = draggedClipStart;
-            for (const auto& track : snapshot.tracks) for (const auto& clip : track.clips)
-                if (isClipSelected(clip.id)) earliestDraggedStart = std::min(earliestDraggedStart, clip.startSeconds);
+            draggedClipTrack = juce::jlimit(0, static_cast<int>(snapshot.tracks.size())-1,
+                static_cast<int>(std::floor((it->bounds.getCentreY()-rulerHeight)/rowHeight)));
+            draggedTrackDelta = 0;
+            firstDraggedTrack = lastDraggedTrack = draggedClipTrack;
+            for (int row = 0; row < static_cast<int>(snapshot.tracks.size()); ++row)
+                for (const auto& clip : snapshot.tracks[static_cast<std::size_t>(row)].clips)
+                    if (isClipSelected(clip.id)) {
+                        earliestDraggedStart = std::min(earliestDraggedStart, clip.startSeconds);
+                        firstDraggedTrack = std::min(firstDraggedTrack, row);
+                        lastDraggedTrack = std::max(lastDraggedTrack, row);
+                    }
             const auto waveformTop = it->bounds.getY() + 19.0f;
             const auto fadeIn = juce::Point<float>(timeToX(it->audioStartSeconds + it->fadeInSeconds), waveformTop);
             const auto fadeOut = juce::Point<float>(timeToX(it->audioStartSeconds + it->audioDurationSeconds - it->fadeOutSeconds), waveformTop);
@@ -1013,9 +1118,19 @@ void TimelineComponent::mouseDrag(const juce::MouseEvent& event)
                                   snap(draggedClipStart + draggedClipDuration + delta));
         draggedClipPreviewDuration = end - draggedClipStart;
     }
-    else
+    else if (dragMode == DragMode::move) {
         draggedClipPreviewStart = draggedClipStart + std::max(-earliestDraggedStart,
             snap(draggedClipStart + delta) - draggedClipStart);
+        const auto pointedRow = static_cast<int>(std::floor((event.position.y-rulerHeight)/rowHeight));
+        draggedTrackDelta = juce::jlimit(-firstDraggedTrack,
+            static_cast<int>(snapshot.tracks.size())-1-lastDraggedTrack, pointedRow-draggedClipTrack);
+        draggedClipPreviewStart=draggedClipStart+constrainedNativeClipMoves(snapshot,selectedClips,
+            draggedClipPreviewStart-draggedClipStart,draggedTrackDelta);
+        if (auto* viewport = findParentComponentOfClass<juce::Viewport>()) {
+            const auto p = viewport->getLocalPoint(this, event.getPosition());
+            viewport->autoScroll(p.x, p.y, 18, 18);
+        }
+    }
     repaint();
 }
 
@@ -1044,10 +1159,12 @@ void TimelineComponent::mouseUp(const juce::MouseEvent&)
         else if (dragMode == DragMode::resizeLeft || dragMode == DragMode::resizeRight)
             model.trimClip(draggedClip, draggedClipPreviewStart,
                              draggedClipPreviewDuration);
-        else if (std::abs(draggedClipPreviewStart - draggedClipStart) > 1.0e-9)
-            model.moveClips(selectedClips, draggedClipPreviewStart - draggedClipStart);
+        else if (dragMode == DragMode::move
+            && (draggedTrackDelta != 0 || std::abs(draggedClipPreviewStart - draggedClipStart) > 1.0e-9))
+            model.moveClips(selectedClips, draggedClipPreviewStart - draggedClipStart, draggedTrackDelta);
     }
     draggedClip.clear();
+    draggedTrackDelta = 0;
     dragMode = DragMode::none;
     setMouseCursor(juce::MouseCursor::NormalCursor);
     repaint();

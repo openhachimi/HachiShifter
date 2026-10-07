@@ -2,6 +2,7 @@
 
 #include "SampleSettings.h"
 #include "Theme.h"
+#include "backend/OtoAudioAnalysis.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <array>
@@ -51,6 +52,7 @@ public:
     };
     // Without a host the recording still plays, into nothing: that is how the
     // checks pull it and listen to what a device would have been sent.
+    void stopPlaybackPreview() { stopPlayback(); }
     void setPlaybackHost(PlaybackHost host) { playbackHost = std::move(host); }
 
     // Test seams: press Save the way the button does, and read its caption.
@@ -64,6 +66,7 @@ public:
     // would be sent -- up to maxSeconds at outputRate, in blocks, the playhead
     // moved after each block the way the window's timer moves it.  Appended to
     // out; returns how many samples came.
+    bool diagnosticHasPlaybackHost() const { return bool(playbackHost.devices)&&bool(playbackHost.beforeStart); }
     void diagnosticPressPlay() { togglePlayback(); }
     [[nodiscard]] juce::String diagnosticPlayCaption() const
     {
@@ -176,13 +179,41 @@ public:
     double diagnosticVisibleMs() const { return waveform.visibleLengthMilliseconds(); }
     juce::Rectangle<int> diagnosticScrollBounds() const { return waveformScroll.getBounds(); }
     bool diagnosticScrollEnabled() const { return waveformScroll.isEnabled(); }
+    bool diagnosticAnalysisReady() { waveform.pollAnalysis(); return waveform.analysisReady(); }
+    std::shared_ptr<const backend::OtoAudioAnalysisData> diagnosticAnalysis() const { return waveform.analysisData(); }
+    void diagnosticSetAnalysisLayers(bool spectrum, bool f0)
+    {
+        spectrumButton.setToggleState(spectrum, juce::dontSendNotification);
+        sourceF0Button.setToggleState(f0, juce::dontSendNotification);
+        waveform.setAnalysisLayers(spectrum, f0);
+    }
+    juce::Rectangle<int> diagnosticSpectrumBounds() const { return waveform.analysisBounds(); }
+    juce::Rectangle<int> diagnosticWaveformBounds() const { return waveform.waveBounds(); }
+    float diagnosticXForTime(double ms) const { return waveform.timeX(ms); }
+    void diagnosticZoomIn() { waveform.nudgeHorizontalZoom(1.4); }
+    void diagnosticScrollTo(double ms) { waveform.setVisibleStartMilliseconds(ms); }
+    juce::Component& diagnosticWaveformComponent() { return waveform; }
+    juce::String diagnosticPitchReadout() const { return pitchReadoutHz.getText(); }
+    juce::String diagnosticPitchTimeReadout() const { return pitchReadoutTime.getText(); }
+
 
 private:
-    class WaveformView final : public juce::Component
+    class WaveformView final : public juce::Component, public juce::SettableTooltipClient,
+                               private juce::Timer
     {
     public:
         WaveformView(VoicebankOtoEntry& entry, bool jieMode, bool mouMode,
                      std::function<void()> changedCallback);
+        ~WaveformView() override;
+        void pollAnalysis();
+        bool analysisReady() const { return analysis && analysis->complete; }
+        std::shared_ptr<const backend::OtoAudioAnalysisData> analysisData() const { return analysis; }
+        void setAnalysisLayers(bool spectrum, bool f0);
+        std::function<void(std::optional<backend::FcpeFrame>)> onPitchSelected;
+        juce::Rectangle<int> analysisBounds() const;
+        juce::Rectangle<int> waveBounds() const;
+        float timeX(double ms) const { return xForMilliseconds(ms); }
+
 
         void paint(juce::Graphics& g) override;
         void mouseMove(const juce::MouseEvent& event) override;
@@ -235,6 +266,15 @@ private:
         enum class Handle { none, offset, consonant, cutoff, preutterance, overlap,
                             jieOnset, jieGlide, jieNucleus };
         void loadWaveform();
+        void timerCallback() override { pollAnalysis(); }
+        void paintAnalysis(juce::Graphics& g);
+        void paintSourceF0(juce::Graphics& g, juce::Rectangle<int> area);
+        std::shared_ptr<backend::OtoAudioAnalysisRequest> analysisRequest;
+        std::shared_ptr<const backend::OtoAudioAnalysisData> analysis;
+        bool spectrumVisible = true, sourceF0Visible = true;
+        std::optional<backend::FcpeFrame> selectedPitch;
+        const backend::FcpeFrame* pitchFrameNear(juce::Point<float> position) const;
+
         juce::Rectangle<int> plotBounds() const;
         float xForMilliseconds(double milliseconds) const;
         double millisecondsForX(float x) const;
@@ -254,6 +294,15 @@ private:
         // follows the last visible one rather than being crossed by it.
         void orderBoundaries();
         Handle handleNear(const juce::Point<float>& position) const;
+        double millisecondsForHandle(Handle handle) const;
+        struct HandleBadge
+        {
+            Handle handle;
+            juce::String text;
+            juce::Colour colour;
+            juce::Rectangle<float> bounds;
+        };
+        std::vector<HandleBadge> handleBadges() const;
         void updateCursor(const juce::Point<float>& position);
 
         VoicebankOtoEntry& entry;
@@ -283,6 +332,7 @@ private:
         std::vector<std::pair<float, float>> waveformPeaks;
         double durationMs = 0.0;
         Handle dragging = Handle::none;
+        double dragGrabOffsetMs = 0.0;
         std::optional<double> playheadMs;
     };
 
@@ -337,6 +387,8 @@ private:
     std::function<bool(const VoicebankOtoEntry&, juce::String&)> saveOverride;
     juce::Label fileLabel;
     juce::Label helpLabel;
+    juce::Label pitchReadoutTitle, pitchReadoutHz, pitchReadoutTime;
+    juce::Rectangle<int> pitchReadoutBounds;
     // The class string, shown only in 谋 mode: one letter per region, and its
     // length is the region count.
     juce::Label classesLabel;
@@ -379,5 +431,6 @@ private:
     std::unique_ptr<juce::AudioSourcePlayer> previewPlayer;
     juce::AudioDeviceManager* previewDevices = nullptr;
     juce::TextButton playButton;
+    juce::ToggleButton spectrumButton, sourceF0Button;
 };
 }

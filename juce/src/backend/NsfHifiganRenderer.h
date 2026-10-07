@@ -53,6 +53,8 @@ struct NsfHifiganEdgeGuard
 class NsfHifiganRenderer final
 {
 public:
+    // Call after all render services have stopped, before releasing the runtime.
+    static void shutdown();
     [[nodiscard]] static bool modelAvailable(const juce::File& configuredModelDirectory);
     static NsfHifiganRenderResult render(
         const juce::AudioBuffer<float>& source,
@@ -66,12 +68,13 @@ public:
         const OrtExecutionConfig& execution,
         NsfHifiganStretchOrder stretchOrder,
         bool normalizeVolume = false,
-        const NsfHifiganEdgeGuard& edgeGuard = NsfHifiganEdgeGuard{});
+        const NsfHifiganEdgeGuard& edgeGuard = NsfHifiganEdgeGuard{},
+        const std::function<bool()>& cancelled = {});
 };
 
 // UTAU voicebank synthesis on the one NSF-HiFiGAN renderer (no separate
 // renderer): these are the native building blocks that let the NSF-HiFiGAN
-// path reproduce the UTAU backend's non-flag behaviour -- OTO timing, consonant
+// path preserve UTAU timing while applying HiFisampler FLAG DSP -- OTO timing, consonant
 // velocity, preutterance/overlap, vibrato/pitch as the model's F0 input, and
 // overlap crossfade mixing -- in the spirit of hifisampler but without the
 // classic time-domain resampler or an external executable.  Split out as pure
@@ -86,6 +89,9 @@ struct NsfUtauSampleTiming
     double preutteranceSeconds = 0.0;
     double overlapSeconds = 0.0;
     double fileSeconds = 0.0;
+    bool hasRegions = false;
+    std::array<double, 4> regionSeconds {};
+    juce::String mouClasses;
 };
 
 // The plan for feeding one note to NSF-HiFiGAN: the source region and a pure
@@ -98,11 +104,17 @@ struct NsfUtauNotePlan
     double soundStartOffsetSeconds = 0.0;
     double outputSeconds = 0.0;
     std::vector<NsfHifiganTimeMapPoint> timeMap;
+    bool usesRegions = false;
+    int regionCount = 0;
+    std::array<double, 4> outputRegionSeconds {};
+    juce::String regionClasses;
 };
 
 [[nodiscard]] NsfUtauNotePlan buildNsfUtauNotePlan(
     const NsfUtauSampleTiming& timing, double noteStartSeconds,
-    double noteDurationSeconds, double consonantVelocityScale, double tailSeconds);
+    double noteDurationSeconds, double consonantVelocityScale, double tailSeconds,
+    const std::array<double, 3>* manualFractions = nullptr,
+    bool firstTwoRegionsOnly = false, double soundingOutputSeconds = 0.0);
 
 // A pitch handle on a note, cents from its MIDI pitch (vibrato folded in).
 struct NsfUtauPitchPoint
@@ -128,7 +140,7 @@ struct NsfUtauMixNote
 
 [[nodiscard]] juce::AudioBuffer<float> mixNsfUtauNotes(
     const std::vector<NsfUtauMixNote>& notes, double totalSeconds, double sampleRate,
-    int channels = 1);
+    int channels = 1, const std::function<bool()>& cancelled = {});
 
 // Synthesise one voicebank note through NSF-HiFiGAN (empty audio + reason when
 // the model is unavailable, so the caller warns rather than failing silently).
@@ -144,7 +156,9 @@ struct NsfUtauSynthResult
     const juce::File& sampleFile, const NsfUtauNotePlan& plan,
     float midiNote, const std::vector<NsfUtauPitchPoint>& pitchCurve,
     const juce::File& modelDirectory, const OrtExecutionConfig& execution,
-    const std::function<float(double)>& timelinePitchCents = {});
+    const std::function<float(double)>& timelinePitchCents = {},
+    const UtauNoteRenderSpec* flagsNote = nullptr,
+    const std::function<bool()>& cancelled = {});
 
 // Render a whole UTAU voicebank phrase through the one NSF-HiFiGAN renderer:
 // resolve each note's sample by alias (and prefix-mapped pitch bank), plan its
@@ -154,4 +168,6 @@ struct NsfUtauSynthResult
 // executable.  Empty buffer + warning when the model is unavailable.
 [[nodiscard]] UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
     const juce::File& modelDirectory, const OrtExecutionConfig& execution);
+[[nodiscard]] bool runHifisamplerSmoke(const juce::File& folder, const juce::File& modelDirectory);
+
 }

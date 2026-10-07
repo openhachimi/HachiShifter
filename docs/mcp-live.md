@@ -1,4 +1,4 @@
-# MCP 连接当前编辑器窗口（0.2.3）
+# MCP 连接当前编辑器窗口（0.2.4）
 
 先启动最新版编辑器，打开需要编辑的工程，再启动 MCP 客户端。此模式操作窗口里的真实工程、选区、撤销历史和音频引擎。连接端是一个独立的 stdio 代理进程，不会另建空白工程。
 
@@ -6,7 +6,7 @@
 {
   "mcpServers": {
     "hachishifter": {
-      "command": "E:/和声合成新UI/HachiShifter-整合版-0.2.3-DiffSinger/HachiShifter Next.exe",
+      "command": "E:/和声合成新UI/HachiShifter-整合版-0.2.4-DiffSinger/HachiShifter Next.exe",
       "args": ["--mcp-live"]
     }
   }
@@ -123,3 +123,27 @@
 ## 伴奏音频分析（036）
 
 新增 `hamood_analyse_audio`（异步分析与缓存）、`hamood_audio_context`（按选区 / 范围读取）、`hamood_alignment_preview`（只读拍点相位对齐预览）。`hamood_preview` / `hamood_generate` 支持 `audio_clip_id` 与 `minimum_chord_score`，在当前片段位置参考伴奏和弦生成独立声部。需要本机分析运行时，详见 [伴奏分析说明](hamood-audio.md)。
+
+
+## HAMOOD 工程资料（055）
+
+`hamood_get_context` 读取当前工程保存的调性设置、手动调性分段、和弦、段落及人工确认状态；`hamood_set_context` 提交完整资料对象，需要 `expected_revision`，支持一次撤销。先读取并保留无关条目，再修改所需内容。资料随工程保存，GUI 与 MCP 共用。
+
+`hamood_preview` / `hamood_generate` 的省略参数继承已保存设置，显式参数优先；整轨处理仍须明确 `whole_track=true`。已确认和弦不会被重新分析覆盖。详细字段与时间单位见 [HAMOOD 使用说明](hamood.md#工程资料055)。
+
+`editor_status` 同时返回 `selected_note_count` 和 `selected_region_count`，用于检查当前多区域音符选区。
+
+
+## OTO 高级包络（056）
+
+`set_note` 的 `tail_fade` 字段可设为 `off`、`linear`、`smooth`，作用于普通 UTAU / 界·UTAU / 谋·UTAU 的 OTO 最后分区。`editor_selection`、`editor_query`、工程快照返回该设置；DS 无 OTO，不接受此效果。原手绘包络和 FLAG 保持独立，多音符修改可通过 `editor_batch` 合并为一次撤销。详见 [高级包络使用说明](advanced-envelope.md)。
+
+
+## 尾段淡出细节（057）
+
+`set_note` 增加五个可选数值字段：`tail_fade_start_percent` / `tail_fade_end_percent`（在 OTO 尾段内的起止比例，0–100，间隔至少 0.1%）、`tail_fade_start_gain_percent` / `tail_fade_end_gain_percent`（相对原包络的振幅倍率，0–200，结束倍率不得大于起始倍率）、`tail_fade_curve_power`（0.25–4，默认 1）。省略的字段保留当前值，单独设置细节不改变开关和形状；`off` 保留细节以便重启。模式和细节在同一请求中整体校验，失败不会部分修改音符，选区与工程快照返回全部字段。
+
+
+### 058 · UST 编码与保真交换
+
+`import_ust` 增加可选 `encoding`。新增 `export_ust(path, track_id, encoding?)`，保持原编码为默认行为；支持 auto、UTF-8、Shift-JIS、GBK、Big5、GB18030。当前窗口写入类接口仍需要 expected_revision，导出本身不修改工程。支持原始未知字段、空值及未启用音高数据随 HJPX 留存；完整规则见 [UST 保真说明](ust-fidelity.md)。

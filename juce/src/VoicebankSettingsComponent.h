@@ -1,13 +1,16 @@
 #pragma once
 
 #include "SampleSettings.h"
+#include "ModelessWindows.h"
 #include "Theme.h"
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <array>
 #include <vector>
+#include <optional>
 
 namespace hachi
 {
+class OtoWaveformEditorComponent;
 class VoicebankSettingsComponent final : public juce::Component,
                                          private juce::TableListBoxModel
 {
@@ -23,6 +26,18 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    std::function<void(OtoWaveformEditorComponent&)> configureOtoEditor;
+    juce::DialogWindow* diagnosticEditorWindow() const;
+    void diagnosticCollectClosedEditors() { editorWindows.removeClosed(); }
+    void diagnosticOpenEditor() { openSelectedEditor(); }
+    int diagnosticSelectedRow() const { return table.getSelectedRow(); }
+    juce::Point<int> diagnosticScrollPosition() const { return table.getViewport()->getViewPosition(); }
+    void diagnosticScrollTo(int x,int y) { table.getViewport()->setViewPosition(x,y); }
+    void diagnosticFilter(const juce::String& text) { searchEditor.setText(text);applyFilter(); }
+    std::optional<VoicebankOtoEntry> diagnosticSelectedEntry() const {const auto* e=selectedEntry();return e?std::optional<VoicebankOtoEntry>(*e):std::nullopt;}
+    void diagnosticReloadFile(const juce::File& file) { reload(file); }
+    void diagnosticCreateJieFromMou() { createJieFromMou(); }
+    bool diagnosticJieFromMouVisible() const { return createJieFromMouButton.getParentComponent() == this; }
 
     // Offline checks: the panel is only reachable through a dialog, so the
     // selection and the 2/3/4 buttons are driven directly.
@@ -43,12 +58,18 @@ private:
     void cellDoubleClicked(int rowNumber, int columnId,
                            const juce::MouseEvent& event) override;
 
-    void reload();
-    void applyFilter();
+    void reload(const juce::File& onlyOtoFile = {});
+    void refreshEncodingChoice();
+    juce::Label encodingLabel;
+    juce::ComboBox encodingFolder, encodingChoice;
+    std::vector<juce::File> encodingFolders;
+    void applyFilter(std::optional<VoicebankOtoEntry> preferred = {},
+                     std::optional<juce::Point<int>> scrollPosition = {});
     void refreshDetails(int filteredRow);
     void openSelectedEditor();
     void duplicateSelectedEntry();
     void createJieOto();
+    void createJieFromMou();
     // Switch the selected entry between two, three and four regions.  The
     // panel has no save button, so this writes otomou.ini as it is clicked --
     // the same edit the waveform editor makes, without opening it.
@@ -69,6 +90,7 @@ private:
     const bool mou;
     void createMouOto();
     juce::TextButton createMouButton;
+    ModelessWindows editorWindows;
     // Alias to select once the table has been (re)built.
     juce::String pendingAlias;
     juce::File root;
@@ -89,6 +111,7 @@ private:
     juce::TextButton openEditorButton;
     juce::TextButton duplicateButton;
     juce::TextButton createJieButton;
+    juce::TextButton createJieFromMouButton;
     juce::TextButton reloadButton;
     // 2/3/4 段分 for the selected entry, shown only in 谋 mode.
     juce::Label countLabel;

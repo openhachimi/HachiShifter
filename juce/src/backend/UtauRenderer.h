@@ -2,6 +2,7 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "UtauOtoOverride.h"
+#include "TailFadeSettings.h"
 #include "../WavExportOptions.h"
 #include <array>
 #include <functional>
@@ -78,6 +79,9 @@ struct UtauNoteRenderSpec
     juce::String diffSingerTiming;
     juce::String diffSingerPronunciation;
     juce::String diffSingerContext;
+    int tailFadeMode = 0;
+    TailFadeSettings tailFadeSettings;
+    double modulationPercent = 0.0;
 };
 
 struct UtauPhonemeSpan
@@ -96,6 +100,8 @@ struct UtauRenderRequest
     juce::var diffSingerInference; // immutable settings snapshot for queued renders
     std::function<bool()> cancelled;
     juce::File resamplerExecutable;
+    juce::File wavtoolExecutable;
+    bool requireExternalResampler = false;
     bool fourRegion = false;
     // 谋•UTAU: read 谋•OTO and hand the engine the per-region classes.  Off
     // for UTAU and 界•UTAU, which have no such annotation -- with it off the
@@ -127,6 +133,10 @@ struct UtauRenderRequest
                        const std::function<float(double)>&,
                        const std::function<float(double)>&)> notePiece;
     WavExportComponent exportComponent = WavExportComponent::full;
+    // Scheduling only; excluded from synthesis/cache keys. The full request
+    // stays in musical order, including neighbours needed for crossfades.
+    double timelineStartSeconds = 0.0;
+    std::function<double()> priorityPosition;
 };
 
 struct UtauRenderResult
@@ -171,6 +181,8 @@ struct UtauSampleTiming
     juce::String resolvedAlias;
 };
 
+struct UtauTailFadeSpan {double startSeconds=0,endSeconds=0;};
+
 class UtauRenderer final
 {
 public:
@@ -180,6 +192,11 @@ public:
                                                       const juce::String& effectiveFlags);
     [[nodiscard]] static juce::String diagnosticPitchbend(
         const UtauNoteRenderSpec& note, double bpm, double preutterance, double outputSeconds);
+    // Fit existing attack/release ramps to the actual sounding span. Shared by
+    // resampler and neural voicebank mixers; stored editing points stay intact.
+    [[nodiscard]] static std::vector<UtauAmplitudePoint> fitAmplitudeEnvelope(
+        const std::vector<UtauAmplitudePoint>& drawn, double preutteranceSeconds,
+        double soundingEndSeconds);
     static void invalidateVoicebankCache();
     // The HF vocoder daemon an engine talks to, started ahead of the first
     // render: it takes 10-20 s to load its model, which the first HF note used
@@ -191,6 +208,10 @@ public:
     // port is the daemon's own (51765) except in a check.
     static bool startHfDaemonIfNeeded(const juce::File& resamplerExecutable,
                                       int port = 51765);
+    // Stop only HF daemon processes this editor started. A pre-existing
+    // daemon may belong to another editor and is never adopted or stopped.
+    // Permanent for this application lifetime: no prewarm can restart one.
+    static void shutdownHfDaemon();
     // The interpreter the engine would start the daemon with: the first line of
     // hf_backend/python.txt, a relative one taken from the engine's folder, and
     // "pythonw" when there is no such file.  Read exactly as the engine reads
@@ -214,6 +235,8 @@ public:
     // being read -- the stall the roll's background reading exists to avoid.
     [[nodiscard]] static int diagnosticMessageThreadWaits();
     static void diagnosticRecheckVoicebankFiles();
+    // Refresh at the next worker/background lookup; no bank load on the UI thread.
+    static void recheckVoicebankFiles(const juce::File& root);
     [[nodiscard]] static juce::String diagnosticResolve(const juce::File& voicebankDirectory,
                                                         const juce::String& alias, float midiNote,
                                                         bool fourRegion, bool consonantClasses,
@@ -279,6 +302,9 @@ public:
         double consonantSeconds = 0.0;   // unscaled fixed consonant length
         double overlapSeconds = 0.0;
         float sourceMidi = 60.0f;
+        bool hasRegions = false;
+        std::array<double, 4> regionSeconds {};
+        juce::String mouClasses;
     };
     [[nodiscard]] static ResolvedSample resolveVoiceSample(
         const juce::File& voicebankDirectory, const juce::String& alias, float midiNote,
@@ -288,6 +314,15 @@ public:
         bool overlapOverrideEnabled = false, double overlapSeconds = 0.0,
         const UtauOtoOverride* noteOto = nullptr);
     static UtauRenderResult render(const UtauRenderRequest& request);
+    // The last existing OTO region, on the same sounding span shown in the roll.
+    [[nodiscard]] static std::optional<UtauTailFadeSpan> tailFadeSpan(
+        const UtauSampleTiming& timing,double soundStart,double soundEnd,
+        double nominalDuration,int velocity,bool fourRegion,bool mou,
+        const std::array<double,3>* manual=nullptr);
+    [[nodiscard]] static std::optional<UtauTailFadeSpan> headEnvelopeSpan(
+        const UtauSampleTiming& timing,double soundStart,double soundEnd,
+        double nominalDuration,int velocity,bool fourRegion,bool mou,
+        const std::array<double,3>* manual=nullptr);
     // How one note's four regions divide its output.  With no manual split
     // this reproduces the engine's own weight allocation, so what the piano
     // roll draws is what the resampler is asked for.

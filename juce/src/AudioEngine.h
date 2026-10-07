@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ProjectModel.h"
+#include "RenderedWaveformPeaks.h"
 #include "WavExportOptions.h"
 #include "backend/RenderService.h"
 #include <juce_audio_utils/juce_audio_utils.h>
@@ -64,7 +65,8 @@ public:
     [[nodiscard]] static juce::String componentExportIssue(const ProjectData& project,
         const juce::File& engine, const juce::String& trackId = {},
         const std::vector<juce::String>& noteIds = {}, juce::Range<double> range = {},
-        const juce::String& auditionTrack = {});
+        const juce::String& auditionTrack = {},
+        UtauOutputEngine defaultEngine = UtauOutputEngine::resampler);
     // Stop at this point in the piece rather than at its end.  Zero clears it.
     // Re-armed on every start, so it cannot outlive the run it was set for.
     void setPlayUntil(double seconds);
@@ -89,6 +91,10 @@ public:
     // window because the window is not the only thing that renders: the
     // headless MCP server drives the same engine and had no way to find it.
     void setUtauResamplerFile(const juce::File& executable);
+    void setUtauOutputDefaults(UtauOutputEngine engine, const juce::File& wavtool);
+    [[nodiscard]] UtauOutputEngine currentUtauOutputEngine() const { return defaultUtauOutputEngine; }
+    [[nodiscard]] juce::File currentUtauWavtoolFile() const { return utauWavtoolFile; }
+    [[nodiscard]] juce::String outputEngineDisplayName(const TrackData& track) const;
 
     // What that falls back to: engines\WCSNDM.exe or WCSNDM.exe beside the
     // running executable, and nothing if neither is there.  Pure, and public
@@ -122,6 +128,9 @@ public:
     [[nodiscard]] double position() const;
     [[nodiscard]] float trackPeak(const juce::String& trackId) const;
     [[nodiscard]] std::optional<double> renderProgress() const;
+    // Playback only waits for current audio near the transport. Export still
+    // waits for renderProgress() to finish over the complete requested scope.
+    [[nodiscard]] bool playbackNeedsRender(double lookAheadSeconds = 0.75) const;
     [[nodiscard]] bool hasPlayableRenderedAudio() const;
     [[nodiscard]] bool hasCurrentRenderedAudio() const;
     bool rewindToFirstPlayableRenderedAudio(double leadInSeconds = 0.03);
@@ -133,7 +142,7 @@ public:
     // as a warning naming the unrenderable edit rather than a silent drop.
     // Pure and static so the offline check and the UI read the same rule.
     [[nodiscard]] static juce::StringArray renderCapabilityWarnings(
-        const ProjectData& project);
+        const ProjectData& project, UtauOutputEngine defaultEngine = UtauOutputEngine::resampler);
     // trackId exports that track alone, for one file per track; empty
     // exports the mix.  Whether a track sounds at all is still decided by
     // mute and solo, exactly as in playback.
@@ -165,6 +174,9 @@ public:
 
     // How many phrases the last sync decided to decode in one pass.
     [[nodiscard]] int diagnosticMergedPhraseCount() const;
+    [[nodiscard]] std::uint64_t diagnosticScheduledNsfUtauRenders() const { return scheduledNsfUtauRenders.load(); }
+    [[nodiscard]] double diagnosticRenderPriorityPosition() const
+    { return renderService.playbackPriorityPosition(); }
 
     // The per-frame target MIDI the native render request would carry for one
     // clip, so the automatic pitch-seam S-transition can be tested without the
@@ -183,6 +195,9 @@ public:
     // peaks already computed -- and called from the window's timer, which
     // is where a render finishing is noticed.
     void refreshUtauWaveforms();
+    void refreshNativeWaveforms();
+    [[nodiscard]] std::shared_ptr<const std::vector<NativeRenderedWaveform>> nativeClipWaveforms() const;
+    [[nodiscard]] static std::uint64_t nativeClipWaveformHash(const ClipData&, const TrackData&);
 
     // The note as the render cache sees it, in one number: two notes with the
     // same value render the same audio.  Public because the roll asks it of a
@@ -202,7 +217,9 @@ public:
     [[nodiscard]] static std::vector<backend::UtauNoteRenderSpec> utauRequestNotesForClip(
         const ProjectData& project, const juce::String& clipId);
     [[nodiscard]] static std::string diagnosticUtauRenderKey(
-        const ProjectData& project, const juce::String& clipId);
+        const ProjectData& project, const juce::String& clipId,
+        UtauOutputEngine defaultEngine = UtauOutputEngine::resampler,
+        const juce::File& resampler = {}, const juce::File& wavtool = {});
 
     bool exportWav(const juce::File& file, juce::String& error,
                    const juce::String& trackId = {},
@@ -229,6 +246,8 @@ private:
         std::atomic<bool> ready { false };
         std::atomic<bool> finished { false };
         std::atomic<float> progress { 0.0f };
+        // Computed on the message thread with this immutable render key.
+        bool preservesNativeSource = false;
         // Under stretchSpliceThenPitch a whole glide chain is decoded in one
         // pass; this entry then holds the phrase, and each target is the span
         // belonging to one clip.  A target is filled the moment the phrase
@@ -246,12 +265,14 @@ private:
         // this entry uses for things a render thread writes and the message
         // thread reads.
         std::vector<UtauNoteWaveform> utauWaveforms;
+        std::shared_ptr<const NativeRenderedPeaks> nativePeaks;
     };
 
     struct LoadedClip
     {
         ClipData clip;
         std::string trackId;
+        std::uint64_t nativeWaveformHash = 0;
         bool smoothOverlaps = false;
         bool diffSinger = false;
         bool accompaniment = false;
@@ -266,6 +287,7 @@ private:
 
     static float fadeEnvelope(const ClipData& clip, double localSeconds);
     void rebuildLoadedClips(const ProjectData& project, bool diffSingerExport);
+    [[nodiscard]] bool pendingAudioInRange(double start, double end) const; // renderLock held
 
     juce::AudioFormatManager formatManager;
     backend::RenderService renderService;
@@ -280,11 +302,15 @@ private:
     WavExportComponent renderComponent = WavExportComponent::full;
     juce::String componentExportError;
     std::unordered_set<std::string> utauRenderNoteSelection;
+    std::uint64_t utauRenderRequestGeneration = 0;
+    std::atomic<std::uint64_t> scheduledNsfUtauRenders { 0 };
+    std::unordered_map<std::string, std::string> voicebankRenderStamps;
     // The track being worked on, for the material-track rule above.
     juce::String auditionTrackId;
     std::unordered_set<std::string> utauRenderedNoteHistory;
     juce::File hifiganModelDirectory;
-    juce::File utauResamplerFile;
+    juce::File utauResamplerFile, utauWavtoolFile;
+    UtauOutputEngine defaultUtauOutputEngine = UtauOutputEngine::resampler;
     // Rebuilt whenever a UTAU render lands or the project is synced, and
     // handed out by pointer so a paint never walks a vector being rewritten.
     std::shared_ptr<const std::vector<UtauNoteWaveform>> utauWaveformSnapshot;
@@ -295,6 +321,11 @@ private:
     std::atomic<std::uint64_t> utauWaveformGeneration { 0 };
     std::uint64_t utauWaveformSnapshotGeneration = 0;
     void refreshUtauWaveformSnapshot();
+    std::shared_ptr<const std::vector<NativeRenderedWaveform>> nativeWaveformSnapshot;
+    mutable juce::CriticalSection nativeWaveformLock;
+    std::shared_ptr<std::atomic<std::uint64_t>> nativeWaveformGeneration
+        = std::make_shared<std::atomic<std::uint64_t>>(0);
+    std::uint64_t nativeWaveformSnapshotGeneration = 0;
     backend::OrtExecutionConfig inferenceConfiguration;
     std::shared_ptr<juce::AudioFormatReader> auditionReader;
     juce::AudioBuffer<float> auditionScratch;

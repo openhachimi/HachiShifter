@@ -105,7 +105,7 @@ inline bool MainComponent::diagnosticNormalDisplay(const juce::File& folder)
             check("normal_display_preview_written",out&&juce::PNGImageFormat().writeImageToStream(roll.createComponentSnapshot(area),*out));}
         roll.setSourceEditMode(true);check("source_edit_remains_single_region",roll.diagnosticHitCount()==2);
         roll.setSourceEditMode(false);roll.setFocusedClip("right");model.setClipNormalDisplay("right",false);model.dispatchPendingMessages();roll.diagnosticRefresh();
-        check("active_region_remains_normal_when_disabled",roll.diagnosticHitCount()==2);
+        check("active_region_remains_normal_when_disabled",roll.diagnosticHitCount()==(mode==0?4:2));
     }
     ProjectModel model;model.replace(enabled);PianoRollComponent roll(model,strings);roll.setFocusedClip("left");
     model.setClipNormalDisplay("hidden",true);model.dispatchPendingMessages();roll.diagnosticRefresh();

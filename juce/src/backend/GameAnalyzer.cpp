@@ -522,6 +522,7 @@ std::vector<NoteData> combineRegions(const std::vector<GameRegion>& regions,
         }
         const auto centreCents = median(absolute, note.midiNote * 100.0f);
         note.sourceMidiCenter = juce::jlimit(0.0f, 127.0f, centreCents / 100.0f);
+        note.sourcePitchMeasured = true;
         if (!std::isfinite(region.midi)) note.midiNote = note.sourceMidiCenter;
         auto firstVoiced = note.durationSeconds;
         for (std::size_t index = 0; index < pitches.size(); ++index)

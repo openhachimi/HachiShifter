@@ -134,12 +134,167 @@ OtoWaveformEditorComponent::WaveformView::WaveformView(
     // did; anyone wanting a closer look can zoom in, and FIT still returns to
     // the entry's own range.
     showWholeFile();
+    if (durationMs > 0.0)
+    {
+        analysisRequest = backend::OtoAudioAnalysis::request(entry.audioFile,
+            backend::OtoAudioAnalysis::editorConfig());
+        pollAnalysis();
+        if (!analysisReady()) startTimer(80);
+    }
+}
+
+OtoWaveformEditorComponent::WaveformView::~WaveformView()
+{
+    stopTimer();
+    if (analysisRequest) analysisRequest->cancelled = true;
+}
+
+void OtoWaveformEditorComponent::WaveformView::pollAnalysis()
+{
+    if (!analysisRequest) return;
+    const auto ready = analysisRequest->snapshot();
+    if (ready != analysis) { analysis = ready; repaint(); }
+    if (analysisReady()) stopTimer();
+}
+
+void OtoWaveformEditorComponent::WaveformView::setAnalysisLayers(bool spectrum, bool f0)
+{
+    spectrumVisible = spectrum; sourceF0Visible = f0;
+    if (!f0 && selectedPitch)
+    {
+        selectedPitch.reset();
+        if (onPitchSelected) onPitchSelected(std::nullopt);
+    }
+    repaint();
+}
+
+juce::Rectangle<int> OtoWaveformEditorComponent::WaveformView::waveBounds() const
+{
+    auto area = plotBounds();
+    if (spectrumVisible || sourceF0Visible) area.setHeight(juce::roundToInt(area.getHeight() * 0.40));
+    return area;
+}
+
+juce::Rectangle<int> OtoWaveformEditorComponent::WaveformView::analysisBounds() const
+{
+    if (!spectrumVisible && !sourceF0Visible) return {};
+    auto area = plotBounds(); area.setTop(waveBounds().getBottom() + 8); return area;
+}
+
+const backend::FcpeFrame* OtoWaveformEditorComponent::WaveformView::pitchFrameNear(
+    juce::Point<float> position) const
+{
+    if (!sourceF0Visible || !analysis || analysis->pitch.empty()) return nullptr;
+    const auto area = waveBounds().contains(position.toInt()) ? waveBounds() : analysisBounds();
+    if (area.isEmpty() || !area.contains(position.toInt())) return nullptr;
+    const double seconds = millisecondsForX(position.x) / 1000.0;
+    const auto& pitch = analysis->pitch;
+    auto it = std::lower_bound(pitch.begin(), pitch.end(), seconds,
+        [](const auto& frame, double time) { return frame.timeSeconds < time; });
+    if (it != pitch.begin() && (it == pitch.end()
+        || seconds - (it - 1)->timeSeconds < it->timeSeconds - seconds)) --it;
+    if (it == pitch.end() || !it->voiced || std::abs(it->timeSeconds - seconds) > 0.025)
+        return nullptr;
+    const auto hz = 440.0 * std::pow(2.0, (it->midi - 69.0) / 12.0);
+    if (!std::isfinite(hz) || hz < analysis->minimumHz || hz > analysis->maximumHz) return nullptr;
+    const auto y = area.getBottom() - analysis->fractionForHz(hz) * area.getHeight();
+    return std::abs(position.y - y) <= 7.0 ? &*it : nullptr;
+}
+
+void OtoWaveformEditorComponent::WaveformView::paintSourceF0(
+    juce::Graphics& g, juce::Rectangle<int> area)
+{
+    if (!sourceF0Visible || !analysis || area.isEmpty()) return;
+    const auto yForHz = [&](double hz)
+    { return static_cast<float>(area.getBottom() - analysis->fractionForHz(hz) * area.getHeight()); };
+    juce::Graphics::ScopedSaveState save(g); g.reduceClipRegion(area);
+    juce::Path path;
+    const auto& pitch = analysis->pitch;
+    auto from = std::lower_bound(pitch.begin(), pitch.end(), viewStartMs() / 1000.0,
+        [](const auto& frame, double time) { return frame.timeSeconds < time; });
+    if (from != pitch.begin()) --from;
+    bool connected = false; double previousTime = -1;
+    for (auto it = from; it != pitch.end(); ++it)
+    {
+        if (it->timeSeconds > (viewStartMs() + visibleSpanMs()) / 1000.0 + 0.02) break;
+        const double hz = 440.0 * std::pow(2.0, (it->midi - 69.0) / 12.0);
+        if (!it->voiced || !std::isfinite(hz) || hz < analysis->minimumHz || hz > analysis->maximumHz)
+        { connected = false; continue; }
+        const auto x = xForMilliseconds(it->timeSeconds * 1000.0), y = yForHz(hz);
+        if (!connected || it->timeSeconds - previousTime > 0.025) path.startNewSubPath(x, y);
+        else path.lineTo(x, y);
+        connected = true; previousTime = it->timeSeconds;
+    }
+    g.setColour(juce::Colours::black.withAlpha(0.85f)); g.strokePath(path, juce::PathStrokeType(3.8f));
+    g.setColour(juce::Colour(0xff7aeeee)); g.strokePath(path, juce::PathStrokeType(1.8f));
+    if (selectedPitch)
+    {
+        const auto x = xForMilliseconds(selectedPitch->timeSeconds * 1000.0);
+        const auto hz = 440.0 * std::pow(2.0, (selectedPitch->midi - 69.0) / 12.0);
+        const auto y = yForHz(hz);
+        const float dashes[] { 3.0f, 4.0f };
+        g.setColour(juce::Colour(0xff7aeeee).withAlpha(0.45f));
+        g.drawDashedLine(juce::Line<float>(x, static_cast<float>(area.getY()),
+            x, static_cast<float>(area.getBottom())), dashes, 2, 1.0f);
+        g.setColour(juce::Colour(0xff101922)); g.fillEllipse(x - 4, y - 4, 8, 8);
+        g.setColour(juce::Colour(0xff7aeeee)); g.drawEllipse(x - 4, y - 4, 8, 8, 1.8f);
+    }
+}
+
+void OtoWaveformEditorComponent::WaveformView::paintAnalysis(juce::Graphics& g)
+{
+    const auto area = analysisBounds();
+    if (area.isEmpty()) return;
+    g.setColour(juce::Colour(0xff101922)); g.fillRect(area);
+    if (analysis && spectrumVisible && analysis->spectrogram.isValid())
+    {
+        juce::Graphics::ScopedSaveState save(g); g.reduceClipRegion(area);
+        const auto& image = analysis->spectrogram;
+        const auto scaleX = static_cast<float>(durationMs / visibleSpanMs() * area.getWidth() / image.getWidth());
+        const auto scaleY = static_cast<float>(area.getHeight()) / image.getHeight();
+        g.setOpacity(1.0f);
+        g.drawImageTransformed(image, juce::AffineTransform::scale(scaleX, scaleY)
+            .translated(xForMilliseconds(0), static_cast<float>(area.getY())));
+    }
+    if (analysis)
+    {
+        const auto yForHz = [&](double hz)
+        { return static_cast<float>(area.getBottom() - analysis->fractionForHz(hz) * area.getHeight()); };
+        g.setFont(10.0f);
+        float lastLabel = -1000;
+        for (double hz : {10000.0, 5000.0, 2000.0, 1000.0, 500.0, 200.0, 100.0, 50.0})
+        {
+            if (hz < analysis->minimumHz || hz > analysis->maximumHz) continue;
+            const auto y = yForHz(hz);
+            if (y - lastLabel < 16) continue;
+            lastLabel = y;
+            g.setColour(juce::Colours::white.withAlpha(0.10f));
+            g.drawHorizontalLine(juce::roundToInt(y), static_cast<float>(area.getX()), static_cast<float>(area.getRight()));
+            g.setColour(Palette::textMuted);
+            const auto label = hz >= 1000 ? juce::String(hz / 1000.0, hz == 10000 ? 0 : 1) + "k" : juce::String(static_cast<int>(hz));
+            g.drawText(label, 0, juce::roundToInt(y) - 7, area.getX() - 5, 14, juce::Justification::centredRight);
+        }
+        g.setColour(Palette::textMuted); g.drawText("Hz", 0, area.getY() - 15, area.getX() - 5, 14, juce::Justification::centredRight);
+        paintSourceF0(g, area);
+    }
+    auto caption = !analysisReady() ? utf8("正在分析原始录音…")
+        : analysis && analysis->error.isNotEmpty() ? analysis->error
+        : sourceF0Visible ? utf8("原始 F0 · ") + (analysis ? analysis->pitchBackend : juce::String{})
+        : utf8("原始录音频谱");
+    if (analysisReady() && sourceF0Visible && analysis && std::none_of(analysis->pitch.begin(), analysis->pitch.end(),
+        [](const auto& point) { return point.voiced; })) caption += utf8(" · 未检测到有声音高");
+    if (analysis && analysis->warning.isNotEmpty()) caption += utf8(" · 内置识别回退");
+    const auto badge = area.withHeight(18).reduced(4, 0);
+    g.setColour(juce::Colour(0xcc101922)); g.fillRect(badge);
+    g.setColour(juce::Colour(0xff7aeeee)); g.setFont(11.0f);
+    g.drawText(caption, badge.reduced(4, 0), juce::Justification::centredLeft, true);
 }
 
 void OtoWaveformEditorComponent::WaveformView::paint(juce::Graphics& g)
 {
     g.fillAll(Palette::graphBackground);
     const auto plot = plotBounds();
+    const auto wave = waveBounds();
     g.setColour(Palette::border);
     g.drawRect(plot);
     if (durationMs <= 0.0)
@@ -210,9 +365,10 @@ void OtoWaveformEditorComponent::WaveformView::paint(juce::Graphics& g)
 
     if (!waveformPeaks.empty())
     {
+        juce::Graphics::ScopedSaveState waveClip(g); g.reduceClipRegion(wave);
         g.setColour(Palette::accentLight);
-        const auto centreY = static_cast<float>(plot.getCentreY());
-        const auto amplitude = static_cast<float>(plot.getHeight()) * 0.43f
+        const auto centreY = static_cast<float>(wave.getCentreY());
+        const auto amplitude = static_cast<float>(wave.getHeight()) * 0.43f
             * static_cast<float>(amplitudeZoom);
         const auto columns = std::max(1, plot.getWidth());
         // Each column covers one slice of the visible window, not of the file.
@@ -249,6 +405,9 @@ void OtoWaveformEditorComponent::WaveformView::paint(juce::Graphics& g)
         g.drawText(utf8("音频中没有可显示的波形"), plot, juce::Justification::centred);
     }
 
+    paintSourceF0(g, wave);
+    paintAnalysis(g);
+
     const auto drawBoundary = [&g, &plot](float x, juce::Colour colour, float thickness)
     {
         g.setColour(colour);
@@ -261,27 +420,13 @@ void OtoWaveformEditorComponent::WaveformView::paint(juce::Graphics& g)
     drawBoundary(preutteranceX, juce::Colours::red, 2.0f);
     drawBoundary(overlapX, juce::Colours::limegreen, 2.0f);
 
-    const std::array<std::pair<float, juce::String>, 5> labels {{
-        { offsetX, utf8("偏移") }, { consonantX, utf8("辅音") },
-        { endX, utf8("终止") }, { preutteranceX, utf8("先行") },
-        { overlapX, utf8("重叠") }
-    }};
-    const std::array<juce::Colour, 5> colours {
-        juce::Colours::mediumpurple.brighter(0.35f), juce::Colours::orangered,
-        juce::Colours::mediumpurple.brighter(0.35f), juce::Colours::red,
-        juce::Colours::limegreen
-    };
     g.setFont(11.0f);
-    for (std::size_t index = 0; index < labels.size(); ++index)
+    for (const auto& badge : handleBadges())
     {
-        if (jie && index == 1) continue;   // the onset boundary is this line
-        auto x = juce::jlimit(static_cast<float>(plot.getX()),
-                              static_cast<float>(plot.getRight() - 38), labels[index].first - 18.0f);
-        auto badge = juce::Rectangle<float>(x, static_cast<float>(2 + (index % 2) * 16), 38.0f, 15.0f);
-        g.setColour(colours[index].withAlpha(0.78f));
-        g.fillRoundedRectangle(badge, 3.0f);
-        g.setColour(colours[index].contrasting(0.9f));
-        g.drawText(labels[index].second, badge, juce::Justification::centred);
+        g.setColour(badge.colour.withAlpha(0.78f));
+        g.fillRoundedRectangle(badge.bounds, 3.0f);
+        g.setColour(badge.colour.contrasting(0.9f));
+        g.drawText(badge.text, badge.bounds, juce::Justification::centred);
     }
 
     if (jie)
@@ -299,7 +444,7 @@ void OtoWaveformEditorComponent::WaveformView::paint(juce::Graphics& g)
             if (width < 26.0f) continue;
             auto badge = juce::Rectangle<float>(
                 spans[index].first + width * 0.5f - 17.0f,
-                static_cast<float>(plot.getBottom() - 19), 34.0f, 15.0f);
+                static_cast<float>(wave.getBottom() - 19), 34.0f, 15.0f);
             g.setColour(jieColours[index].withAlpha(0.82f));
             g.fillRoundedRectangle(badge, 3.0f);
             g.setColour(jieColours[index].contrasting(0.9f));
@@ -336,6 +481,26 @@ void OtoWaveformEditorComponent::WaveformView::paint(juce::Graphics& g)
 void OtoWaveformEditorComponent::WaveformView::mouseMove(const juce::MouseEvent& event)
 {
     updateCursor(event.position);
+    if (analysis && (analysisBounds().contains(event.position.toInt())
+        || (sourceF0Visible && waveBounds().contains(event.position.toInt()))))
+    {
+        const auto seconds = millisecondsForX(event.position.x) / 1000.0;
+        auto tip = juce::String(seconds, 3) + " s";
+        auto it = std::lower_bound(analysis->pitch.begin(), analysis->pitch.end(), seconds,
+            [](const auto& frame, double time) { return frame.timeSeconds < time; });
+        if (it != analysis->pitch.begin() && (it == analysis->pitch.end()
+            || seconds - (it - 1)->timeSeconds < it->timeSeconds - seconds)) --it;
+        if (sourceF0Visible && it != analysis->pitch.end() && it->voiced && std::abs(it->timeSeconds - seconds) <= 0.025)
+        {
+            const auto hz = 440.0 * std::pow(2.0, (it->midi - 69.0) / 12.0);
+            tip += utf8("  原始 F0：") + juce::String(hz, 1) + " Hz  "
+                + juce::MidiMessage::getMidiNoteName(juce::roundToInt(it->midi), true, true, 4);
+        }
+        else if (sourceF0Visible) tip += utf8("  原始 F0：无有声音高");
+        if (analysis->warning.isNotEmpty()) tip += "\n" + analysis->warning;
+        setTooltip(tip);
+    }
+    else setTooltip({});
 }
 
 void OtoWaveformEditorComponent::WaveformView::mouseExit(const juce::MouseEvent&)
@@ -346,9 +511,17 @@ void OtoWaveformEditorComponent::WaveformView::mouseExit(const juce::MouseEvent&
 void OtoWaveformEditorComponent::WaveformView::mouseDown(const juce::MouseEvent& event)
 {
     dragging = handleNear(event.position);
-    // Nothing under the cursor: drag the view instead.  Without this, zooming
-    // in would strand the user wherever the window happened to land.
-    panning = dragging == Handle::none && viewZoom > 1.0;
+    dragGrabOffsetMs = dragging == Handle::none ? 0.0
+        : millisecondsForX(event.position.x) - millisecondsForHandle(dragging);
+    const auto* frame = event.mods.isLeftButtonDown() ? pitchFrameNear(event.position) : nullptr;
+    if (frame)
+    {
+        selectedPitch = *frame;
+        if (onPitchSelected) onPitchSelected(selectedPitch);
+        repaint();
+    }
+    // A pitch click reads the frame; boundary drags keep their original priority.
+    panning = dragging == Handle::none && frame == nullptr && viewZoom > 1.0;
     panStartCentreMs = viewCentreMs;
     updateCursor(event.position);
 }
@@ -365,12 +538,16 @@ void OtoWaveformEditorComponent::WaveformView::mouseDrag(const juce::MouseEvent&
         return;
     }
     if (dragging == Handle::none || durationMs <= 0.0) return;
-    applyHandle(dragging, millisecondsForX(event.position.x));
+    applyHandle(dragging, millisecondsForX(event.position.x) - dragGrabOffsetMs);
 }
 
 void OtoWaveformEditorComponent::WaveformView::applyHandle(Handle handle, double value)
 {
     if (handle == Handle::none || durationMs <= 0.0) return;
+    // Overlap and preutterance are signed timing markers, not audio cuts.
+    // Keep recording bounds only for handles which delimit real sample data.
+    if (handle != Handle::overlap && handle != Handle::preutterance)
+        value = juce::jlimit(0.0, durationMs, value);
     switch (handle)
     {
         case Handle::offset:
@@ -491,6 +668,7 @@ void OtoWaveformEditorComponent::WaveformView::loadWaveform()
 juce::Rectangle<int> OtoWaveformEditorComponent::WaveformView::plotBounds() const
 {
     auto bounds = getLocalBounds().reduced(14, 2);
+    if (spectrumVisible || sourceF0Visible) bounds.removeFromLeft(34);
     bounds.removeFromTop(36);
     bounds.removeFromBottom(22);
     return bounds;
@@ -583,7 +761,49 @@ double OtoWaveformEditorComponent::WaveformView::millisecondsForX(float x) const
 {
     const auto plot = plotBounds();
     const auto ratio = static_cast<double>(x - plot.getX()) / std::max(1, plot.getWidth());
-    return juce::jlimit(0.0, durationMs, viewStartMs() + ratio * visibleSpanMs());
+    return viewStartMs() + ratio * visibleSpanMs();
+}
+
+double OtoWaveformEditorComponent::WaveformView::millisecondsForHandle(Handle handle) const
+{
+    switch (handle)
+    {
+        case Handle::offset: return entry.offsetMs;
+        case Handle::consonant: return entry.offsetMs + entry.consonantMs;
+        case Handle::cutoff: return endMilliseconds();
+        case Handle::preutterance: return entry.offsetMs + entry.preutteranceMs;
+        case Handle::overlap: return entry.offsetMs + entry.overlapMs;
+        case Handle::jieOnset: return entry.offsetMs + entry.jieOnsetMs;
+        case Handle::jieGlide: return entry.offsetMs + entry.jieGlideMs;
+        case Handle::jieNucleus: return entry.offsetMs + entry.jieNucleusMs;
+        case Handle::none: return 0.0;
+    }
+    return 0.0;
+}
+
+std::vector<OtoWaveformEditorComponent::WaveformView::HandleBadge>
+OtoWaveformEditorComponent::WaveformView::handleBadges() const
+{
+    const auto plot = plotBounds();
+    const std::array<Handle, 5> handles { Handle::offset, Handle::consonant,
+        Handle::cutoff, Handle::preutterance, Handle::overlap };
+    const std::array<juce::String, 5> labels { utf8("偏移"), utf8("辅音"),
+        utf8("终止"), utf8("先行"), utf8("重叠") };
+    const std::array<juce::Colour, 5> colours {
+        juce::Colours::mediumpurple.brighter(0.35f), juce::Colours::orangered,
+        juce::Colours::mediumpurple.brighter(0.35f), juce::Colours::red,
+        juce::Colours::limegreen };
+    std::vector<HandleBadge> badges;
+    for (std::size_t i = 0; i < handles.size(); ++i)
+    {
+        if (jie && handles[i] == Handle::consonant) continue;
+        const auto x = juce::jlimit(static_cast<float>(plot.getX()),
+            static_cast<float>(std::max(plot.getX(), plot.getRight() - 38)),
+            xForMilliseconds(millisecondsForHandle(handles[i])) - 18.0f);
+        badges.push_back({ handles[i], labels[i], colours[i],
+            { x, static_cast<float>(2 + (i % 2) * 16), 38.0f, 15.0f } });
+    }
+    return badges;
 }
 
 double OtoWaveformEditorComponent::WaveformView::endMilliseconds() const
@@ -608,8 +828,13 @@ void OtoWaveformEditorComponent::WaveformView::orderBoundaries()
 OtoWaveformEditorComponent::WaveformView::Handle
 OtoWaveformEditorComponent::WaveformView::handleNear(const juce::Point<float>& position) const
 {
-    if (durationMs <= 0.0 || !plotBounds().expanded(8, 32).contains(position.toInt()))
-        return Handle::none;
+    if (durationMs <= 0.0) return Handle::none;
+    // The visible badge selects its own marker even when several lines coincide.
+    // Hit-test in reverse paint order, using the exact same rectangles as paint.
+    const auto badges = handleBadges();
+    for (auto it = badges.rbegin(); it != badges.rend(); ++it)
+        if (it->bounds.contains(position)) return it->handle;
+    if (!plotBounds().expanded(8, 32).contains(position.toInt())) return Handle::none;
     std::vector<std::pair<Handle, float>> handles {
         { Handle::preutterance, xForMilliseconds(entry.offsetMs + entry.preutteranceMs) },
         { Handle::overlap, xForMilliseconds(entry.offsetMs + entry.overlapMs) },
@@ -684,6 +909,8 @@ void OtoWaveformEditorComponent::WaveformView::updateCursor(
 {
     if (dragging != Handle::none || handleNear(position) != Handle::none)
         setMouseCursor(juce::MouseCursor::LeftRightResizeCursor);
+    else if (pitchFrameNear(position) != nullptr)
+        setMouseCursor(juce::MouseCursor::PointingHandCursor);
     else
         setMouseCursor(viewZoom > 1.0 ? juce::MouseCursor::DraggingHandCursor
                                       : juce::MouseCursor::NormalCursor);
@@ -873,13 +1100,49 @@ OtoWaveformEditorComponent::OtoWaveformEditorComponent(
     cancelButton.onClick = [this] { closeWindow(); };
     addAndMakeVisible(cancelButton);
 
-    setSize(980, 500);
+    pitchReadoutTitle.setText(utf8("原始 F0"), juce::dontSendNotification);
+    pitchReadoutHz.setText("-- Hz", juce::dontSendNotification);
+    pitchReadoutTime.setText(utf8("点击音高线"), juce::dontSendNotification);
+    pitchReadoutTitle.setFont(12.0f);
+    pitchReadoutHz.setFont(18.0f);
+    pitchReadoutTime.setFont(11.0f);
+    pitchReadoutHz.setColour(juce::Label::textColourId, juce::Colour(0xff7aeeee));
+    for (auto* label : { &pitchReadoutTitle, &pitchReadoutHz, &pitchReadoutTime })
+    {
+        label->setJustificationType(juce::Justification::centred);
+        label->setInterceptsMouseClicks(false, false);
+        addAndMakeVisible(*label);
+    }
+    waveform.onPitchSelected = [this](std::optional<backend::FcpeFrame> frame)
+    {
+        pitchReadoutHz.setText(frame ? juce::String(440.0 * std::pow(2.0, (frame->midi - 69.0) / 12.0), 1) + " Hz"
+                                    : juce::String("-- Hz"), juce::dontSendNotification);
+        pitchReadoutTime.setText(frame ? juce::String(frame->timeSeconds, 3) + " s"
+                                      : utf8("点击音高线"), juce::dontSendNotification);
+    };
+
+    spectrumButton.setButtonText(utf8("频谱"));
+    sourceF0Button.setButtonText(utf8("原始 F0"));
+    spectrumButton.setTooltip(utf8("显示原始录音的时频图，与波形共用时间轴"));
+    sourceF0Button.setTooltip(utf8("在波形和频谱上同时显示原始基频；点击音高线在左侧查看该帧 Hz，悬停查看音名。清音与静音处断开"));
+    for (auto* button : { &spectrumButton, &sourceF0Button })
+    {
+        button->setToggleState(true, juce::dontSendNotification);
+        button->onClick = [this]
+        { waveform.setAnalysisLayers(spectrumButton.getToggleState(), sourceF0Button.getToggleState()); };
+        addAndMakeVisible(*button);
+    }
+    setSize(1040, 620);
     refreshEditors();
 }
 
 void OtoWaveformEditorComponent::paint(juce::Graphics& g)
 {
     g.fillAll(Palette::panel);
+    g.setColour(Palette::graphBackground);
+    g.fillRoundedRectangle(pitchReadoutBounds.toFloat(), 5.0f);
+    g.setColour(Palette::border);
+    g.drawRoundedRectangle(pitchReadoutBounds.toFloat(), 5.0f, 1.0f);
 }
 
 void OtoWaveformEditorComponent::scrollBarMoved(juce::ScrollBar* bar, double newRangeStart)
@@ -928,6 +1191,9 @@ void OtoWaveformEditorComponent::resized()
         parameterEditors[index].setBounds(item.reduced(3, 2));
     }
     area.removeFromTop(7);
+    auto layers = area.removeFromTop(26);
+    spectrumButton.setBounds(layers.removeFromLeft(86));
+    sourceF0Button.setBounds(layers.removeFromLeft(120));
     auto buttons = area.removeFromBottom(34);
     playButton.setBounds(buttons.removeFromLeft(112).reduced(0, 2));
     cancelButton.setBounds(buttons.removeFromRight(92).reduced(0, 2));
@@ -959,6 +1225,14 @@ void OtoWaveformEditorComponent::resized()
      // diagnosticZoomCaptionsFit.
     auto zoomColumn = area.removeFromRight(44);
     area.removeFromRight(4);
+    auto readoutColumn = area.removeFromLeft(108);
+    area.removeFromLeft(4);
+    readoutColumn.removeFromTop(38);
+    pitchReadoutBounds = readoutColumn.removeFromTop(94);
+    auto readoutContent = pitchReadoutBounds.reduced(3, 5);
+    pitchReadoutTitle.setBounds(readoutContent.removeFromTop(22));
+    pitchReadoutHz.setBounds(readoutContent.removeFromTop(34));
+    pitchReadoutTime.setBounds(readoutContent.removeFromTop(24));
     waveformScroll.setBounds(area.removeFromBottom(12));
     waveform.setBounds(area);
     refreshScrollBar();
@@ -1286,7 +1560,12 @@ void OtoWaveformEditorComponent::startPlayback()
     // either side of the entry is how you hear where its edges belong.
     auto rate = 0.0;
     auto recording = readRecording(edited.audioFile, rate);
-    if (recording.getNumSamples() <= 0) return;
+    if (recording.getNumSamples() <= 0)
+    {
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+            utf8("无法播放原音"),utf8("无法读取音频文件：")+edited.audioFile.getFullPathName());
+        return;
+    }
     if (playbackHost.beforeStart && !playbackHost.beforeStart()) return;
     juce::AudioDeviceManager* devices = nullptr;
     if (playbackHost.devices)

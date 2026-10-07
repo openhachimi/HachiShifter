@@ -10,12 +10,24 @@ using Row = std::array<const char*, 5>;
 const std::unordered_map<std::string, Row> strings {
     { "settings.softwareRendering", { "回退到软件绘制（关闭 GPU 界面加速）", "退回軟體繪製（關閉 GPU 介面加速）", "ソフトウェア描画に切替（GPU描画を無効化）", "소프트웨어 렌더링 사용 (GPU UI 가속 끄기)", "Use software rendering (disable GPU UI acceleration)" } },
     { "app.title",       { "HachiShifter Next", "HachiShifter Next", "HachiShifter Next", "HachiShifter Next", "HachiShifter Next" } },
+    { "file.recovery", { "恢复自动保存的工程…", "復原自動儲存的工程…", "自動保存から復元…", "자동 저장 프로젝트 복구…", "Recover Autosaved Project…" } },
+    { "recovery.title", { "发现可恢复的工程", "發現可復原的工程", "復元可能なプロジェクト", "복구 가능한 프로젝트", "Recoverable projects" } },
+    { "recovery.message", { "自动保存可恢复未保存的修改。恢复后作为未保存工程打开，保存时请选择位置。", "自動儲存可復原未儲存的修改。復原後請另選儲存位置。", "未保存の変更を復元できます。復元後に保存先を選んでください。", "저장하지 않은 변경 사항을 복구합니다. 복구 후 저장 위치를 선택하세요.", "Recover unsaved changes. The recovered project opens as unsaved; choose a location when saving." } },
+    { "recovery.restore", { "恢复", "復原", "復元", "복구", "Recover" } },
+    { "recovery.later", { "稍后处理", "稍後處理", "後で", "나중에", "Later" } },
+    { "recovery.openFolder", { "打开恢复文件夹", "開啟復原資料夾", "復元フォルダーを開く", "복구 폴더 열기", "Open recovery folder" } },
+    { "recovery.none", { "没有可恢复的自动保存。", "沒有可復原的自動儲存。", "復元可能な自動保存はありません。", "복구할 자동 저장이 없습니다.", "No autosaved projects are available." } },
+    { "recovery.failed", { "自动保存失败，原工程未被覆盖：", "自動儲存失敗，原工程未被覆寫：", "自動保存に失敗しました。元のファイルは変更されていません：", "자동 저장 실패. 원본 프로젝트는 변경되지 않았습니다:", "Autosave failed; the original project was not overwritten:" } },
+    { "recovery.restored", { "已恢复自动保存；请另存工程。", "已復原自動儲存；請另存工程。", "自動保存を復元しました。名前を付けて保存してください。", "자동 저장이 복구되었습니다. 다른 이름으로 저장하세요.", "Autosave recovered; please save the project to a new location." } },
+    { "recovery.busy", { "此恢复文件正被另一编辑器使用。", "此復原檔正由另一編輯器使用。", "別のエディターがこの復元ファイルを使用中です。", "다른 편집기에서 이 복구 파일을 사용 중입니다.", "Another editor is using this recovery file." } },
     { "file.open",       { "打开工程", "開啟工程", "プロジェクトを開く", "프로젝트 열기", "Open Project" } },
     { "file.save",       { "保存工程", "儲存工程", "プロジェクトを保存", "프로젝트 저장", "Save Project" } },
     { "file.saveAs",     { "工程另存为…", "工程另存新檔…", "プロジェクトを別名で保存…", "프로젝트 다른 이름으로 저장…", "Save Project As…" } },
     { "native.range", { "范围", "範圍", "範囲", "범위", "Range" } },
     { "native.envelope", { "包络", "包絡", "エンベロープ", "엔벨로프", "Envelope" } },
     { "native.renderedWave", { "合成波形", "合成波形", "合成波形", "합성 파형", "Rendered waveform" } },
+    { "native.sourceWave", { "原始波形预览", "原始波形預覽", "元波形プレビュー", "원본 파형 미리보기", "Source waveform preview" } },
+    { "native.actualWave", { "渲染后真实波形", "渲染後真實波形", "レンダリング後の実波形", "렌더링된 실제 파형", "Actual rendered waveform" } },
     { "native.pitchLine", { "音高线", "音高線", "ピッチカーブ", "피치 곡선", "Pitch curve" } },
     { "native.display", { "显示", "顯示", "表示", "표시", "Display" } },
     { "native.velocityHelp", { "辅音速度：100 为基准，增大会缩短起音；保持音符总时长和源选区。", "子音速度：100 為基準，增大会縮短起音；保留音符總時長和來源範圍。", "子音速度：100が基準。値を上げるとアタックが短くなります。ノート全長と素材範囲は維持されます。", "자음 속도: 100이 기준입니다. 높이면 어택이 짧아지며 음표 길이와 원본 범위는 유지됩니다.", "Consonant velocity: 100 is neutral; higher values shorten the onset while retaining note duration and source range." } },
@@ -87,6 +99,17 @@ const std::unordered_map<std::string, Row> strings {
     { "view.zoomOut",    { "缩小", "縮小", "縮小", "축소", "Zoom Out" } },
     { "view.zoomFit",    { "适合工程", "符合工程", "プロジェクト全体", "프로젝트 맞춤", "Fit Project" } },
     { "view.showWaveforms", { "显示波形", "顯示波形", "波形を表示", "파형 표시", "Show Waveforms" } },
+    { "view.showLyrics", { "显示歌词", "顯示歌詞", "歌詞を表示", "가사 표시", "Show Lyrics" } },
+    { "native.allowOverlap", { "允许音频重叠", "允許音訊重疊", "オーディオの重なりを許可", "오디오 겹침 허용", "Allow audio overlap" } },
+    { "native.overlapHelp", { "当前轨道的音频重叠开关。默认禁止重叠；关闭时前段不变，裁掉后段重叠的开头并保留其结束位置。可一次撤销。", "目前軌道的音訊重疊開關。關閉時前段不變，裁掉後段重疊的開頭並保留結束位置。可復原。", "現在のトラックの重なり設定。オフにすると前の素材を保持し、後の素材の重なる先頭を切り取ります。終了位置は維持します。", "현재 트랙의 겹침 설정. 끄면 앞 소재는 유지하고 뒤 소재의 겹치는 시작 부분을 잘라냅니다. 끝 위치는 유지됩니다.", "Current track: off prevents overlap. Turning off trims the later source's overlapping head, keeps its end and leaves the earlier source unchanged. One undo restores the edit." } },
+    { "native.overlap", { "重叠", "重疊", "重なり", "겹침", "Overlap" } },
+    { "native.overlapMix", { "同时发声", "同時發聲", "同時再生", "동시 재생", "Simultaneous audio" } },
+    { "native.overlapEarlier", { "前段", "前段", "先の素材", "앞 소재", "Earlier" } },
+    { "native.overlapLater", { "后段", "後段", "後の素材", "뒤 소재", "Later" } },
+    { "native.linkAudio", { "粘连音频", "黏連音訊", "オーディオを連結する", "오디오 연결", "Link Audio" } },
+    { "native.disconnectAudio", { "断开音频", "斷開音訊", "オーディオを切り離す", "오디오 연결 해제", "Disconnect Audio" } },
+    { "native.restoreOriginalPitch", { "还原为原始素材音高", "還原為原始素材音高", "元の素材のピッチに戻す", "원본 소재 피치로 복원", "Restore Original Source Pitch" } },
+    { "native.originalPitchLine", { "显示原始音高线（虚线）", "顯示原始音高線（虛線）", "元ピッチを表示（破線）", "원본 피치 표시 (점선)", "Show Original Pitch (Dashed)" } },
     { "view.vZoomIn", { "纵向放大", "縱向放大", "縦方向に拡大", "세로 확대", "Zoom In Vertically" } },
     { "view.vZoomOut", { "纵向缩小", "縱向縮小", "縦方向に縮小", "세로 축소", "Zoom Out Vertically" } },
     { "help.about",      { "关于 HachiShifter", "關於 HachiShifter", "HachiShifterについて", "HachiShifter 정보", "About HachiShifter" } },
@@ -362,6 +385,12 @@ const std::unordered_map<std::string, Row> strings {
     ,{ "asset.melodyneNoRegister", { "不登记", "不登記", "登録しない", "등록 안 함", "Don't register" } }
     ,{ "asset.melodyneFolderDone", { "已登记 {count} 个素材文件夹，可在素材管理器中复用。", "已登記 {count} 個素材資料夾，可在素材管理器中重複使用。", "{count} 個の素材フォルダーを登録しました。素材マネージャーで再利用できます。", "소재 폴더 {count}개를 등록했습니다. 소재 관리자에서 재사용할 수 있습니다.", "Registered {count} material folder(s), reusable in the Asset Manager." } }
     ,{ "settings.browse", { "浏览…", "瀏覽…", "参照…", "찾아보기…", "Browse…" } }
+    ,{ "settings.utauOutputEngine", { "UTAU 默认输出引擎", "UTAU 預設輸出引擎", "UTAU 既定出力エンジン", "UTAU 기본 출력 엔진", "Default UTAU Output Engine" } }
+    ,{ "output.choose", { "选择输出引擎", "選擇輸出引擎", "出力エンジンを選択", "출력 엔진 선택", "Choose Output Engine" } }
+    ,{ "output.inherit", { "跟随设置", "跟隨設定", "設定に従う", "설정 따르기", "Follow Settings" } }
+    ,{ "output.resampler", { "重采样器…", "重取樣器…", "リサンプラー…", "리샘플러…", "Resampler…" } }
+    ,{ "output.toolsHelp", { "路径留空时使用设置中的默认值；默认 wavtool 留空时使用内置合成。", "路徑留空時使用設定中的預設值；預設 wavtool 留空時使用內建合成。", "空欄は既定設定を使用。既定 wavtool が空欄の場合は内蔵合成。", "빈 경로는 기본 설정 사용. 기본 wavtool이 비어 있으면 내장 합성 사용.", "Empty paths follow Settings; an empty default wavtool uses internal assembly." } }
+    ,{ "output.invalidTool", { "指定的工具文件不存在，请重新选择。", "指定的工具檔案不存在，請重新選擇。", "指定したツールが見つかりません。", "선택한 도구 파일이 없습니다.", "The selected tool file does not exist." } }
     ,{ "settings.utauVoicebank", { "UTAU 默认音源文件夹", "UTAU 預設音源資料夾", "UTAU 既定音源フォルダー", "UTAU 기본 음원 폴더", "Default UTAU Voicebank" } }
     ,{ "settings.utauWavtool", { "UTAU 合成器 / wavtool（可选）", "UTAU 合成器 / wavtool（可選）", "UTAU 合成ツール / wavtool（任意）", "UTAU 합성기 / wavtool (선택)", "UTAU Synthesis Tool / wavtool (optional)" } }
     ,{ "settings.chooseUtauVoicebank", { "选择 UTAU 音源文件夹", "選擇 UTAU 音源資料夾", "UTAU 音源フォルダーを選択", "UTAU 음원 폴더 선택", "Choose UTAU Voicebank Folder" } }

@@ -3,8 +3,10 @@
 #include "I18n.h"
 #include "AudioEngine.h"
 #include "ProjectModel.h"
+#include "backend/UtauRenderer.h"
 #include "SampleSettings.h"
 #include "NoteDanceAnimation.h"
+#include "OtoRegionGuides.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <array>
 #include <functional>
@@ -83,6 +85,11 @@ public:
     // without a message loop; the offline check reads the roll straight
     // after editing it, so it needs the snapshot brought up to date now.
     void diagnosticRefresh();
+    [[nodiscard]] juce::Rectangle<float> diagnosticOverlapSourceBounds(const juce::String& id) const
+    { for(const auto& hit:nativeOverlapSourceHits)if(hit.noteId==id)return hit.bounds;return {}; }
+    [[nodiscard]] std::size_t diagnosticOverlapCardCount() const { return nativeOverlapHints.size(); }
+    // Update immediately before focusing notes created by a synchronous edit.
+    void refreshFromModel();
     ~PianoRollComponent() override;
 
     void setPixelsPerSecond(float value);
@@ -105,6 +112,10 @@ public:
         std::shared_ptr<const std::vector<UtauNoteWaveform>> waveforms);
     // Its own switch, separate from the source-audio waveforms: off means off,
     // whatever has been rendered.
+    void setShowNativeRenderedWaveforms(bool show);
+    void setNativeClipWaveforms(std::shared_ptr<const std::vector<NativeRenderedWaveform>> waveforms);
+    void setShowNativeWaveforms(bool show) { showNativeWaveforms = show; repaint(); }
+    void setShowLyrics(bool show) { showLyrics = show; repaint(); }
     void setShowUtauWaveforms(bool enabled);
 
     // A line of lyrics, one word per note.  Whitespace separates them, and
@@ -132,6 +143,7 @@ public:
     // pitch line without changing the analysed source contour; on UTAU tracks
     // it is the same anchor baseline the renderer follows.
     void flattenPitchLine(const juce::String& noteId);
+    void restoreOriginalPitch(const juce::String& noteId);
     // A frequency as a MIDI pitch, and back.  Twelve-tone equal temperament
     // against concert A4 = 440 Hz, which is what the roll's vertical axis is.
     //
@@ -230,6 +242,8 @@ public:
     // put the line back where it belongs.
     void setShowPitchLine(bool enabled);
     [[nodiscard]] bool showsPitchLine() const { return showPitchLine; }
+    void setShowOriginalPitchLine(bool show) { showOriginalPitchLine = show; repaint(); }
+    [[nodiscard]] bool showsOriginalPitchLine() const { return showOriginalPitchLine; }
     [[nodiscard]] juce::Path diagnosticDiffSingerPitchReference(const juce::String& noteId) const;
     // Test seam: lets a harness paint the same strip with and without the
     // off-screen skip, which is the only way to tell a note that was correctly
@@ -446,6 +460,14 @@ public:
     // Gives a note that has just been given a lyric the shape it is already
     // being drawn with, so it sounds like its neighbours straight away.
     void ensureDefaultEnvelope(const juce::String& noteId);
+    int applyTailFade(int mode);
+    [[nodiscard]] std::vector<OtoRegionGuide> otoRegionGuidesFor(const juce::String& noteId) const;
+    [[nodiscard]] std::vector<AmplitudeEnvelopePoint> tailFadeBaseEnvelope(const juce::String& id) const;
+    [[nodiscard]] std::optional<backend::UtauTailFadeSpan> headEnvelopeSpanFor(const juce::String& noteId) const;
+    [[nodiscard]] std::optional<backend::UtauTailFadeSpan> tailFadeSpanFor(const juce::String& noteId) const;
+    [[nodiscard]] std::optional<backend::UtauTailFadeSpan> diagnosticTailFadeSpan(const juce::String& noteId) const {return tailFadeSpanFor(noteId);}
+    [[nodiscard]] std::vector<AmplitudeEnvelopePoint> diagnosticTailFadePicture(const juce::String& noteId) const;
+
     // A loudness envelope preset, point by point.  Each point is placed by
     // what a note is laid out by rather than by clock time -- after the moment
     // it starts sounding, after its beat, or before the moment it stops -- so
@@ -547,6 +569,7 @@ public:
     void setFlagEditMode(FlagEditMode mode);
     void setFlagLaneFlag(const juce::String& flag);
     void setDiffSingerFlagContext(bool enabled, const juce::var& capabilities);
+    void setHifisamplerFlagContext(bool enabled);
     bool setDiffSingerParameterLayer(bool actual);
     [[nodiscard]] bool hasDiffSingerParameters() const;
     [[nodiscard]] juce::Rectangle<float> flagLaneLayerBounds(bool actual) const;
@@ -624,6 +647,7 @@ public:
     // what a curve is seeded with.
     static constexpr float flagCurveDefault = 0.0f;
     bool diffSingerFlagContext = false;
+    bool hifisamplerFlagContext = false;
     juce::var diffSingerFlagCapabilities;
     // Which items the handle's menu offers.  The last handle cannot be
     // deleted -- a curve with none has nothing to say, and turning the switch
@@ -694,6 +718,7 @@ public:
         const juce::String& saved, const juce::String& name,
         const juce::StringArray& values);
     std::function<void(const juce::String&)> onNoteSelected;
+    std::function<void(const juce::String&)> onEditRejected;
     std::function<void(const juce::String&)> onNoteAliasCommitted;
     // Open the four-region / oto editor for this note's voicebank entry.
     std::function<void(const juce::String&)> onOpenRegionEditor;
@@ -845,6 +870,7 @@ private:
     [[nodiscard]] std::optional<ConsonantHandleInfo> consonantHandleAt(
         juce::Point<float> position) const;
     [[nodiscard]] double noteEditQuantumSeconds() const;
+    [[nodiscard]] double nativeEdgeDragDelta(double originalSeconds, double travelSeconds, bool free) const;
     [[nodiscard]] int noteEditDivision() const;
     void beginInlineAliasEdit(const NoteHit& hit);
     void finishInlineAliasEdit(bool accept);
@@ -967,6 +993,7 @@ private:
                                        double timeSeconds);
     [[nodiscard]] std::vector<AmplitudeEnvelopePoint> amplitudeEnvelopeFor(
         const NoteData& note, double absoluteStart) const;
+    [[nodiscard]] std::vector<AmplitudeEnvelopePoint> effectiveAmplitudeEnvelope(const NoteData& note,double absoluteStart,const std::vector<AmplitudeEnvelopePoint>& base) const;
     [[nodiscard]] static float amplitudeDbAt(
         const std::vector<AmplitudeEnvelopePoint>& points, double timeSeconds);
     // One millisecond of a note's picture: the piece as the mix fades it,
@@ -1058,10 +1085,26 @@ private:
     // enabled from the view menu when source detail is useful.
     bool showWaveforms = false;
     bool showUtauWaveforms = false;
+    bool showNativeWaveforms = true;
+    bool showLyrics = true;
+    bool showNativeRenderedWaveforms = false;
+    std::shared_ptr<const std::vector<NativeRenderedWaveform>> nativeWaveforms;
+    std::unordered_map<std::uint64_t, const NativeRenderedPeaks*> nativePeaksByHash;
+    std::unordered_map<const ClipData*, std::uint64_t> nativeClipHashes;
+    [[nodiscard]] bool nativeNoteTimingEnabled(const juce::String& id) const;
+    void rebuildNativeWaveformHashes();
+    [[nodiscard]] const NativeRenderedPeaks* nativeRenderedPeaksFor(const ClipData&) const;
     std::shared_ptr<const std::vector<UtauNoteWaveform>> utauWaveforms;
     std::unordered_map<std::string, std::vector<backend::UtauPhonemeSpan>> diffSingerPhonemes;
     std::unordered_set<std::string> diffSingerNoteIds;
     void drawUtauNoteWaveforms(juce::Graphics& g);
+    void drawNativeNoteWaveforms(juce::Graphics& g);
+    [[nodiscard]] juce::Rectangle<float> nativeWaveformLabelBounds(
+        const TrackData&, const ClipData&, const NoteData&, juce::Rectangle<float>) const;
+    void drawNativeAudioOverlaps(juce::Graphics& g);
+    std::vector<std::pair<juce::Rectangle<float>,juce::String>> nativeOverlapHints;
+    struct NativeOverlapSourceHit { juce::Rectangle<float> bounds;juce::String noteId; };
+    std::vector<NativeOverlapSourceHit> nativeOverlapSourceHits;
     void drawNoteHints(juce::Graphics& g) const;
     // The rendered audio behind the loudness envelope, in the lane's own
     // percent scale.  Returns how many notes it drew, which is what a check
@@ -1080,6 +1123,7 @@ private:
     bool showNoteRange = true;
     bool showEnvelope = false;
     bool showPitchLine = true;
+    bool showOriginalPitchLine = true;
     Tool tool = Tool::note;
     juce::String focusedClip;
     juce::String focusedTrack;
@@ -1091,7 +1135,7 @@ private:
     float previewMidi = 0.0f;
     float dragStartY = 0.0f;
     bool finePitchDrag = false;
-    enum class DragMode { none, pitch, moveUtauNote,
+    enum class DragMode { none, pitch, moveUtauNote, moveNativeNote, resizeNativeLeft, resizeNativeRight,
                           resizeLeft, resizeRight, consonantLeadIn,
                           drawPitch, linePitch, drawNewNote,
                           pointPitch, amplitudePoint, flagPoint, continuousFlag, jieSplit, vibrato,
@@ -1125,6 +1169,7 @@ private:
     double previewDurationSeconds = 0.0;
     double previewMoveDeltaSeconds = 0.0;
     double minimumMoveDeltaSeconds = 0.0;
+    float minimumDragPitchDelta=-127.f, maximumDragPitchDelta=127.f;
     double resizeMaximumDurationSeconds = 1.0e12;
     double consonantNoteAbsoluteStart = 0.0;
     double consonantScaledPreutterance = 0.0;
@@ -1272,5 +1317,6 @@ private:
     void updateMarqueeAutoScroll(juce::Point<float> position);
     void timerCallback() override;
     bool marqueeAddsToSelection = false;
+    bool marqueeShowsContextMenu = false;
 };
 }

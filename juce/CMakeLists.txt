@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 # Public version changes require an explicit user request; small updates use docs/updates.md.
-project(HachiShifterNext VERSION 0.2.3 LANGUAGES C CXX)
+project(HachiShifterNext VERSION 0.2.4 LANGUAGES C CXX)
 
 option(HACHI_ENABLE_ASAN "Enable AddressSanitizer for native crash diagnosis" OFF)
 
@@ -272,6 +272,7 @@ target_sources(HachiShifterNext PRIVATE
     src/backend/NativeAnalyzer.cpp
     src/backend/NativeAnalyzer.h
     src/backend/AnalysisService.cpp
+    src/backend/OtoAudioAnalysis.cpp
     src/backend/AnalysisService.h
     src/backend/GameAnalyzer.cpp
     src/backend/GameAnalyzer.h
@@ -381,6 +382,17 @@ add_custom_command(TARGET HachiShifterNext POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/english_g2p.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/requirements.txt"
         "$<TARGET_FILE_DIR:HachiShifterNext>/engines/diffsinger")
+
+# Keep locally prepared analysis weights beside the binary, so builds and
+# portable packages use the same default without absolute machine paths.
+foreach(analysis_pack game/medium fcpe)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../models/${analysis_pack}")
+        add_custom_command(TARGET HachiShifterNext POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/../models/${analysis_pack}"
+                "$<TARGET_FILE_DIR:HachiShifterNext>/models/${analysis_pack}")
+    endif()
+endforeach()
 add_custom_command(TARGET HachiShifterNext POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/pronunciation-data"

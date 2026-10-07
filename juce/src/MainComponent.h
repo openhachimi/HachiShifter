@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AudioEngine.h"
+#include "ProjectRecovery.h"
 #include "I18n.h"
 #include "PianoRollComponent.h"
 #include "SettingsComponent.h"
@@ -241,9 +242,13 @@ public:
         // asked for: they exist only for notes that have been rendered and
         // not touched since, so most of the time there is nothing to draw.
         bool utauWaveform = false;
+        bool nativeRenderedWaveform = false;
+        bool nativeWaveform = true; // warped source preview, available before synthesis
         // The line the note is sung along.  On by default: without it the
         // roll shows where notes are but not what they do.
         bool pitchLine = true;
+        bool originalPitchLine = true; // unedited source pitch, drawn as a dashed reference
+        bool lyrics = true;
     };
     // The settings keys are the ones the two buttons already used, so a
     // project opened after this change still shows what it showed before.
@@ -252,7 +257,7 @@ public:
     static void storeViewOptions(juce::PropertySet& properties, const ViewOptions& options);
     // Menu ids are positions in one list, so the menu that is shown and the
     // answer to "what was clicked" cannot drift apart.
-    [[nodiscard]] static ViewOptions afterViewMenuChoice(ViewOptions options, int chosen);
+    [[nodiscard]] static ViewOptions afterViewMenuChoice(ViewOptions options, int chosen, bool utauEditorActive = true);
     // Only the UTAU modes render note by note, so only they have per-note
     // audio to draw; elsewhere that item is shown greyed rather than dropped,
     // so the menu keeps its shape and the tick still says what is set.
@@ -334,6 +339,7 @@ public:
     void mouseUp(const juce::MouseEvent& event) override;
     void openExternalFile(const juce::File& file);
     void requestClose(std::function<void()> approved);
+    void startProjectRecovery();
     bool keyPressed(const juce::KeyPress& key) override;
     bool keyStateChanged(bool isKeyDown) override;
     bool isInterestedInFileDrag(const juce::StringArray& files) override;
@@ -365,8 +371,11 @@ public:
     void diagnosticSelectNotes(const std::vector<juce::String>& ids) { pianoRoll.setSelectedNoteIds(ids); }
     [[nodiscard]] juce::String diagnosticStatusText() const { return statusLabel.getText(); }
     [[nodiscard]] ProjectModel& diagnosticProject() { return project; }
+    [[nodiscard]] PianoRollComponent& diagnosticPianoRoll() { return pianoRoll; }
+    [[nodiscard]] TimelineComponent& diagnosticTimeline() { return timeline; }
     [[nodiscard]] PianoRollComponent::Tool diagnosticTool() const;
     void diagnosticRefreshControls();
+    [[nodiscard]] juce::ToggleButton& diagnosticNativeAudioOverlapButton() { return nativeAudioOverlapButton; }
     bool diagnosticDiffSingerExpressionLane();
     void diagnosticLoadDiffSingerBank(const juce::String& trackId, const juce::File& directory);
     bool diagnosticPitchPersistence(const juce::File& original, const juce::File& output, bool reopenOnly);
@@ -397,18 +406,36 @@ public:
     [[nodiscard]] bool diagnosticTimelineSelection(const juce::File& directory);
     [[nodiscard]] bool diagnosticClipMerge(const juce::File& directory);
     [[nodiscard]] bool diagnosticClipGainKnob(const juce::File& directory);
+    [[nodiscard]] bool diagnosticNativeRenderedWaveform(const juce::File& directory, const juce::File& modelDirectory = {});
+    [[nodiscard]] bool diagnosticNativeWaveformPreview(const juce::File& directory);
+    [[nodiscard]] bool diagnosticNativeNoteMove(const juce::File& directory);
+    [[nodiscard]] bool diagnosticNativeNoteCopyPaste(const juce::File& directory);
+    [[nodiscard]] bool diagnosticNativeSourcePitch(const juce::File& directory,
+                                                   const juce::File& models);
     [[nodiscard]] bool diagnosticTimelineNotes(const juce::File& directory);
     [[nodiscard]] bool diagnosticTrackGainEnvelope(const juce::File& directory);
+    [[nodiscard]] bool diagnosticAdvancedEnvelope(const juce::File& directory);
+    [[nodiscard]] bool diagnosticModelessOto(const juce::File& directory);
+    [[nodiscard]] bool diagnosticOtoContinuity(const juce::File& directory,const juce::File& profileBank = {});
+    [[nodiscard]] bool diagnosticAdvancedEnvelopePanel(const juce::File& directory);
     [[nodiscard]] bool diagnosticEmptyTuningClip(const juce::File& directory);
     [[nodiscard]] bool diagnosticClipEditorScope(const juce::File& directory);
     [[nodiscard]] bool diagnosticNoteHints(const juce::File& directory);
+    [[nodiscard]] bool diagnosticCrossRegionEditing(const juce::File& directory);
+    [[nodiscard]] bool diagnosticHamoodPersistence(const juce::File& directory);
+    [[nodiscard]] bool diagnosticProjectSafety(const juce::File& directory);
     [[nodiscard]] bool diagnosticNormalDisplay(const juce::File& directory);
     [[nodiscard]] bool diagnosticIndependentZoom();
     [[nodiscard]] bool diagnosticNsfPicker();
+    [[nodiscard]] bool diagnosticOutputEngine(const juce::File& folder, const juce::File& modelFolder, const juce::File& wavtool);
 
 private:
     [[nodiscard]] juce::PopupMenu clipContextMenu(const juce::String& clipId, double seconds);
     void clipContextMenuItemChosen(int result, const juce::String& clipId, double seconds);
+    void addOutputEngineMenu(juce::PopupMenu& menu, const juce::String& trackId);
+    bool outputEngineItemChosen(int result, const juce::String& trackId);
+    void showOutputEngineMenu(const juce::String& trackId, juce::Point<int> at);
+    void showTrackResamplerSettings(const juce::String& trackId);
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void timerCallback() override;
     void updateNoteDanceKeys();
@@ -446,6 +473,12 @@ private:
     // 播放原音 in either OTO window: this window's output device, with the
     // song stopped before the recording starts.
     void attachOtoPlayback(OtoWaveformEditorComponent& editor);
+    void stopOtoPreviews();
+    void startPreparedPlayback();
+    void refreshAfterVoicebankChange();
+    std::uint64_t seenVoicebankFilesRevision = SampleSettings::voicebankFilesRevision();
+    ModelessWindows voicebankWindows, noteOtoWindows;
+    std::vector<juce::Component::SafePointer<OtoWaveformEditorComponent>> otoPreviews;
     bool bindDefaultUtauVoicebank(const juce::String& trackId);
     void prepareUtauTrackForNote(const juce::String& noteId);
     void commitNoteAlias();
@@ -458,7 +491,11 @@ private:
     void refreshCollapseIcon();
     void newProject();
     void openProject();
-    void loadProjectFile(const juce::File& file);
+    void replaceImportedProject(ProjectData replacement);
+    bool loadProjectFile(const juce::File& file, bool recovering = false);
+    void showRecoveryDialog(bool automatic = false);
+    void discardProjectRecovery();
+    bool restoreProjectRecovery(const ProjectRecovery::Entry& entry);
     void saveProject(std::function<void(bool)> completion = {});
     void saveProjectAs(std::function<void(bool)> completion = {});
     bool saveProjectTo(const juce::File& file);
@@ -494,10 +531,11 @@ private:
     void scheduleAnalysis(const juce::File& file, const juce::String& clipId);
     void importMidi();
     void exportMidi();
+    void exportUst();
     // A UTAU project file, which arrives as a plain UTAU track.
     void importUst();
     void loadUstFile(const juce::File& file);
-    void importUstFile(const juce::File& file, ProjectModel::UstImportMode mode);
+    void importUstFile(const juce::File& file, ProjectModel::UstImportMode mode, int encoding = 0);
     void importMelodyne();
     void showSettings(int page = 0);
     void applyPreferences();
@@ -577,12 +615,15 @@ private:
     juce::TextButton breathParamButton;
     juce::TextButton tensionParamButton;
     juce::TextButton formantParamButton;
-    juce::TextButton volumeParamButton;
+    ToolButton volumeParamButton;
     // Per-frame flags for the selected notes, and the lane that draws the
     // curve.  The lane is only reachable once the notes are switched over:
     // with flags held as a single number there is no curve to show.
     ToolButton flagCurveButton, flagEnvelopeButton;
+    DropdownButton advancedEnvelopeButton;
+    void showAdvancedEnvelopeMenu();
     DropdownButton showViewMenuButton;
+    juce::ToggleButton nativeAudioOverlapButton;
     ViewOptions viewOptions;
     void showViewMenu();
     void applyViewOptions();
@@ -599,6 +640,10 @@ private:
     juce::Label stretchLabel;
     juce::Label renderOrderLabel;
     juce::Label statusLabel;
+    juce::Label selectionSummaryLabel;
+    void refreshSelectionSummary();
+    std::vector<juce::String> selectionSummaryIds;
+    std::uint64_t selectionSummaryRevision=std::numeric_limits<std::uint64_t>::max();
     juce::Label sourceEditHint;
     juce::ComboBox sampleRegionSelector;
     juce::TextEditor sampleAliasEditor;
@@ -699,12 +744,16 @@ private:
     std::unordered_set<std::string> accumulatedUtauNoteIds;
     juce::String copiedClipId;
     std::vector<NoteData> copiedNotes;
+    std::vector<ClipData> copiedNativeClips;
+    std::vector<NativeConnection> copiedNativeConnections;
     // Where the copied block sat on the timeline.  Pasting without saying
     // where puts it back at the same moment, on whichever track is in front.
     double copiedOriginSeconds = 0.0;
     // The track it was copied from.  Pasting back onto that same track means
     // something different from carrying it across to another one.
     juce::String copiedTrackId;
+    std::unique_ptr<ProjectRecovery> projectRecovery;
+    juce::String lastRecoveryError;
     juce::File currentProjectFile;
     juce::StringArray recentProjectPaths;
     std::uint64_t savedProjectRevision = 0;

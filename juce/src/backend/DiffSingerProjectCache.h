@@ -34,7 +34,7 @@ inline bool prepare(const juce::File& root) {
     if (root.exists() && (!root.isDirectory() || root.getNumberOfChildFiles(juce::File::findFilesAndDirectories)>0)) return false;
     if(root.createDirectory().failed())return false;
     auto* info=new juce::DynamicObject();info->setProperty("format","HachiShifter DiffSinger cache");
-    info->setProperty("version",formatVersion);info->setProperty("editor_version","0.2.3");
+    info->setProperty("version",formatVersion);info->setProperty("editor_version",JUCE_APPLICATION_VERSION_STRING);
     return root.getChildFile("cache-info.json").replaceWithText(juce::JSON::toString(juce::var(info)));
 }
 inline void removeTemporary(const juce::File& root,const juce::String& token) {

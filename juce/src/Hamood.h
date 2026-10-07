@@ -8,6 +8,7 @@ struct ManualSection
     int startBar = 1, endBar = 8; // Inclusive, ruler numbering; bar 0 can cover a pickup.
     int tonic = 0;
     bool minor = false;
+    bool confirmed = true;
 };
 // Native implementation inspired by HARMOLOID's workflow, not a port of its code.
 struct Chord { double start=0,end=0,score=0; juce::String label; std::vector<int> pitches; };

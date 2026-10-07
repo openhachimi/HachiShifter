@@ -32,7 +32,7 @@ def main() -> int:
             "usage: game_fcpe_smoke.py HachiShifterNext GAME_DIR FCPE.onnx VOCAL.wav"
         )
     binary, game_dir, fcpe, vocal = map(lambda value: pathlib.Path(value).resolve(), sys.argv[1:])
-    variant = "small" if game_dir.name.lower() == "small" else "large"
+    variant = game_dir.name.lower() if game_dir.name.lower() in {"small", "medium", "large"} else "medium"
     env = os.environ.copy()
     env["HACHISHIFTER_GAME_MODEL"] = variant
     env[

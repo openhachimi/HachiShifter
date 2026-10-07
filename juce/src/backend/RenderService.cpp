@@ -3,6 +3,7 @@
 #include "NsfHifiganRenderer.h"
 #include "Llsm2Renderer.h"
 #include "WorldRenderer.h"
+#include "DiffSingerRenderer.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <signalsmith-stretch.h>
 #include <algorithm>
@@ -17,6 +18,30 @@
 
 namespace hachi::backend
 {
+bool canPreserveNativeSource(const Mld5FileRenderRequest& request,
+                             double sampleRate, int sourceSamples, int targetSamples)
+{
+    if (!(sampleRate > 0.0) || !request.preserveUneditedSource
+        || request.exportComponent != WavExportComponent::full || request.normalizeVolume)
+        return false;
+    const auto neutral = [](const auto& values, float expected)
+    {
+        return std::all_of(values.begin(), values.end(), [&](float value)
+        { return std::isfinite(value) && std::abs(value - expected) <= 1.0e-4f; });
+    };
+    const auto pitchUnchanged = request.sourceMidi.size() == request.targetMidi.size()
+        && std::equal(request.sourceMidi.begin(), request.sourceMidi.end(), request.targetMidi.begin(),
+            [](float sourcePitch, float targetPitch)
+            { return std::isfinite(sourcePitch) && std::isfinite(targetPitch)
+                && std::abs(sourcePitch - targetPitch) <= 1.0e-4f; });
+    const auto timeUnchanged = sourceSamples == targetSamples
+        && std::all_of(request.timeMap.begin(), request.timeMap.end(), [&](const auto& point)
+            { return std::isfinite(point.sourceSeconds) && std::isfinite(point.targetSeconds)
+                && std::abs(point.sourceSeconds - point.targetSeconds) <= .5 / sampleRate; });
+    return timeUnchanged && pitchUnchanged && neutral(request.formantSemitones, 0)
+        && neutral(request.tension, 0) && neutral(request.robustPitchCurve, 0);
+}
+
 namespace
 {
 std::timed_mutex llsmRenderMutex;
@@ -734,6 +759,20 @@ public:
 
         const auto targetSamples = std::max(1, static_cast<int>(std::llround(
             std::max(0.001, request.targetDurationSeconds) * reader->sampleRate)));
+        const auto neutral = [](const auto& values, float expected)
+        {return std::all_of(values.begin(),values.end(),[&](float value)
+            {return std::isfinite(value)&&std::abs(value-expected)<=1.0e-4f;});};
+        if (canPreserveNativeSource(request, reader->sampleRate, sourceSamples, targetSamples))
+        {
+            // Detection and display do not edit audio. Gain/breath edits alone
+            // can be applied to PCM without rebuilding its spectrum or phase.
+            if (!neutral(request.noteGain,1) || !neutral(request.breath,0))
+                applyExpressionAndTension(source,reader->sampleRate,request.framePeriodMs,
+                    request.targetMidi,request.noteGain,{},request.breath);
+            if (shouldExit()) return jobHasFinished;
+            if (completion) completion({std::move(source),reader->sampleRate,"native-source-preserved"});
+            return jobHasFinished;
+        }
         // Robust pitch curve is a native analysis stabilizer, not a UTAU flag.
         // NSF has no source-MIDI input tensor, so apply the same corrected
         // target curve before its F0 conversion instead of silently dropping
@@ -877,7 +916,9 @@ public:
             auto neural = NsfHifiganRenderer::render(source, reader->sampleRate,
                 targetSamples, request.framePeriodMs, request.targetMidi,
                 request.formantSemitones, neuralTimeMap, request.hifiganModelDirectory,
-                request.inference, stretchOrder, request.normalizeVolume, edgeGuard);
+                request.inference, stretchOrder, request.normalizeVolume, edgeGuard,
+                [this] { return shouldExit(); });
+            if (shouldExit()) return jobHasFinished;
             if (neural.usedModel && neural.buffer.getNumSamples() == targetSamples)
             {
                 rendered = std::move(neural.buffer);
@@ -988,7 +1029,8 @@ public:
     JobStatus runJob() override
     {
         if (shouldExit()) return jobHasFinished;
-        request.cancelled = [this] { return shouldExit(); };
+        const auto cancelled = request.cancelled;
+        request.cancelled = [this, cancelled] { return shouldExit() || (cancelled && cancelled()); };
         auto rendered = UtauRenderer::render(request);
         if (shouldExit()) return jobHasFinished;
         if (rendered.warning.isNotEmpty())
@@ -1019,6 +1061,8 @@ public:
     JobStatus runJob() override
     {
         if (shouldExit()) return jobHasFinished;
+        const auto cancelled = request.cancelled;
+        request.cancelled = [this, cancelled] { return shouldExit() || (cancelled && cancelled()); };
         auto rendered = renderNsfUtauPhrase(request, modelDirectory, execution);
         if (shouldExit()) return jobHasFinished;
         if (rendered.warning.isNotEmpty())
@@ -1037,7 +1081,7 @@ private:
 };
 
 RenderService::RenderService()
-    : pool(std::max(1, juce::SystemStats::getNumCpus() - 1))
+    : queue(std::clamp(juce::SystemStats::getNumCpus() - 1, 1, 4))
 {
 }
 
@@ -1048,28 +1092,42 @@ RenderService::~RenderService()
 
 void RenderService::renderMld5(Mld5RenderRequest request, Completion completion)
 {
-    pool.addJob(new RenderJob(std::move(request), std::move(completion)), true);
+    queue.add(std::make_unique<RenderJob>(std::move(request), std::move(completion)));
 }
 
-void RenderService::renderMld5File(Mld5FileRenderRequest request, FileCompletion completion)
+void RenderService::renderMld5File(Mld5FileRenderRequest request, FileCompletion completion,
+                                 RenderSchedule schedule)
 {
-    pool.addJob(new FileRenderJob(std::move(request), std::move(completion)), true);
+    const auto lane = request.pitchBackend == PitchRenderBackend::llsm2 ? RenderLane::llsm
+        : request.pitchBackend == PitchRenderBackend::nsfHifigan ? RenderLane::neural : RenderLane::parallel;
+    queue.add(std::make_unique<FileRenderJob>(std::move(request), std::move(completion)),
+              std::move(schedule), lane);
 }
 
-void RenderService::renderUtau(UtauRenderRequest request, FileCompletion completion)
+void RenderService::renderUtau(UtauRenderRequest request, FileCompletion completion,
+                              RenderSchedule schedule)
 {
-    pool.addJob(new UtauRenderJob(std::move(request), std::move(completion)), true);
+    const auto ds = DiffSingerRenderer::isVoicebank(request.voicebankDirectory);
+    if (std::isfinite(schedule.startSeconds))
+        request.priorityPosition = [clock = queue.positionClock()]
+        { return clock->load(std::memory_order_relaxed); };
+    const auto lane = ds ? RenderLane::diffSinger
+        : request.resamplerExecutable.existsAsFile() ? RenderLane::classicUtau : RenderLane::parallel;
+    queue.add(std::make_unique<UtauRenderJob>(std::move(request), std::move(completion)),
+              std::move(schedule), lane);
 }
 
 void RenderService::renderNsfUtau(UtauRenderRequest request, juce::File modelDirectory,
-                                  OrtExecutionConfig execution, FileCompletion completion)
+                                  OrtExecutionConfig execution, FileCompletion completion,
+                                  RenderSchedule schedule)
 {
-    pool.addJob(new NsfUtauRenderJob(std::move(request), std::move(modelDirectory),
-                                     std::move(execution), std::move(completion)), true);
+    queue.add(std::make_unique<NsfUtauRenderJob>(std::move(request), std::move(modelDirectory),
+                                     std::move(execution), std::move(completion)),
+              std::move(schedule), RenderLane::neural);
 }
 
 void RenderService::cancelAll()
 {
-    pool.removeAllJobs(true, 10'000);
+    queue.cancelAll();
 }
 }

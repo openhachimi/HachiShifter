@@ -12,6 +12,12 @@ namespace hachi::backend
 struct UstNote
 {
     // UST measures length in ticks, 480 to a quarter note, always.
+    int sourceSectionIndex = -1;
+    juce::String sourceSection;
+    bool mode2 = true;
+    std::optional<double> modulation, stpMs;
+    double mode1StartMs = 0;
+    std::vector<double> mode1Cents;
     int lengthTicks = 480;
     juce::String lyric;
     int noteNum = 60;
@@ -79,6 +85,8 @@ struct UstNote
 
 struct UstProject
 {
+    juce::String sourceText, sourceEncoding, sourceBytes;
+    bool sourceBom = false, mode2 = true;
     double tempo = 120.0;
     juce::String name;
     // As written, usually "%VOICE%<folder>".  The application cannot resolve
@@ -113,7 +121,7 @@ public:
 
     [[nodiscard]] static std::optional<UstProject> read(const juce::File& file,
                                                         juce::String& error,
-                                                        juce::StringArray& warnings);
+                                                        juce::StringArray& warnings, int encoding = 0);
 
     // Ticks to quarter notes.  One place, because getting it wrong scales the
     // whole song and looks like a tempo bug.

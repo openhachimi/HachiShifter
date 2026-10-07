@@ -1,5 +1,7 @@
 #include "MainComponent.h"
 #include "Hamood.h"
+#include "HamoodProject.h"
+#include "HamoodTimelinePanel.h"
 #include <iostream>
 #include <set>
 
@@ -12,11 +14,13 @@ class HamoodPanel final : public juce::Component, private juce::ListBoxModel
 {
 public:
     HamoodPanel(ProjectData snapshot, const juce::String& focused, std::vector<juce::String> selected,
-                std::function<bool(const hamood::Options&,const hamood::Plan&)> apply)
-        : data(std::move(snapshot)), selection(std::move(selected)), commit(std::move(apply))
+                std::function<bool(const hamood::Options&,const hamood::Plan&)> apply,
+                std::function<bool(const juce::String&)> save = {}, juce::File cache = {})
+        : data(std::move(snapshot)), selection(std::move(selected)), commit(std::move(apply)), persist(std::move(save)), cacheFolder(cache)
     {
+        state=hamoodstate::read(data);
         heading.setText(tr("HAMOOD · 自动和声"),juce::dontSendNotification);
-        hint.setText(tr("先预览调性与音高，再生成独立轨道。支持 Ctrl+Z 一次撤销。"),juce::dontSendNotification);
+        hint.setText(tr("有效修改随工程保存，关闭窗口后保留。生成和声支持 Ctrl+Z 一次撤销。"),juce::dontSendNotification);
         sourceLabel.setText(tr("源轨道"),juce::dontSendNotification);
         scopeLabel.setText(tr("处理范围"),juce::dontSendNotification);
         keyLabel.setText(tr("调性方式"),juce::dontSendNotification);
@@ -49,13 +53,13 @@ public:
         addSection.onClick=[this]{
             if(!validRange())return;
             const int start=startBar.getText().getIntValue(),count=barCount.getText().getIntValue();
-            manualSections.push_back({start,start+count-1,tonic.getSelectedId()-1,scale.getSelectedId()==2});
+            manualSections.push_back({start,start+count-1,tonic.getSelectedId()-1,scale.getSelectedId()==2,sectionConfirmed.getToggleState()});
             sectionList.deselectAllRows();sectionList.updateContent();startBar.setText(juce::String(start+count));refresh();
         };
         updateSection.onClick=[this]{
             const auto row=sectionList.getSelectedRow();if(row<0||row>=(int)manualSections.size()||!validRange())return;
             const int start=startBar.getText().getIntValue();
-            manualSections[(size_t)row]={start,start+barCount.getText().getIntValue()-1,tonic.getSelectedId()-1,scale.getSelectedId()==2};
+            manualSections[(size_t)row]={start,start+barCount.getText().getIntValue()-1,tonic.getSelectedId()-1,scale.getSelectedId()==2,sectionConfirmed.getToggleState()};
             sectionList.updateContent();refresh();
         };
         removeSection.onClick=[this]{const auto row=sectionList.getSelectedRow();if(row>=0&&row<(int)manualSections.size()){manualSections.erase(manualSections.begin()+row);sectionList.deselectAllRows();sectionList.updateContent();refresh();}};
@@ -74,7 +78,17 @@ public:
         generate.setButtonText(tr("生成和声轨道"));cancel.setButtonText(tr("取消"));
         generate.onClick=[this]{auto options=readOptions();auto plan=hamood::analyse(data,options);if(plan.error.isEmpty()&&commit(options,plan))close();};
         cancel.onClick=[this]{close();};addAndMakeVisible(generate);addAndMakeVisible(cancel);
-        setSize(880,760);refresh();
+        sectionConfirmed.setButtonText(tr("已人工确认"));sectionConfirmed.setToggleState(true,juce::dontSendNotification);
+        sectionConfirmed.onClick=[this]{const auto i=sectionList.getSelectedRow();if(i>=0&&i<(int)manualSections.size()){manualSections[(size_t)i].confirmed=sectionConfirmed.getToggleState();sectionList.repaint();refresh();}};
+        adoptPrediction.setButtonText(tr("采用预测调性"));adoptPrediction.onClick=[this]{
+            auto plan=hamood::analyse(data,readOptions());if(plan.error.isNotEmpty())return;
+            manualSections.clear();for(const auto& p:plan.passages)manualSections.push_back({p.startBar,p.endBar,p.key%12,p.key>=12,false});
+            mode.setSelectedId(3,juce::dontSendNotification);sectionList.updateContent();refresh();
+        };
+        useChords.setButtonText(tr("使用工程中的和弦资料"));useChords.onClick=[this]{auto s=state["settings"];hamoodstate::put(s,"use_chords",useChords.getToggleState());hamoodstate::put(state,"settings",s);refresh();};
+        timelineButton.setButtonText(tr("和弦 / 段落资料…"));timelineButton.onClick=[this]{openTimeline();};
+        for(juce::Component* c:std::initializer_list<juce::Component*>{&sectionConfirmed,&adoptPrediction,&useChords,&timelineButton})addAndMakeVisible(*c);
+        loadSettings();cancel.setButtonText(tr("关闭"));setSize(880,800);refresh(false);
     }
     hamood::Options readOptions() const
     {
@@ -85,15 +99,25 @@ public:
         o.tonic=tonic.getSelectedId()-1;o.minor=scale.getSelectedId()==2;o.sectionBars=bars.getSelectedId();
         if(o.keyMode=="manual")o.manualSections=manualSections;
         o.voices.clear();for(const auto& [steps,button]:voices)if(button->getToggleState())o.voices.push_back(steps);
-        o.preservePitch=preserve.getToggleState();o.gainDb=(float)gain.getValue();return o;
+        o.preservePitch=preserve.getToggleState();o.gainDb=(float)gain.getValue();o.minimumChordScore=(double)state["settings"].getProperty("minimum_chord_score",.35);hamoodstate::attach(data,state,o);return o;
     }
-    void refresh()
+    void refresh(bool save = true)
     {
         const bool manual=mode.getSelectedId()==3;
         tonic.setEnabled(manual);scale.setEnabled(manual);bars.setEnabled(mode.getSelectedId()==2);
         for(juce::Component* c:std::initializer_list<juce::Component*>{&manualHint,&startLabel,&countLabel,&rangeLabel,&startBar,&barCount,&addSection,&updateSection,&removeSection,&sectionList})c->setVisible(manual);
+        sectionConfirmed.setVisible(manual);adoptPrediction.setEnabled(!manual);
         updateRange();resized();
-        const auto plan=hamood::analyse(data,readOptions());preview.setText(plan.description(),false);generate.setEnabled(plan.error.isEmpty());
+        const auto options=readOptions();const auto plan=hamood::analyse(data,options);preview.setText(plan.description(),false);generate.setEnabled(plan.error.isEmpty());
+        if(save)
+        {
+            auto next=juce::JSON::parse(hamoodstate::encode(state));hamoodstate::settings(next,options,manualSections);hamoodstate::predictions(data,next,plan);
+            juce::String error;
+            if(!hamoodstate::validate(next,error)){preview.setText(tr("本次无效修改未保存：")+error+"\n"+plan.description(),false);return;}
+            const auto encoded=hamoodstate::encode(next);
+            if(persist&&!persist(encoded)){preview.setText(tr("工程已变化，请重新打开 HAMOOD。"),false);generate.setEnabled(false);return;}
+            state=std::move(next);data.hamoodState=encoded;
+        }
     }
     bool validRange() const
     {
@@ -112,7 +136,7 @@ public:
         if(row<0||row>=(int)manualSections.size())return;
         if(selected)g.fillAll(juce::Colour(0xff405b6b));
         const auto& s=manualSections[(size_t)row];g.setColour(juce::Colours::white);
-        g.drawText(tr("第 ")+juce::String(s.startBar)+" – "+juce::String(s.endBar)+tr(" 小节   |   ")+hamood::keyName(s.tonic+(s.minor?12:0)),8,0,width-16,height,juce::Justification::centredLeft);
+        g.drawText(tr("第 ")+juce::String(s.startBar)+" – "+juce::String(s.endBar)+tr(" 小节   |   ")+hamood::keyName(s.tonic+(s.minor?12:0))+tr(s.confirmed?"   已确认":"   待确认"),8,0,width-16,height,juce::Justification::centredLeft);
     }
     void selectedRowsChanged(int row) override
     {
@@ -121,6 +145,7 @@ public:
             const auto& s=manualSections[(size_t)row];
             startBar.setText(juce::String(s.startBar),false);barCount.setText(juce::String(s.endBar-s.startBar+1),false);
             tonic.setSelectedId(s.tonic+1,juce::dontSendNotification);scale.setSelectedId(s.minor?2:1,juce::dontSendNotification);
+            sectionConfirmed.setToggleState(s.confirmed,juce::dontSendNotification);
         }
         updateRange();
     }
@@ -133,7 +158,7 @@ public:
         area.removeFromTop(10);row=area.removeFromTop(34);keyLabel.setBounds(row.removeFromLeft(70));mode.setBounds(row.removeFromLeft(235));row.removeFromLeft(10);tonic.setBounds(row.removeFromLeft(110));row.removeFromLeft(10);scale.setBounds(row.removeFromLeft(115));row.removeFromLeft(10);bars.setBounds(row);
         if(mode.getSelectedId()==3)
         {
-            area.removeFromTop(8);manualHint.setBounds(area.removeFromTop(25));
+            area.removeFromTop(8);auto manualRow=area.removeFromTop(25);sectionConfirmed.setBounds(manualRow.removeFromRight(135));manualHint.setBounds(manualRow);
             row=area.removeFromTop(32);startLabel.setBounds(row.removeFromLeft(72));startBar.setBounds(row.removeFromLeft(58));row.removeFromLeft(8);
             countLabel.setBounds(row.removeFromLeft(72));barCount.setBounds(row.removeFromLeft(58));rangeLabel.setBounds(row.removeFromLeft(146));
             addSection.setBounds(row.removeFromLeft(100).reduced(3,0));updateSection.setBounds(row.removeFromLeft(100).reduced(3,0));removeSection.setBounds(row.removeFromLeft(100).reduced(3,0));
@@ -141,10 +166,32 @@ public:
         }
         area.removeFromTop(12);
         for(int i=0;i<2;++i){row=area.removeFromTop(32);for(int j=0;j<5;++j)voices[(size_t)(j*2+i)].second->setBounds(row.removeFromLeft((getWidth()-40)/5));}
-        area.removeFromTop(6);preserve.setBounds(area.removeFromTop(30));
+        area.removeFromTop(6);row=area.removeFromTop(30);adoptPrediction.setBounds(row.removeFromRight(145));row.removeFromRight(8);timelineButton.setBounds(row.removeFromRight(185));useChords.setBounds(row);
+        preserve.setBounds(area.removeFromTop(30));
         row=area.removeFromTop(32);volumeLabel.setBounds(row.removeFromLeft(195));gain.setBounds(row);
         area.removeFromTop(12);auto footer=area.removeFromBottom(36);cancel.setBounds(footer.removeFromRight(105));footer.removeFromRight(10);generate.setBounds(footer.removeFromRight(185));
         area.removeFromBottom(12);preview.setBounds(area);
+    }
+    void loadSettings()
+    {
+        const auto s=state["settings"];const auto key=s.getProperty("key_mode","auto").toString();
+        mode.setSelectedId(key=="manual"?3:key=="sections"?2:1,juce::dontSendNotification);tonic.setSelectedId((int)s.getProperty("tonic",0)+1,juce::dontSendNotification);
+        scale.setSelectedId((bool)s.getProperty("minor",false)?2:1,juce::dontSendNotification);
+        const int count=(int)s.getProperty("section_bars",8);if(bars.indexOfItemId(count)<0)bars.addItem(juce::String(count)+tr(" 小节 / 段"),count);bars.setSelectedId(count,juce::dontSendNotification);
+        gain.setValue((double)s.getProperty("gain_db",-6),juce::dontSendNotification);preserve.setToggleState((bool)s.getProperty("preserve_pitch",true),juce::dontSendNotification);
+        if(auto* v=s["voices"].getArray())for(auto& [steps,button]:voices)button->setToggleState(std::any_of(v->begin(),v->end(),[&](const auto& x){return (int)x==steps;}),juce::dontSendNotification);
+        manualSections.clear();if(auto* rows=s["manual_sections"].getArray())for(const auto& r:*rows)manualSections.push_back({(int)r["start_bar"],(int)r["end_bar"],(int)r["tonic"],(bool)r["minor"],(bool)r.getProperty("confirmed",true)});
+        useChords.setToggleState((bool)s.getProperty("use_chords",false),juce::dontSendNotification);sectionList.updateContent();
+    }
+    void openTimeline()
+    {
+        juce::Component::SafePointer<HamoodPanel> safe(this);
+        auto* content=new HamoodTimelinePanel(data,state,cacheFolder,[safe](const juce::String& json){
+            if(!safe)return false;if(safe->persist&&!safe->persist(json))return false;
+            safe->data.hamoodState=json;safe->state=hamoodstate::read(safe->data);safe->useChords.setToggleState((bool)safe->state["settings"].getProperty("use_chords",false),juce::dontSendNotification);safe->refresh(false);return true;
+        });
+        juce::DialogWindow::LaunchOptions dialog;dialog.dialogTitle=tr("HAMOOD — 工程资料");dialog.dialogBackgroundColour=Palette::panel;dialog.content.setOwned(content);dialog.componentToCentreAround=this;dialog.escapeKeyTriggersCloseButton=true;dialog.useNativeTitleBar=true;dialog.resizable=true;
+        if(auto* window=dialog.launchAsync())window->setResizeLimits(820,500,1400,1000);
     }
     void close(){if(auto* window=findParentComponentOfClass<juce::DialogWindow>())window->exitModalState(0);}
     ProjectData data;
@@ -162,28 +209,39 @@ public:
     juce::TextButton addSection,updateSection,removeSection;
     std::vector<hamood::ManualSection> manualSections;
     juce::ListBox sectionList;
+    juce::var state;
+    std::function<bool(const juce::String&)> persist;
+    juce::File cacheFolder;
+    juce::ToggleButton sectionConfirmed,useChords;
+    juce::TextButton adoptPrediction,timelineButton;
 };
 }
 void MainComponent::showHamood()
 {
     if(diffSingerBusy){showError(tr("请先等待当前 DS 任务完成，再生成和声。"));return;}
-    const auto revision=project.revisionNumber();
+    const auto revision=std::make_shared<std::uint64_t>(project.revisionNumber());
     juce::Component::SafePointer<MainComponent> safe(this);
     auto* content=new HamoodPanel(project.snapshot(),selectedTrackId,pianoRoll.selectedNoteIds(),
         [safe,revision](const hamood::Options& options,const hamood::Plan& plan)
         {
             if(safe==nullptr)return false;
-            if(safe->project.revisionNumber()!=revision)
+            if(safe->project.revisionNumber()!=*revision)
             {safe->showError(tr("工程已发生变化，请关闭 HAMOOD 后重新打开预览。"));return false;}
             auto data=safe->project.snapshot();const auto ids=hamood::generate(data,options,plan);
             if(ids.empty())return false;
+            data.hamoodState=hamoodstate::remember(data,options,plan);
             safe->project.replace(std::move(data));
             safe->statusLabel.setText(tr("HAMOOD 已生成 ")+juce::String((int)ids.size())+tr(" 条和声轨道，可 Ctrl+Z 撤销。"),juce::dontSendNotification);
             return true;
-        });
+        },[safe,revision](const juce::String& json)
+        {
+            if(!safe||safe->project.revisionNumber()!=*revision)return false;
+            juce::String error;if(!safe->project.setHamoodState(json,error))return false;
+            *revision=safe->project.revisionNumber();return true;
+        },hamoodaudio::cacheFolder(currentProjectFile));
     juce::DialogWindow::LaunchOptions dialog;dialog.dialogTitle=tr("HAMOOD — 自动和声");dialog.dialogBackgroundColour=Palette::panel;
     dialog.content.setOwned(content);dialog.componentToCentreAround=this;dialog.escapeKeyTriggersCloseButton=true;dialog.useNativeTitleBar=true;dialog.resizable=true;
-    if(auto* window=dialog.launchAsync())window->setResizeLimits(840,760,1400,1100);
+    if(auto* window=dialog.launchAsync())window->setResizeLimits(840,800,1400,1100);
 }
 bool MainComponent::diagnosticHamood(const juce::File& directory)
 {
@@ -328,3 +386,5 @@ bool MainComponent::diagnosticHamood(const juce::File& directory)
 }
 
 }
+
+#include "tests/HamoodPersistenceSmoke.h"

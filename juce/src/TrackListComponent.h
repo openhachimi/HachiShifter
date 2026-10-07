@@ -50,6 +50,7 @@ public:
     ~TrackListComponent() override;
 
     void paint(juce::Graphics& g) override;
+    std::function<juce::String(const TrackData&)> outputEngineNameProvider;
     void setHighlightedTracks(const std::vector<juce::String>& ids) { highlightedTracks = ids; repaint(); }
     // Re-apply the Palette-derived label colours so a theme switch does not
     // leave them on the previous theme's (unreadable) colour.
@@ -101,6 +102,7 @@ public:
 
     std::function<float(const juce::String&)> peakProvider;
     std::function<void(const juce::String&)> onTrackSelected;
+    std::function<void(const juce::String&, juce::Point<int>)> onTrackMenu;
     // A right-click on the space around the tracks, in screen coordinates.
     std::function<void(juce::Point<int>)> onEmptyAreaMenu;
 

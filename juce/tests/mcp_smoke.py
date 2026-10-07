@@ -36,6 +36,7 @@ class McpClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
             bufsize=1,
         )
 
@@ -84,7 +85,7 @@ def main() -> int:
         client = McpClient(binary)
         analysis_status = client.call("analysis_status")
         assert "requested=GAME+FCPE" in analysis_status
-        assert "game_variant=large" in analysis_status
+        assert "game_variant=medium" in analysis_status
         assert "inference_requested=auto" in analysis_status
         assert "inference_active=cpu" in analysis_status
         unsupported_status = client.call(

@@ -1,8 +1,11 @@
+#include "backend/LegacyTextCodec.h"
+#include "backend/UstText.h"
 #include "SampleSettings.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <atomic>
 #include <map>
 #include <numeric>
@@ -150,46 +153,8 @@ double number(const juce::StringArray& values, int index, double fallback)
 
 juce::String decodeOtoText(const juce::File& file)
 {
-    juce::MemoryBlock bytes;
-    if (!file.loadFileAsData(bytes) || bytes.getSize() == 0) return {};
-    const auto* data = static_cast<const char*>(bytes.getData());
-    auto size = bytes.getSize();
-    if (size >= 3 && static_cast<unsigned char>(data[0]) == 0xef
-        && static_cast<unsigned char>(data[1]) == 0xbb
-        && static_cast<unsigned char>(data[2]) == 0xbf)
-    {
-        data += 3;
-        size -= 3;
-    }
-    if (juce::CharPointer_UTF8::isValidString(data, static_cast<int>(size)))
-        return juce::String::fromUTF8(data, static_cast<int>(size));
-
-#if JUCE_WINDOWS
-    const auto wideLength = MultiByteToWideChar(932, 0, data, static_cast<int>(size), nullptr, 0);
-    if (wideLength > 0)
-    {
-        std::vector<wchar_t> wide(static_cast<std::size_t>(wideLength + 1), 0);
-        if (MultiByteToWideChar(932, 0, data, static_cast<int>(size), wide.data(), wideLength) > 0)
-            return juce::String(wide.data());
-    }
-#elif defined(HACHI_HAS_ICONV)
-    auto decoder = iconv_open("UTF-8", "CP932");
-    if (decoder == reinterpret_cast<iconv_t>(-1)) decoder = iconv_open("UTF-8", "SHIFT-JIS");
-    if (decoder != reinterpret_cast<iconv_t>(-1))
-    {
-        std::vector<char> decoded(size * 4 + 4, 0);
-        auto* input = const_cast<char*>(data);
-        auto inputLeft = size;
-        auto* output = decoded.data();
-        auto outputLeft = decoded.size() - 1;
-        const auto result = iconv(decoder, &input, &inputLeft, &output, &outputLeft);
-        iconv_close(decoder);
-        if (result != static_cast<std::size_t>(-1))
-            return juce::String::fromUTF8(decoded.data(),
-                static_cast<int>(decoded.size() - outputLeft - 1));
-    }
-#endif
-    return juce::String::fromUTF8(data, static_cast<int>(size));
+    juce::String error;const auto doc=backend::LegacyTextCodec::read(file,error);
+    return doc?doc->text:juce::String();
 }
 
 juce::String otoNumber(double value)
@@ -210,70 +175,19 @@ juce::String otoEntryText(const VoicebankOtoEntry& entry)
         + otoNumber(entry.overlapMs);
 }
 
-bool writeOtoTextPreservingEncoding(const juce::File& file,
-                                    const juce::String& output,
-                                    juce::String& error)
+bool writeOtoTextPreservingEncoding(const juce::File& file,const juce::String& output,juce::String& error)
 {
-    juce::MemoryBlock originalBytes;
-    if (!file.loadFileAsData(originalBytes) || originalBytes.getSize() == 0)
-    {
-        error = "Could not read " + file.getFullPathName();
-        return false;
-    }
-    const auto* raw = static_cast<const char*>(originalBytes.getData());
-    const auto rawSize = originalBytes.getSize();
-    const auto hasUtf8Bom = rawSize >= 3
-        && static_cast<unsigned char>(raw[0]) == 0xef
-        && static_cast<unsigned char>(raw[1]) == 0xbb
-        && static_cast<unsigned char>(raw[2]) == 0xbf;
-    const auto* utf8Start = raw + (hasUtf8Bom ? 3 : 0);
-    const auto utf8Size = rawSize - (hasUtf8Bom ? 3 : 0);
-    const auto wasUtf8 = hasUtf8Bom
-        || juce::CharPointer_UTF8::isValidString(utf8Start, static_cast<int>(utf8Size));
-
-    juce::MemoryBlock encoded;
-    if (wasUtf8)
-    {
-        if (hasUtf8Bom)
-        {
-            const unsigned char bom[] { 0xef, 0xbb, 0xbf };
-            encoded.append(bom, sizeof(bom));
-        }
-        encoded.append(output.toRawUTF8(), output.getNumBytesAsUTF8());
-    }
-#if JUCE_WINDOWS
+    backend::LegacyTextDocument original;
+    if(file.existsAsFile()){auto read=backend::LegacyTextCodec::read(file,error);if(!read)return false;original=*read;}
     else
     {
-        const std::wstring wide(output.toWideCharPointer());
-        const auto byteCount = WideCharToMultiByte(932, 0, wide.data(),
-            static_cast<int>(wide.size()), nullptr, 0, nullptr, nullptr);
-        if (byteCount <= 0)
-        {
-            error = "Could not encode Shift-JIS oto file";
-            return false;
-        }
-        std::vector<char> bytes(static_cast<std::size_t>(byteCount));
-        if (WideCharToMultiByte(932, 0, wide.data(), static_cast<int>(wide.size()),
-                                bytes.data(), byteCount, nullptr, nullptr) <= 0)
-        {
-            error = "Could not encode Shift-JIS oto file";
-            return false;
-        }
-        encoded.append(bytes.data(), bytes.size());
+        original.codePage=backend::LegacyTextCodec::directoryCodePage(file.getParentDirectory());
+        if(original.codePage==0){juce::String ignored;const auto parent=backend::LegacyTextCodec::read(file.getSiblingFile("oto.ini"),ignored);original.codePage=parent?parent->codePage:65001;}
+        original.bom=original.codePage==65001;
     }
-#else
-    else
-    {
-        encoded.append(output.toRawUTF8(), output.getNumBytesAsUTF8());
-    }
-#endif
-    if (!voicebankFileWritten(file.replaceWithData(encoded.getData(), encoded.getSize())))
-    {
-        error = "Could not write " + file.getFullPathName();
-        return false;
-    }
-    return true;
+    return voicebankFileWritten(backend::LegacyTextCodec::write(file,output,original,error));
 }
+
 }
 
 juce::File SampleSettings::sidecarFor(const juce::File& audio)
@@ -701,7 +615,7 @@ bool SampleSettings::save(const juce::File& audio,
     const auto sidecar = sidecarFor(audio);
     if (!voicebankFileWritten(sidecar.replaceWithText(csv, false, false, "\n")))
     {
-        error = "Could not write " + sidecar.getFullPathName();
+        if(error.isEmpty())error = "Could not write " + sidecar.getFullPathName();
         return false;
     }
     return true;
@@ -813,7 +727,8 @@ bool SampleSettings::exportOto(const juce::File& oto, const juce::File& audio,
     auto inserted = false;
     if (oto.existsAsFile())
     {
-        const auto existing = juce::StringArray::fromLines(oto.loadFileAsString());
+        juce::String codecError;const auto document=backend::LegacyTextCodec::read(oto,codecError);if(!document){error=codecError;return false;}
+        const auto existing = juce::StringArray::fromLines(document->text);
         for (auto line : existing)
         {
             if (line.trimStart().startsWithIgnoreCase(prefix))
@@ -828,9 +743,9 @@ bool SampleSettings::exportOto(const juce::File& oto, const juce::File& audio,
     while (out.size() > 0 && out[out.size() - 1].trim().isEmpty())
         out.remove(out.size() - 1);
 
-    if (!voicebankFileWritten(oto.replaceWithText(out.joinIntoString("\n") + "\n", false, false, "\n")))
+    if (!writeOtoTextPreservingEncoding(oto,out.joinIntoString("\n") + "\n",error))
     {
-        error = "Could not write " + oto.getFullPathName();
+        if(error.isEmpty())error = "Could not write " + oto.getFullPathName();
         return false;
     }
     return true;
@@ -890,7 +805,7 @@ void appendUnlistedAudio(const juce::File& root,
 
 std::vector<VoicebankOtoEntry> SampleSettings::loadVoicebankOto(
     const juce::File& root, juce::StringArray& warnings, bool jieMode,
-    bool mouMode)
+    bool mouMode, const juce::File& onlyOtoFile)
 {
     warnings.clear();
     std::vector<VoicebankOtoEntry> entries;
@@ -901,7 +816,9 @@ std::vector<VoicebankOtoEntry> SampleSettings::loadVoicebankOto(
     }
 
     juce::Array<juce::File> otoFiles;
-    root.findChildFiles(otoFiles, juce::File::findFiles, true, "oto.ini");
+    if (onlyOtoFile != juce::File{})
+        otoFiles.add(onlyOtoFile.getParentDirectory().getChildFile("oto.ini"));
+    else root.findChildFiles(otoFiles, juce::File::findFiles, true, "oto.ini");
     otoFiles.sort();
     // Each entry's oto file relative to the root, which is what the entries
     // are sorted by first.  Worked out once per file: asked inside the
@@ -918,7 +835,9 @@ std::vector<VoicebankOtoEntry> SampleSettings::loadVoicebankOto(
         const auto storageOto = jieMode ? jieOto : originalOto;
         const auto otoOrderKey = storageOto.getRelativePathFrom(root);
         auto malformed = 0;
-        const auto otoLines = juce::StringArray::fromLines(decodeOtoText(sourceOto));
+        juce::String codecError;const auto document=backend::LegacyTextCodec::read(sourceOto,codecError);
+        if(!document){warnings.add(codecError);continue;}
+        const auto otoLines = juce::StringArray::fromLines(document->text);
         for (int lineIndex = 0; lineIndex < otoLines.size(); ++lineIndex)
         {
             const auto& rawLine = otoLines[lineIndex];
@@ -941,6 +860,8 @@ std::vector<VoicebankOtoEntry> SampleSettings::loadVoicebankOto(
 
             VoicebankOtoEntry entry;
             entry.otoFile = storageOto;
+            entry.sourceEncoding=document->encoding;
+            entry.sourceFingerprint=document->fingerprint;
             entry.sourceName = wav;
             entry.audioFile = originalOto.getParentDirectory().getChildFile(
                 wav.replaceCharacter('\\', '/'));
@@ -978,7 +899,7 @@ std::vector<VoicebankOtoEntry> SampleSettings::loadVoicebankOto(
     }
     if (otoFiles.isEmpty()) warnings.add("No oto.ini found in voicebank directory");
     else if (entries.empty()) warnings.add("No valid oto.ini entries found");
-    appendUnlistedAudio(root, otoFiles, jieMode, entries);
+    if (onlyOtoFile == juce::File{}) appendUnlistedAudio(root, otoFiles, jieMode, entries);
     mergeJieOto(entries);
     if (mouMode) mergeMouOto(entries);
     return entries;
@@ -1003,7 +924,11 @@ bool SampleSettings::updateVoicebankOtoEntry(const VoicebankOtoEntry& original,
         }
     }
 
-    const auto decoded = decodeOtoText(original.otoFile);
+    juce::String codecError;const auto document=backend::LegacyTextCodec::read(original.otoFile,codecError);
+    if(!document){error=codecError;return false;}
+    if(original.sourceFingerprint.isNotEmpty()&&original.sourceFingerprint!=document->fingerprint)
+    {error=juce::String::fromUTF8("OTO 文件已被其他操作修改，请刷新音源后重试。");return false;}
+    const auto decoded = document->text;
     auto lines = juce::StringArray::fromLines(decoded);
     auto targetLine = original.lineIndex;
     const auto lineMatchesSource = [&original](const juce::String& candidate)
@@ -1040,14 +965,27 @@ bool SampleSettings::updateVoicebankOtoEntry(const VoicebankOtoEntry& original,
         lines.add(otoEntryText(updated));
     }
     else
-        lines.set(targetLine, otoEntryText(updated));
+    {
+        const auto oldLine=lines[targetLine];const auto eq=oldLine.indexOfChar('=');juce::StringArray fields;fields.addTokens(oldLine.substring(eq+1),",","\"");
+        if(fields.size()>=6)
+        {
+            if(updated.alias!=original.alias)fields.set(0,updated.alias);
+            const double before[]{original.offsetMs,original.consonantMs,original.cutoffMs,original.preutteranceMs,original.overlapMs};
+            const double after[]{updated.offsetMs,updated.consonantMs,updated.cutoffMs,updated.preutteranceMs,updated.overlapMs};
+            for(int i=0;i<5;++i)if(before[i]!=after[i])fields.set(i+1,otoNumber(after[i]));
+            lines.set(targetLine,(updated.sourceName==original.sourceName?oldLine.substring(0,eq):updated.sourceName)+"="+fields.joinIntoString(","));
+        }
+        else lines.set(targetLine,otoEntryText(updated));
+    }
 
     const auto lineEnding = decoded.contains("\r\n") ? juce::String("\r\n")
                                                         : juce::String("\n");
     auto output = lines.joinIntoString(lineEnding);
-    if (decoded.endsWithChar('\n')) output += lineEnding;
+    const auto originalLines=backend::usttext::lines(decoded);
+    if(targetLine>=0&&(size_t)targetLine<originalLines.size())
+    {output.clear();output.preallocateBytes(decoded.getNumBytesAsUTF8()+64);for(size_t i=0;i<originalLines.size();++i)output+=(i==(size_t)targetLine?lines[targetLine]:originalLines[i].body)+originalLines[i].ending;}
 
-    if (!writeOtoTextPreservingEncoding(original.otoFile, output, error))
+    if (!voicebankFileWritten(backend::LegacyTextCodec::write(original.otoFile,output,*document,error)))
         return false;
 
     // OTO edits are authoritative for UTAU banks. Do not mirror them into HJM
@@ -1517,8 +1455,9 @@ bool SampleSettings::createJieOto(const juce::File& root, int& written, int& kep
     {
         const juce::File otoFile(group.first);
         const auto independentOto = jieClassicOtoFileFor(otoFile);
+        const auto originalOto = otoFile.getParentDirectory().getChildFile("oto.ini");
         if (!independentOto.existsAsFile()
-            && !voicebankFileWritten(otoFile.copyFileTo(independentOto)))
+            && !voicebankFileWritten(originalOto.copyFileTo(independentOto)))
         {
             error = "Could not create independent Jie oto: "
                 + independentOto.getFullPathName();
@@ -1554,9 +1493,9 @@ bool SampleSettings::createJieOto(const juce::File& root, int& written, int& kep
             lines.add(jieRowText(seeded, {}));
             ++written;
         }
-        if (!voicebankFileWritten(jieFile.replaceWithText(lines.joinIntoString("\n") + "\n", false, false, "\n")))
+        if (!writeOtoTextPreservingEncoding(jieFile,lines.joinIntoString("\n") + "\n",error))
         {
-            error = "Could not write " + jieFile.getFullPathName();
+            if(error.isEmpty())error = "Could not write " + jieFile.getFullPathName();
             return false;
         }
     }
@@ -1603,6 +1542,103 @@ int findMouRow(const MouRows& rows, const juce::String& wav, double offsetMs)
     return row == nullptr ? -1 : static_cast<int>(row - rows.rows.data());
 }
 }  // namespace
+
+bool SampleSettings::createJieOtoFromMou(const juce::File& root,
+                                         JieFromMouResult& result, juce::String& error)
+{
+    result = {}; error.clear();
+    juce::StringArray warnings;
+    const auto entries = loadVoicebankOto(root, warnings, true);
+    std::map<juce::String, std::vector<const VoicebankOtoEntry*>> groups;
+    for (const auto& entry : entries)
+        if (entry.lineIndex >= 0) groups[entry.otoFile.getFullPathName()].push_back(&entry);
+    if (groups.empty())
+    {
+        error = juce::String::fromUTF8("没有可匹配的界 OTO 条目：") + root.getFullPathName();
+        return false;
+    }
+    for (const auto& group : groups)
+    {
+        const juce::File timingFile(group.first);
+        const auto mouFile = mouOtoFileFor(timingFile);
+        if (mouFile.existsAsFile() && !backend::LegacyTextCodec::read(mouFile, error)) return false;
+        const auto source = readMouRows(mouFile);
+        const auto target = jieOtoFileFor(timingFile);
+        backend::LegacyTextDocument document;
+        if (target.existsAsFile())
+        {
+            const auto read = backend::LegacyTextCodec::read(target, error);
+            if (!read) return false;
+            document = *read;
+        }
+        else
+        {
+            document.codePage = backend::LegacyTextCodec::directoryCodePage(target.getParentDirectory());
+            if (document.codePage == 0)
+            {
+                const auto original = backend::LegacyTextCodec::read(timingFile.existsAsFile()
+                    ? timingFile : target.getSiblingFile("oto.ini"), error);
+                if (!original) return false;
+                document.codePage = original->codePage;
+            }
+            document.bom = document.codePage == 65001;
+        }
+        auto lines = backend::usttext::lines(document.text);
+        const auto existing = readJieRows(target);
+        std::set<juce::String> handled;
+        int changed = 0;
+        for (const auto* entry : group.second)
+        {
+            // Aliases sharing one sample and offset share one annotation row.
+            const auto key = entry->sourceName.toLowerCase() + "\n" + juce::String(entry->offsetMs, 9);
+            if (!handled.insert(key).second) continue;
+            const auto index = findMouRow(source, entry->sourceName, entry->offsetMs);
+            if (index < 0 || source.classes[static_cast<std::size_t>(index)].length() != 4)
+                { ++result.skipped; continue; }
+            auto fields = source.rows[static_cast<std::size_t>(index)].fields;
+            bool valid = fields.size() >= 4;
+            double previous = 0.0;
+            for (int i = 0; valid && i < 4; ++i)
+            {
+                const auto token = fields[i].trim();
+                const auto utf = token.toUTF8(); char* end = nullptr;
+                const auto value = std::strtod(utf.getAddress(), &end);
+                valid = token.isNotEmpty() && end != utf.getAddress() && *end == '\0'
+                    && std::isfinite(value) && value >= 0.0 && (i < 2 || value >= previous);
+                previous = value;
+            }
+            if (!valid) { ++result.skipped; continue; }
+            fields.set(0, jieNumber(entry->offsetMs));
+            const auto text = entry->sourceName + "=" + fields.joinIntoString(",");
+            const auto* row = findJieRow(existing, entry->sourceName, entry->offsetMs);
+            if (row && juce::isPositiveAndBelow(row->lineIndex, static_cast<int>(lines.size())))
+            {
+                auto& line = lines[static_cast<std::size_t>(row->lineIndex)];
+                if (line.body.trim() == text) { ++result.unchanged; continue; }
+                line.body = text;
+            }
+            else
+            {
+                const auto eol = backend::usttext::eol(document.text);
+                if (!lines.empty() && lines.back().ending.isEmpty()) lines.back().ending = eol;
+                lines.push_back({ text, eol });
+            }
+            ++changed;
+        }
+        if (changed == 0) continue;
+        juce::String output;
+        for (const auto& line : lines) output += line.body + line.ending;
+        // Keep a recoverable copy before replacing any existing Jie divisions.
+        if (target.existsAsFile())
+        {
+            const auto backup = target.getParentDirectory().getNonexistentChildFile("oto4.before-mou", ".bak", false);
+            if (!target.copyFileTo(backup)) { error = "Could not back up " + target.getFullPathName(); return false; }
+        }
+        if (!voicebankFileWritten(backend::LegacyTextCodec::write(target, output, document, error))) return false;
+        result.written += changed;
+    }
+    return true;
+}
 
 bool SampleSettings::updateMouOtoEntry(const VoicebankOtoEntry& original,
                                       const VoicebankOtoEntry& updated,
@@ -1651,9 +1687,9 @@ bool SampleSettings::updateMouOtoEntry(const VoicebankOtoEntry& original,
     else
         lines.add(text);
 
-    if (!voicebankFileWritten(mouFile.replaceWithText(lines.joinIntoString("\n") + "\n", false, false, "\n")))
+    if (!writeOtoTextPreservingEncoding(mouFile,lines.joinIntoString("\n") + "\n",error))
     {
-        error = "Could not write " + mouFile.getFullPathName();
+        if(error.isEmpty())error = "Could not write " + mouFile.getFullPathName();
         return false;
     }
     return true;
@@ -1737,9 +1773,9 @@ bool SampleSettings::createMouOto(const juce::File& root, int& written, int& kep
             addedHere.insert(key);
             ++written;
         }
-        if (!voicebankFileWritten(mouFile.replaceWithText(lines.joinIntoString("\n") + "\n", false, false, "\n")))
+        if (!writeOtoTextPreservingEncoding(mouFile,lines.joinIntoString("\n") + "\n",error))
         {
-            error = "Could not write " + mouFile.getFullPathName();
+            if(error.isEmpty())error = "Could not write " + mouFile.getFullPathName();
             return false;
         }
     }
@@ -1780,9 +1816,9 @@ bool SampleSettings::updateJieOtoEntry(const VoicebankOtoEntry& original,
     else
         lines.add(text);
 
-    if (!voicebankFileWritten(jieFile.replaceWithText(lines.joinIntoString("\n") + "\n", false, false, "\n")))
+    if (!writeOtoTextPreservingEncoding(jieFile,lines.joinIntoString("\n") + "\n",error))
     {
-        error = "Could not write " + jieFile.getFullPathName();
+        if(error.isEmpty())error = "Could not write " + jieFile.getFullPathName();
         return false;
     }
     return true;

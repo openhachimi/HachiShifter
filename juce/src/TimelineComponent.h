@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ProjectModel.h"
+#include "RenderedWaveformPeaks.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <functional>
 #include <memory>
@@ -17,7 +18,13 @@ public:
     explicit TimelineComponent(ProjectModel& modelToUse);
     ~TimelineComponent() override;
 
+    void setShowNativeRenderedWaveforms(bool show);
+    void setAudioOverlapLabel(juce::String label) { nativeOverlapLabel=std::move(label); }
+    void setNativeFocusedNote(juce::String id) { if(nativeFocusedNote!=id){nativeFocusedNote=std::move(id);repaint();} }
+    [[nodiscard]] juce::String diagnosticNativeFocusedNote() const { return nativeFocusedNote; }
+    void setNativeClipWaveforms(std::shared_ptr<const std::vector<NativeRenderedWaveform>> waveforms);
     void paint(juce::Graphics& g) override;
+    std::function<juce::String(const TrackData&)> outputEngineNameProvider;
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
     void mouseDoubleClick(const juce::MouseEvent& event) override;
@@ -52,6 +59,7 @@ public:
     [[nodiscard]] int diagnosticRowHeight() const { return getRowHeight(); }
     // Takes the model's current state, as a change message would.
     void diagnosticRefresh() { snapshot = model.snapshot(); }
+    [[nodiscard]] juce::String clipHeaderText(const TrackData&, const ClipData&, float gain) const;
     void diagnosticShowTempoDialog(double quarterPosition) { showTempoDialog(quarterPosition); }
     std::function<void(double)> onSeek;
     // A right-click on empty lane space, in screen coordinates.
@@ -63,6 +71,8 @@ public:
     std::function<void(const juce::String&, double, juce::Point<int>)> onClipMenu;
 
 private:
+    juce::String nativeFocusedNote;
+    juce::String nativeOverlapLabel=juce::String::fromUTF8("重叠");
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
     void timerCallback() override;
     void rebuild();
@@ -103,6 +113,11 @@ private:
     ProjectData snapshot;
     juce::AudioFormatManager formats;
     juce::AudioThumbnailCache thumbnailCache { 96 };
+    void rebuildNativeWaveformHashes();
+    bool showNativeRenderedWaveforms=false;
+    std::shared_ptr<const std::vector<NativeRenderedWaveform>> nativeWaveforms;
+    std::unordered_map<std::uint64_t,const NativeRenderedPeaks*> nativePeaksByHash;
+    std::unordered_map<std::string,std::uint64_t> nativeClipHashes;
     std::unordered_map<std::string, std::unique_ptr<juce::AudioThumbnail>> thumbnails;
     std::vector<ClipHit> clipHits;
     float pixelsPerSecond = 140.0f;
@@ -118,6 +133,7 @@ private:
     juce::Point<float> marqueeAnchor;
     juce::Rectangle<float> marqueeBounds;
     double earliestDraggedStart = 0.0;
+    int draggedClipTrack = 0, draggedTrackDelta = 0, firstDraggedTrack = 0, lastDraggedTrack = 0;
     juce::String draggedClip;
     double draggedClipStart = 0.0;
     double draggedClipDuration = 0.0;

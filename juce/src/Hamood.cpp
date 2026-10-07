@@ -445,7 +445,7 @@ bool parseOptions(const juce::var& a,const juce::String& focused,const std::vect
         {
             if(row.getDynamicObject()==nullptr||!row.hasProperty("start_bar")||!row.hasProperty("end_bar")||!row.hasProperty("tonic"))
             {error="Each manual section requires start_bar, end_bar and tonic";return false;}
-            o.manualSections.push_back({(int)row["start_bar"],(int)row["end_bar"],(int)row["tonic"],(bool)row.getProperty("minor",false)});
+            o.manualSections.push_back({(int)row["start_bar"],(int)row["end_bar"],(int)row["tonic"],(bool)row.getProperty("minor",false),(bool)row.getProperty("confirmed",true)});
         }
     }
     if(a.hasProperty("voices"))

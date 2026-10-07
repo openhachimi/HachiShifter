@@ -1,9 +1,12 @@
+#include "NativeSourceTimeMap.h"
+#include "NativePitchIdentity.h"
 #include "AudioEngine.h"
 #include "ClipParts.h"
 #include "TrackGainEnvelope.h"
 #include "StartupLog.h"
 #include "backend/MelodyneProvider.h"
 #include "backend/DiffSingerRenderer.h"
+#include "backend/HifisamplerFlags.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -100,6 +103,7 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
     request.sourceDurationSeconds = clip.sourceDurationSeconds > 1.0e-9
         ? clip.sourceDurationSeconds : clip.durationSeconds;
     request.targetDurationSeconds = clip.durationSeconds;
+    request.preserveUneditedSource = std::all_of(clip.notes.begin(), clip.notes.end(), nativeSourcePitchIsKnown);
     request.hifiganModelDirectory = hifiganModelDirectory;
     request.inference = inference;
     // The neural decoder fades each edge over 3 ms so that a clip boundary
@@ -145,57 +149,8 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
     // splice-first bounce (each of many short clips floored independently).
     // Match the reference's behaviour: leave the neural level untouched here.
     request.matchNsfSourceLevel = false;
-    const auto sourceDuration = request.sourceDurationSeconds;
-    std::vector<backend::TimeMapPoint> timeAnchors;
-    if (!clip.sourceTimeMap.empty())
-    {
-        timeAnchors.reserve(clip.sourceTimeMap.size());
-        for (const auto& point : clip.sourceTimeMap)
-            timeAnchors.push_back({ juce::jlimit(0.0, clip.durationSeconds, point.targetSeconds),
-                                    juce::jlimit(0.0, sourceDuration, point.sourceSeconds) });
-    }
-    else
-    {
-        timeAnchors.push_back({ 0.0, 0.0 });
-        for (const auto& note : clip.notes)
-        {
-            const auto noteTargetStart = juce::jlimit(0.0, clip.durationSeconds, note.startSeconds);
-            const auto sourceStart = clip.durationSeconds > 1.0e-9
-                ? noteTargetStart / clip.durationSeconds * sourceDuration : 0.0;
-            timeAnchors.push_back({ noteTargetStart, sourceStart });
-            if (note.consonantSeconds <= 1.0e-6 || note.attackSpeed <= 1.0e-6f) continue;
-            const auto targetAttack = juce::jlimit(noteTargetStart, clip.durationSeconds,
-                noteTargetStart + note.consonantSeconds);
-            const auto sourceAttack = juce::jlimit(sourceStart, sourceDuration,
-                sourceStart + note.consonantSeconds * static_cast<double>(note.attackSpeed));
-            timeAnchors.push_back({ targetAttack, sourceAttack });
-        }
-    }
-    timeAnchors.push_back({ clip.durationSeconds, sourceDuration });
-    std::stable_sort(timeAnchors.begin(), timeAnchors.end(), [](const auto& left, const auto& right)
-    {
-        if (std::abs(left.targetSeconds - right.targetSeconds) > 1.0e-9)
-            return left.targetSeconds < right.targetSeconds;
-        return left.sourceSeconds < right.sourceSeconds;
-    });
-    for (const auto& anchor : timeAnchors)
-    {
-        if (request.timeMap.empty())
-        {
-            request.timeMap.push_back(anchor);
-            continue;
-        }
-        auto& previous = request.timeMap.back();
-        if (std::abs(anchor.targetSeconds - previous.targetSeconds) <= 1.0e-7)
-        {
-            previous.sourceSeconds = std::max(previous.sourceSeconds, anchor.sourceSeconds);
-            continue;
-        }
-        if (anchor.sourceSeconds > previous.sourceSeconds + 1.0e-7)
-            request.timeMap.push_back(anchor);
-    }
-    if (request.timeMap.empty() || request.timeMap.back().targetSeconds < clip.durationSeconds - 1.0e-7)
-        request.timeMap.push_back({ clip.durationSeconds, sourceDuration });
+    for (const auto& point : nativeSourceTimeMap(clip))
+        request.timeMap.push_back({ point.targetSeconds, point.sourceSeconds });
     constexpr auto framePeriodSeconds = 0.005;
     request.framePeriodMs = framePeriodSeconds * 1000.0;
     const auto frameCount = std::max(2, static_cast<int>(std::ceil(clip.durationSeconds
@@ -308,6 +263,11 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
         {
             const auto& previous = clip.notes[order[position - 1]];
             const auto& next = clip.notes[order[position]];
+            // Measured F0 already contains the recording's own transition.
+            // An analysis boundary must never introduce a target-pitch edit.
+            if (nativePitchIsUnedited(previous) && nativePitchIsUnedited(next)) continue;
+            // Explicit source-pitch restoration excludes artificial boundary bends.
+            if (!previous.utauAutoPitchTransition || !next.utauAutoPitchTransition) continue;
             const auto previousEnd = previous.startSeconds + previous.durationSeconds;
             if (std::abs(previousEnd - next.startSeconds) > 0.002) continue;
             // An explicit connection already glided this seam above.
@@ -366,6 +326,8 @@ backend::Mld5FileRenderRequest AudioEngine::mergedRequestFor(
     request.sourceOffsetSeconds = sourceStart;
     request.sourceDurationSeconds = std::max(1.0e-6, sourceEnd - sourceStart);
     request.targetDurationSeconds = targetDuration;
+    request.preserveUneditedSource = std::all_of(group.begin(), group.end(), [](const auto* clip)
+    {return std::all_of(clip->notes.begin(), clip->notes.end(), nativeSourcePitchIsKnown);});
     request.hifiganModelDirectory = hifiganModelDirectory;
     request.inference = inference;
     request.pitchBackend = backend::PitchRenderBackend::nsfHifigan;
@@ -583,6 +545,7 @@ void writeNoteRenderFields(juce::MemoryOutputStream& stream, const NoteData& not
     stream.writeBool(note.utauOverlapOverrideEnabled);
     stream.writeDouble(note.utauOverlapSeconds);
     stream.writeDouble(note.utauStpSeconds);
+    stream.writeDouble(note.utauModulationPercent);
     // A note's own oto decides what it sounds, so it is part of what counts as
     // an edit -- for the render cache and for the waveform drawn under it.
     stream.writeBool(note.utauOto.enabled);
@@ -637,6 +600,7 @@ void writeNoteRenderFields(juce::MemoryOutputStream& stream, const NoteData& not
     stream.writeDouble(note.durationSeconds);
     stream.writeFloat(note.midiNote);
     stream.writeFloat(note.sourceMidiCenter);
+    stream.writeBool(note.sourcePitchMeasured);
     stream.writeString(note.diffSingerTiming);
     stream.writeString(note.diffSingerPronunciation);
     stream.writeDouble(note.consonantSeconds);
@@ -653,6 +617,29 @@ void writeNoteRenderFields(juce::MemoryOutputStream& stream, const NoteData& not
     if (withAmplitudeEnvelope)
     {
         stream.writeFloat(note.amplitudeEnvelopeBasePercent);
+        stream.writeInt(note.utauTailFadeMode);
+        if(note.utauTailFadeMode!=0)stream.writeString("oto-single-tail-v2");
+        stream.writeDouble(note.utauTailFade.startFraction);
+        stream.writeDouble(note.utauTailFade.endFraction);
+        stream.writeDouble(note.utauTailFade.startGain);
+        stream.writeDouble(note.utauTailFade.endGain);
+        stream.writeDouble(note.utauTailFade.curvePower);
+        stream.writeInt(note.utauTailFade.head.mode);
+        stream.writeDouble(note.utauTailFade.head.startFraction);
+        stream.writeDouble(note.utauTailFade.head.endFraction);
+        stream.writeDouble(note.utauTailFade.head.startGain);
+        stream.writeDouble(note.utauTailFade.head.endGain);
+        stream.writeDouble(note.utauTailFade.head.curvePower);
+        stream.writeBool(note.utauTailFade.head.customCurve);
+        stream.writeDouble(note.utauTailFade.head.control1Time);
+        stream.writeDouble(note.utauTailFade.head.control1Progress);
+        stream.writeDouble(note.utauTailFade.head.control2Time);
+        stream.writeDouble(note.utauTailFade.head.control2Progress);
+    stream.writeBool(note.utauTailFade.customCurve);
+    stream.writeDouble(note.utauTailFade.control1Time);
+    stream.writeDouble(note.utauTailFade.control1Progress);
+    stream.writeDouble(note.utauTailFade.control2Time);
+    stream.writeDouble(note.utauTailFade.control2Progress);
         stream.writeInt64(static_cast<juce::int64>(note.amplitudeEnvelope.size()));
         for (const auto& point : note.amplitudeEnvelope)
         {
@@ -714,17 +701,51 @@ std::uint64_t noteRenderHashImpl(const NoteData& note, bool withAmplitudeEnvelop
     return hash;
 }
 
+std::string voicebankRenderStamp(const TrackData& track)
+{
+    juce::MemoryOutputStream stream;
+    if (trackUsesVoicebankSynthesis(track) && track.voicebankDirectory.isDirectory())
+    {
+        juce::Array<juce::File> otoFiles;
+        track.voicebankDirectory.findChildFiles(
+            otoFiles, juce::File::findFiles, true, "*");
+        otoFiles.removeIf([](const juce::File& file)
+        {
+            const auto name = file.getFileName();
+            return !name.equalsIgnoreCase("oto.ini")
+                && !name.equalsIgnoreCase("oto.jie.ini")
+                && !name.equalsIgnoreCase("oto4.ini")
+                && !name.equalsIgnoreCase("otomou.ini")
+                && !file.hasFileExtension("yaml;json;onnx;emb;txt;wav;flac;aif;aiff");
+        });
+        otoFiles.sort();
+        for (const auto& file : otoFiles)
+        {
+            const auto relative = file.getRelativePathFrom(
+                track.voicebankDirectory).toUTF8();
+            stream.write(relative.getAddress(), relative.sizeInBytes());
+            stream.writeInt64(file.getLastModificationTime().toMilliseconds());
+            stream.writeInt64(file.getSize());
+        }
+    }
+    return std::string(static_cast<const char*>(stream.getData()), stream.getDataSize());
+}
+
 std::string renderKey(const ClipData& clip, const TrackData& track,
                       const juce::File& hifiganModelDirectory,
                       const backend::OrtExecutionConfig& inference,
-                      const juce::File& utauResamplerFile, const juce::var& dsOptions = {})
+                      const juce::File& utauResamplerFile, const juce::var& dsOptions = {},
+                      UtauOutputEngine defaultEngine = UtauOutputEngine::resampler,
+                      const juce::File& wavtool = {}, const std::string* voicebankStamp = nullptr)
 {
     juce::MemoryOutputStream stream;
+    if (!trackUsesVoicebankSynthesis(track) && !trackIsDiffSinger(track))
+        stream.writeInt(2026100601); // Native source-preservation render semantics.
     if (trackIsDiffSinger(track)) stream.writeString(juce::JSON::toString(dsOptions));
     // The render order reaches the per-clip render through matchNsfSourceLevel,
     // so two orders are two different buffers and must not share a cache entry.
     stream.writeInt(static_cast<int>(track.renderOrder));
-    if (track.pitchAlgorithm == PitchAlgorithm::utau)
+    if (trackUsesVoicebankSynthesis(track))
     {
         // A selected note can read a curve edited on an unselected neighbour
         // or another clip. The clip cache must include those dependencies too.
@@ -754,7 +775,13 @@ std::string renderKey(const ClipData& clip, const TrackData& track,
     stream.writeInt(static_cast<int>(track.pitchAlgorithm));
     stream.writeInt(static_cast<int>(track.stretchAlgorithm));
     stream.writeBool(track.normalizeVolume);
-    stream.writeBool(utauModeUsesRegions(track.utauMode));
+    stream.writeInt(static_cast<int>(track.utauMode));
+    stream.writeInt(static_cast<int>(effectiveUtauOutputEngine(track, defaultEngine)));
+    const auto selectedResampler = effectiveUtauResampler(track, utauResamplerFile);
+    const auto selectedWavtool = effectiveUtauWavtool(track, wavtool);
+    stream.writeString(selectedWavtool.getFullPathName());
+    stream.writeInt64(selectedWavtool.getLastModificationTime().toMilliseconds());
+    stream.writeInt64(selectedWavtool.getSize());
     stream.writeInt(track.utauConsonantVelocity);
     const auto globalFlags = track.utauGlobalFlags.toUTF8();
     stream.write(globalFlags.getAddress(), globalFlags.sizeInBytes());
@@ -764,43 +791,33 @@ std::string renderKey(const ClipData& clip, const TrackData& track,
     stream.writeString(track.diffSingerLanguage);
     stream.writeString(track.diffSingerSpeaker);
     stream.writeString(track.diffSingerDictionary);
-    if (track.pitchAlgorithm == PitchAlgorithm::utau
-        && track.voicebankDirectory.isDirectory())
-    {
-        juce::Array<juce::File> otoFiles;
-        track.voicebankDirectory.findChildFiles(
-            otoFiles, juce::File::findFiles, true, "*");
-        otoFiles.removeIf([](const juce::File& file)
-        {
-            const auto name = file.getFileName();
-            return !name.equalsIgnoreCase("oto.ini")
-                && !name.equalsIgnoreCase("oto.jie.ini")
-                && !name.equalsIgnoreCase("oto4.ini")
-                && !file.hasFileExtension("yaml;json;onnx;emb;txt");
-        });
-        otoFiles.sort();
-        for (const auto& file : otoFiles)
-        {
-            const auto relative = file.getRelativePathFrom(
-                track.voicebankDirectory).toUTF8();
-            stream.write(relative.getAddress(), relative.sizeInBytes());
-            stream.writeInt64(file.getLastModificationTime().toMilliseconds());
-            stream.writeInt64(file.getSize());
-        }
-    }
-    const auto resamplerPath = utauResamplerFile.getFullPathName().toUTF8();
+    const auto bankStamp = voicebankStamp != nullptr ? *voicebankStamp : voicebankRenderStamp(track);
+    stream.write(bankStamp.data(), bankStamp.size());
+    const auto resamplerPath = selectedResampler.getFullPathName().toUTF8();
     stream.write(resamplerPath.getAddress(), resamplerPath.sizeInBytes());
-    stream.writeInt64(utauResamplerFile.getLastModificationTime().toMilliseconds());
+    stream.writeInt64(selectedResampler.getLastModificationTime().toMilliseconds());
+    stream.writeInt64(selectedResampler.getSize());
     const auto modelPath = hifiganModelDirectory.getFullPathName().toUTF8();
     stream.write(modelPath.getAddress(), modelPath.sizeInBytes());
-    const auto modelDirectory = hifiganModelDirectory.existsAsFile()
+    auto modelDirectory = hifiganModelDirectory.existsAsFile()
         ? hifiganModelDirectory.getParentDirectory() : hifiganModelDirectory;
+    if (!modelDirectory.getChildFile("pc_nsf_hifigan.onnx").existsAsFile()) {
+        const auto env = juce::SystemStats::getEnvironmentVariable("HACHISHIFTER_NSF_HIFIGAN_MODEL_DIR", {});
+        if (env.isNotEmpty()) modelDirectory = juce::File(env);
+        else if (hifiganModelDirectory == juce::File{}) modelDirectory = juce::File::getSpecialLocation(
+            juce::File::currentExecutableFile).getParentDirectory().getChildFile("models/nsf_hifigan");
+    }
     const auto model = modelDirectory.getChildFile("pc_nsf_hifigan.onnx");
     const auto config = modelDirectory.getChildFile("config.json");
     stream.writeInt64(model.getLastModificationTime().toMilliseconds());
     stream.writeInt64(model.getSize());
     stream.writeInt64(config.getLastModificationTime().toMilliseconds());
     stream.writeInt64(config.getSize());
+    for (const auto* relative : { "hifisampler.json", "hnsep/model.onnx", "hnsep/config.json" }) {
+        const auto file = modelDirectory.getChildFile(relative);
+        stream.writeInt64(file.getLastModificationTime().toMilliseconds());
+        stream.writeInt64(file.getSize());
+    }
     stream.writeInt(static_cast<int>(inference.requested));
     stream.writeInt(inference.deviceIndex);
     stream.writeInt(inference.intraOpThreads);
@@ -1170,7 +1187,12 @@ backend::UtauRenderRequest makeUtauRequest(const ClipData& clip, const TrackData
         {
             if (curve.flag.startsWith("DS:")) continue;
             const auto& drawn = curve.points;
-            if (drawn.empty()) continue;
+            if (drawn.empty()) {
+                // Empty HIFI overrides intentionally suppress a saved legacy
+                // curve while retaining it for the traditional resampler.
+                if (curve.flag.startsWith("HIFI:")) renderedNote.flagCurves.emplace_back(curve.flag, std::vector<std::pair<double,double>>{});
+                continue;
+            }
             auto curved = 0;
             for (std::size_t index = 1; index < drawn.size(); ++index)
                 if (drawn[index].shape != PitchCurveShape::linear) ++curved;
@@ -1199,6 +1221,9 @@ backend::UtauRenderRequest makeUtauRequest(const ClipData& clip, const TrackData
         renderedNote.durationSeconds = note.durationSeconds;
         renderedNote.midiNote = note.midiNote;
         renderedNote.gain = note.gain;
+        renderedNote.tailFadeMode = trackIsDiffSinger(track)?0:note.utauTailFadeMode;
+        renderedNote.tailFadeSettings = note.utauTailFade;
+        if(trackIsDiffSinger(track))renderedNote.tailFadeSettings.head.mode=0;
         {
             // A note with no envelope of its own still has one: a flat 100%.
             // Written out here so a base value raises it like any other.
@@ -1227,6 +1252,7 @@ backend::UtauRenderRequest makeUtauRequest(const ClipData& clip, const TrackData
         renderedNote.overlapOverrideEnabled = note.utauOverlapOverrideEnabled;
         renderedNote.overlapSeconds = note.utauOverlapSeconds;
         renderedNote.stpSeconds = note.utauStpSeconds;
+        renderedNote.modulationPercent = note.utauModulationPercent;
         renderedNote.oto = note.utauOto;
         renderedNote.jieSplitSet = note.utauJieSplitSet;
         renderedNote.jieSplit = { note.utauJieSplit1, note.utauJieSplit2,
@@ -1313,6 +1339,18 @@ AudioEngine::AudioEngine()
     // plausible while the packaged engine sits unused beside it.
     utauResamplerFile = bundledUtauResampler(juce::File::getSpecialLocation(
         juce::File::currentExecutableFile).getParentDirectory());
+    // Read the same preferences for GUI, offline export and headless MCP.
+    juce::PropertiesFile::Options options;
+    options.applicationName = "HachiShifterNext";
+    options.filenameSuffix = "settings";
+    options.folderName = juce::SystemStats::getEnvironmentVariable("HACHI_TEST_SETTINGS_DIR", "HachiShifterNext");
+    options.osxLibrarySubFolder = "Application Support";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    juce::PropertiesFile settings(options);
+    setUtauResamplerFile(juce::File(settings.getValue("algorithm.utauResampler").trim().unquoted()));
+    setUtauOutputDefaults(parseUtauOutputEngine(settings.getValue("algorithm.utauOutputEngine")),
+        juce::File(settings.getValue("algorithm.utauWavtool").trim().unquoted()));
+    hifiganModelDirectory = juce::File(settings.getValue("algorithm.hifiganPath").trim().unquoted());
     formatManager.registerBasicFormats();
     sourcePlayer.setSource(this);
     startupLog("AudioEngine: opening default devices");
@@ -1435,6 +1473,7 @@ void AudioEngine::clearAuditionFile()
     // it here sent the playhead to the beginning every time the sample editor
     // was closed, and the next zoom then dragged the whole view after it.
     timelineSample.store(projectTimelineSample.load());
+    renderService.setPlaybackPosition(position());
     sendChangeMessage();
 }
 
@@ -1561,11 +1600,12 @@ std::vector<backend::UtauNoteRenderSpec> AudioEngine::diagnosticUtauRequestNotes
 }
 
 std::string AudioEngine::diagnosticUtauRenderKey(const ProjectData& project,
-                                               const juce::String& clipId)
+                                               const juce::String& clipId, UtauOutputEngine defaultEngine,
+    const juce::File& resampler, const juce::File& wavtool)
 {
     for (const auto& track : project.tracks)
         for (const auto& clip : track.clips)
-            if (clip.id == clipId) return renderKey(clip, track, {}, {}, {});
+            if (clip.id == clipId) return renderKey(clip, track, {}, {}, resampler, {}, defaultEngine, wavtool);
     return {};
 }
 
@@ -1600,6 +1640,53 @@ void AudioEngine::refreshUtauWaveformSnapshot()
     }
     const juce::ScopedLock guard(utauWaveformLock);
     utauWaveformSnapshot = std::move(collected);
+}
+
+std::uint64_t AudioEngine::nativeClipWaveformHash(const ClipData& viewClip, const TrackData& track)
+{
+    const auto clip = nativeAudioPreviewClip(viewClip);
+    juce::MemoryOutputStream stream;
+    stream.writeString(track.id); stream.writeString(clip.sourceFile.getFullPathName());
+    stream.writeDouble(clip.startSeconds); stream.writeDouble(clip.sourceOffsetSeconds);
+    stream.writeDouble(clip.sourceDurationSeconds); stream.writeDouble(clip.durationSeconds);
+    stream.writeInt(static_cast<int>(track.pitchAlgorithm));
+    stream.writeInt(static_cast<int>(track.stretchAlgorithm));
+    stream.writeInt(static_cast<int>(track.renderOrder)); stream.writeBool(track.normalizeVolume);
+    stream.writeInt64(static_cast<juce::int64>(clip.sourceTimeMap.size()));
+    for(const auto& point:clip.sourceTimeMap)
+    {stream.writeDouble(point.targetSeconds);stream.writeDouble(point.sourceSeconds);}
+    stream.writeInt64(static_cast<juce::int64>(clip.notes.size()));
+    for(const auto& note:clip.notes) writeNoteRenderFields(stream,note);
+    std::uint64_t hash=1469598103934665603ull;
+    const auto* bytes=static_cast<const unsigned char*>(stream.getData());
+    for(std::size_t i=0;i<stream.getDataSize();++i){hash^=bytes[i];hash*=1099511628211ull;}
+    return hash;
+}
+
+std::shared_ptr<const std::vector<NativeRenderedWaveform>> AudioEngine::nativeClipWaveforms() const
+{
+    const juce::ScopedLock guard(nativeWaveformLock);return nativeWaveformSnapshot;
+}
+
+void AudioEngine::refreshNativeWaveforms()
+{
+    const auto generation=nativeWaveformGeneration->load(std::memory_order_acquire);
+    if(generation==nativeWaveformSnapshotGeneration)return;
+    nativeWaveformSnapshotGeneration=generation;
+    auto collected=std::make_shared<std::vector<NativeRenderedWaveform>>();
+    {
+        const juce::ScopedReadLock guard(renderLock);
+        for(const auto& loaded:loadedClips)
+        {
+            // Old fallback audio may still be heard while rebuilding. It is
+            // never labelled as the new render in the tuning editor.
+            const auto& entry=loaded->rendered;
+            if(loaded->nativeWaveformHash==0||!entry||!entry->ready.load(std::memory_order_acquire)
+                ||!entry->nativePeaks)continue;
+            collected->push_back({loaded->nativeWaveformHash,entry->nativePeaks});
+        }
+    }
+    const juce::ScopedLock guard(nativeWaveformLock);nativeWaveformSnapshot=std::move(collected);
 }
 
 std::vector<std::vector<const ClipData*>> AudioEngine::glideChains(
@@ -1685,7 +1772,7 @@ void AudioEngine::syncProject(const ProjectData& project, bool diffSingerExport,
     componentExportError = component == WavExportComponent::full ? juce::String{}
         : componentExportIssue(project, utauResamplerFile, {},
             std::vector<juce::String>(utauRenderNoteSelection.begin(), utauRenderNoteSelection.end()),
-            {}, auditionTrackId);
+            {}, auditionTrackId, defaultUtauOutputEngine);
     rebuildLoadedClips(project, diffSingerExport);
     auto contentDuration = 0.0;
     for (const auto& track : project.tracks)
@@ -1720,6 +1807,7 @@ void AudioEngine::setUtauRenderNoteSelection(const std::vector<juce::String>& no
     // every later marquee silently accumulate historical notes and caused the
     // rendered phrase to disagree with the visible selection.  Shift-marquee
     // is already represented by noteIds containing both old and new notes.
+    ++utauRenderRequestGeneration;
     utauRenderNoteSelection.clear();
     for (const auto& id : noteIds)
         if (id.isNotEmpty())
@@ -1744,6 +1832,7 @@ int AudioEngine::selectEveryUtauNote(const ProjectData& project)
 bool AudioEngine::selectAllRenderedUtauNotes()
 {
     const juce::ScopedWriteLock guard(renderLock);
+    ++utauRenderRequestGeneration;
     utauRenderNoteSelection = utauRenderedNoteHistory;
     return !utauRenderNoteSelection.empty();
 }
@@ -1779,6 +1868,27 @@ juce::File AudioEngine::resolveUtauResampler(const juce::String& configured,
     const juce::File chosen(configured.trim().unquoted());
     if (chosen.existsAsFile()) return chosen;
     return bundledUtauResampler(executableDirectory);
+}
+
+void AudioEngine::setUtauOutputDefaults(UtauOutputEngine engine, const juce::File& wavtool)
+{
+    const juce::ScopedWriteLock guard(renderLock);
+    const auto selected = engine == UtauOutputEngine::pcNsfHifigan ? engine : UtauOutputEngine::resampler;
+    if (defaultUtauOutputEngine == selected && utauWavtoolFile == wavtool) return;
+    defaultUtauOutputEngine = selected;
+    utauWavtoolFile = wavtool;
+    renderCache.clear();
+}
+
+juce::String AudioEngine::outputEngineDisplayName(const TrackData& track) const
+{
+    const juce::ScopedReadLock guard(renderLock);
+    if (track.accompaniment || !trackUsesVoicebankSynthesis(track)) return {};
+    if (trackIsDiffSinger(track)) return "DiffSinger";
+    if (effectiveUtauOutputEngine(track, defaultUtauOutputEngine) == UtauOutputEngine::pcNsfHifigan)
+        return juce::String::fromUTF8("HiFisampler（PC-NSF-HiFiGAN）");
+    const auto engine = effectiveUtauResampler(track, utauResamplerFile);
+    return engine == juce::File{} ? juce::String::fromUTF8("重采样器未配置") : engine.getFileNameWithoutExtension();
 }
 
 void AudioEngine::setUtauResamplerFile(const juce::File& executable)
@@ -1871,9 +1981,21 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
     trackMeters.clear();
     std::unordered_map<std::string, std::shared_ptr<juce::AudioFormatReader>> readers;
     std::unordered_set<std::string> activeRenderKeys;
+    // Submit the complete snapshot before any worker picks its next task, so
+    // the first track in project order cannot jump ahead of the playhead.
+    renderService.setPlaybackPosition(static_cast<double>(auditionMode.load()
+        ? projectTimelineSample.load() : timelineSample.load()) / outputSampleRate.load());
+    renderService.beginUpdate();
+    struct QueueUpdateScope
+    {
+        backend::RenderService& service;
+        const std::unordered_set<std::string>& keys;
+        ~QueueUpdateScope() { service.endUpdate(keys); }
+    };
+    const QueueUpdateScope queueUpdate { renderService, activeRenderKeys };
     // Hand one clip its span of a decoded phrase.  The audible range is found
     // here rather than copied from the phrase, because it is asked per clip.
-    const auto sliceInto = [](const RenderedClip& phrase,
+    const auto sliceInto = [generation=nativeWaveformGeneration](const RenderedClip& phrase,
                               const RenderedClip::SliceTarget& target)
     {
         if (target.clip == nullptr || phrase.buffer.getNumSamples() <= 0) return;
@@ -1898,12 +2020,17 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
         target.clip->firstAudibleSample = firstAudible;
         target.clip->lastAudibleSample = lastAudible;
         target.clip->sampleRate = phrase.sampleRate;
+        target.clip->nativePeaks = measureNativeRenderedPeaks(target.clip->buffer, phrase.sampleRate);
         target.clip->backend = phrase.backend;
         target.clip->warning = phrase.warning;
         target.clip->progress.store(1.0f, std::memory_order_release);
         target.clip->ready.store(true, std::memory_order_release);
         target.clip->finished.store(true, std::memory_order_release);
+        generation->fetch_add(1, std::memory_order_release);
     };
+    // Tracks sharing a bank share one metadata scan in this update.
+    std::unordered_map<std::string, std::string> updateBankStamps;
+    std::unordered_set<std::string> changedBanks;
     const auto anySolo = std::any_of(project.tracks.begin(), project.tracks.end(),
                                      [](const auto& track) { return track.solo; });
     for (const auto& track : project.tracks)
@@ -1920,6 +2047,22 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
         {
             return left->startSeconds < right->startSeconds;
         });
+        const auto bankPath = trackUsesVoicebankSynthesis(track)
+            ? track.voicebankDirectory.getFullPathName().toStdString() : std::string{};
+        auto [updateStamp, firstTrack] = updateBankStamps.try_emplace(bankPath);
+        if (firstTrack) {
+            updateStamp->second = voicebankRenderStamp(track);
+            if (trackUsesVoicebankSynthesis(track)) {
+                auto [it, inserted] = voicebankRenderStamps.try_emplace(bankPath, updateStamp->second);
+                if (!inserted && it->second != updateStamp->second) {
+                    it->second = updateStamp->second;
+                    changedBanks.insert(bankPath);
+                    backend::UtauRenderer::recheckVoicebankFiles(track.voicebankDirectory);
+                }
+            }
+        }
+        const auto& bankStamp = updateStamp->second;
+        const auto bankChanged = changedBanks.contains(bankPath);
         const auto count = orderedClips.size();
         // stretchSpliceThenPitch: a chain of clips joined by Melodyne pitch
         // joins is decoded in one pass instead of being spliced afterwards.
@@ -1957,8 +2100,8 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
             // need the same note-driven request path; only the final render
             // call differs.
             const auto classicUtau = !track.accompaniment && track.pitchAlgorithm == PitchAlgorithm::utau;
-            const auto nsfVoicebank = !track.accompaniment && track.pitchAlgorithm == PitchAlgorithm::nsfHifigan
-                && track.voicebankDirectory.isDirectory();
+            const auto nsfVoicebank = trackUsesVoicebankSynthesis(track) && !trackIsDiffSinger(track)
+                && effectiveUtauOutputEngine(track, defaultUtauOutputEngine) == UtauOutputEngine::pcNsfHifigan;
             const auto utauTrack = classicUtau || nsfVoicebank;
             if (clip.muted || (!utauTrack && !clip.sourceFile.existsAsFile())) continue;
             std::shared_ptr<juce::AudioFormatReader> reader;
@@ -1976,16 +2119,52 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
             auto loaded = std::make_unique<LoadedClip>();
             loaded->clip = clip;
             loaded->trackId = track.id.toStdString();
+            if(track.compose && !track.accompaniment && !trackUsesVoicebankSynthesis(track))
+                loaded->nativeWaveformHash = nativeClipWaveformHash(clip,track);
             loaded->smoothOverlaps = track.smoothOverlaps;
-            const auto compactDeclick = std::min(0.0025, loaded->clip.durationSeconds * 0.5);
-            loaded->clip.fadeInSeconds = std::max(loaded->clip.fadeInSeconds, compactDeclick);
-            loaded->clip.fadeOutSeconds = std::max(loaded->clip.fadeOutSeconds, compactDeclick);
-            // Worked out once: the mixer fades such a seam, and the neural
-            // decoder is told below not to fade its own edge into it as well.
             const auto joinedStart = clipIndex > 0
                 && clipsJoinAt(clip, *orderedClips[clipIndex - 1], false);
             const auto joinedEnd = clipIndex + 1 < orderedClips.size()
                 && clipsJoinAt(clip, *orderedClips[clipIndex + 1], true);
+            std::optional<backend::Mld5FileRenderRequest> nativeRequest;
+            std::optional<std::string> nativeCacheKey;
+            auto preservesSource = false;
+            if (reader && trackShowsAllNativeRegions(track) && !inGlideGroup[clipIndex])
+            {
+                if (!clip.notes.empty())
+                    nativeCacheKey = renderKey(clip, track, hifiganModelDirectory, inferenceConfiguration,
+                        utauResamplerFile, dsOptions, defaultUtauOutputEngine, utauWavtoolFile, &bankStamp)
+                        + (renderComponent == WavExportComponent::full ? std::string{}
+                            : "|export-component=" + std::to_string(static_cast<int>(renderComponent)));
+                const auto cached = nativeCacheKey ? renderCache.find(*nativeCacheKey) : renderCache.end();
+                if (cached != renderCache.end() && cached->second)
+                    preservesSource = cached->second->preservesNativeSource;
+                else
+                {
+                    nativeRequest = makeRenderRequest(clip, track, hifiganModelDirectory,
+                        inferenceConfiguration, joinedStart, joinedEnd);
+                    nativeRequest->exportComponent = renderComponent;
+                    const auto sourceStart = juce::jlimit<juce::int64>(0, reader->lengthInSamples - 1,
+                        static_cast<juce::int64>(std::llround(clip.sourceOffsetSeconds * reader->sampleRate)));
+                    const auto sourceSamples = static_cast<int>(std::max<juce::int64>(1,
+                        std::min(static_cast<juce::int64>(std::llround(
+                            std::max(0.001, nativeRequest->sourceDurationSeconds) * reader->sampleRate)),
+                            reader->lengthInSamples - sourceStart)));
+                    const auto targetSamples = std::max(1, static_cast<int>(std::llround(
+                        std::max(0.001, clip.durationSeconds) * reader->sampleRate)));
+                    preservesSource = backend::canPreserveNativeSource(*nativeRequest,
+                        reader->sampleRate, sourceSamples, targetSamples);
+                }
+            }
+            // A raw native recording already carries its original attack and
+            // release. Only processed audio needs an implicit boundary guard;
+            // explicitly authored clip fades still apply in either case.
+            if (!preservesSource)
+            {
+                const auto compactDeclick = std::min(0.0025, loaded->clip.durationSeconds * 0.5);
+                loaded->clip.fadeInSeconds = std::max(loaded->clip.fadeInSeconds, compactDeclick);
+                loaded->clip.fadeOutSeconds = std::max(loaded->clip.fadeOutSeconds, compactDeclick);
+            }
             // A seam inside a decoded phrase was never cut, so there is nothing
             // there to fade across; the mixer must lay these buffers down flat.
             if (inGlideGroup[clipIndex])
@@ -2128,14 +2307,31 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
             }
             else if (!track.accompaniment && track.compose && !renderClip.notes.empty())
             {
-                const auto cacheKey = renderKey(
+                auto cacheKey = nativeCacheKey ? *nativeCacheKey : renderKey(
                     renderClip, track, hifiganModelDirectory, inferenceConfiguration,
-                    utauResamplerFile, dsOptions)
+                    utauResamplerFile, dsOptions, defaultUtauOutputEngine, utauWavtoolFile, &bankStamp)
                     + (renderComponent == WavExportComponent::full ? std::string{}
                         : "|export-component=" + std::to_string(static_cast<int>(renderComponent)));
+                bool forceNative = false;
+                if (nsfVoicebank) {
+                    forceNative = backend::HifisamplerFlags::parse(track.utauGlobalFlags).force;
+                    for (const auto& note : renderClip.notes) {
+                        forceNative |= backend::HifisamplerFlags::parse(note.utauFlags).force;
+                        if (note.utauFlagSplit) for (const auto& text : { note.utauRegionFlags1, note.utauRegionFlags2, note.utauRegionFlags3, note.utauRegionFlags4 })
+                            forceNative |= backend::HifisamplerFlags::parse(text).force;
+                    }
+                }
+                // G bypasses the phrase cache once per explicit selection/export.
+                // Rebuilding the UI for the same request must not queue it again.
+                if (forceNative) cacheKey += "|G-request="+std::to_string(utauRenderRequestGeneration);
+                if (bankChanged || forceNative) {
+                    loaded->fallbackRendered.reset();
+                    playbackFallbackByClip.erase(clip.id.toStdString());
+                }
                 activeRenderKeys.insert(cacheKey);
                 auto& state = renderCache[cacheKey];
                 if (state == nullptr) state = std::make_shared<RenderedClip>();
+                if (!utauTrack) state->preservesNativeSource = preservesSource;
                 state->timelineOffsetSeconds = renderTimelineOffset;
                 loaded->rendered = state;
                 // A failed/empty render must not remain as a permanently silent
@@ -2150,7 +2346,25 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
                 }
                 if (!state->scheduled.exchange(true))
                 {
-                    const auto publish = [state](backend::RenderedAudio result) mutable
+                    backend::RenderSchedule schedule;
+                    schedule.key = cacheKey;
+                    schedule.startSeconds = requestClip.startSeconds;
+                    schedule.endSeconds = requestClip.startSeconds + requestClip.durationSeconds;
+                    if (utauTrack)
+                    {
+                        auto first = std::numeric_limits<double>::infinity();
+                        auto last = -std::numeric_limits<double>::infinity();
+                        for (const auto& note : renderClip.notes)
+                            if (!dsContext || utauRenderNoteSelection.contains(note.id.toStdString()))
+                            {
+                                first = std::min(first, clip.startSeconds + note.startSeconds);
+                                last = std::max(last, clip.startSeconds + note.startSeconds + note.durationSeconds);
+                            }
+                        if (std::isfinite(first))
+                        { schedule.startSeconds = first; schedule.endSeconds = last; }
+                    }
+                    schedule.discarded = [state] { state->scheduled.store(false, std::memory_order_release); };
+                    const auto publish = [state, native=!utauTrack, generation=nativeWaveformGeneration](backend::RenderedAudio result) mutable
                     {
                          if (result.buffer.getNumSamples() <= 0 || result.sampleRate <= 0.0)
                          {
@@ -2185,9 +2399,11 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
                         state->lastAudibleSample = lastAudible;
                         state->backend = std::move(result.backend);
                         state->warning = std::move(result.warning);
+                        if(native) state->nativePeaks = measureNativeRenderedPeaks(state->buffer,state->sampleRate);
                         state->ready.store(true, std::memory_order_release);
                         state->progress.store(1.0f, std::memory_order_release);
                         state->finished.store(true, std::memory_order_release);
+                        if(native) generation->fetch_add(1,std::memory_order_release);
                     };
                     if (utauTrack)
                     {
@@ -2248,7 +2464,10 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
                                 1, std::memory_order_release);
                         };
                         auto request = makeUtauRequest(requestClip, track,
-                            utauResamplerFile, project);
+                            effectiveUtauResampler(track, utauResamplerFile), project);
+                        request.wavtoolExecutable = effectiveUtauWavtool(track, utauWavtoolFile);
+                        request.requireExternalResampler = track.outputResampler != juce::File{};
+                        request.timelineStartSeconds = requestClip.startSeconds;
                         request.diffSingerInference = dsOptions;
                         request.exportComponent = renderComponent;
                         auto phonemes=std::make_shared<std::map<std::size_t,std::vector<backend::UtauPhonemeSpan>>>();
@@ -2313,23 +2532,25 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
                                 measure(result);
                             forward(std::move(result));
                         };
-                        if (nsfVoicebank)
+                        if (nsfVoicebank) {
+                            scheduledNsfUtauRenders.fetch_add(1, std::memory_order_relaxed);
                             // A voicebank track on NSF-HiFiGAN synthesises
                             // natively through the one NSF-HiFiGAN renderer,
                             // not the classic resampler.
                             renderService.renderNsfUtau(std::move(request),
                                 hifiganModelDirectory, inferenceConfiguration,
-                                std::move(forwardMeasured));
-                        else
+                                std::move(forwardMeasured), std::move(schedule));
+                        } else
                             renderService.renderUtau(std::move(request),
-                                std::move(forwardMeasured));
+                                std::move(forwardMeasured), std::move(schedule));
                     }
                     else
                     {
-                        auto request = makeRenderRequest(clip, track, hifiganModelDirectory,
-                            inferenceConfiguration, joinedStart, joinedEnd);
+                        auto request = nativeRequest ? std::move(*nativeRequest)
+                            : makeRenderRequest(clip, track, hifiganModelDirectory,
+                                inferenceConfiguration, joinedStart, joinedEnd);
                         request.exportComponent = renderComponent;
-                        renderService.renderMld5File(std::move(request), publish);
+                        renderService.renderMld5File(std::move(request), publish, std::move(schedule));
                     }
                 }
             }
@@ -2410,7 +2631,9 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
                         for (const auto& target : phrase->pendingSlices)
                             sliceInto(*phrase, target);
                         phrase->pendingSlices.clear();
-                    });
+                    }, { mergedKey, group.clips.front()->startSeconds,
+                         group.clips.back()->startSeconds + group.clips.back()->durationSeconds,
+                         [phrase] { phrase->scheduled.store(false, std::memory_order_release); } });
         }
     }
     std::erase_if(renderCache, [&](const auto& item)
@@ -2418,6 +2641,7 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
         return renderComponent == WavExportComponent::full && !activeRenderKeys.contains(item.first);
     });
     // Which entries are current has changed, so which notes have peaks has too.
+    nativeWaveformGeneration->fetch_add(1, std::memory_order_release);
     utauWaveformGeneration.fetch_add(1, std::memory_order_release);
 }
 
@@ -2476,6 +2700,8 @@ void AudioEngine::getNextAudioBlock(const juce::AudioSourceChannelInfo& info)
     const auto blockStartSample = timelineSample.load();
     const auto blockStart = static_cast<double>(blockStartSample) / sampleRate;
     const auto blockEnd = static_cast<double>(blockStartSample + info.numSamples) / sampleRate;
+    if (!auditionMode.load(std::memory_order_relaxed) && !offlineRendering.load(std::memory_order_relaxed))
+        renderService.setPlaybackPosition(blockStart);
     const juce::ScopedReadLock guard(renderLock);
     // Export-only renders must never become the ordinary transport's voice.
     // The offline writer enables offlineRendering before requesting blocks.
@@ -2530,6 +2756,11 @@ void AudioEngine::getNextAudioBlock(const juce::AudioSourceChannelInfo& info)
         if (!offlineRendering.load(std::memory_order_relaxed)) sendChangeMessage();
         return;
     }
+
+    // A not-yet-rendered voice must not let the accompaniment run ahead. Keep
+    // the common transport stationary, without waiting on this audio thread.
+    if (!offlineRendering.load(std::memory_order_relaxed)
+        && pendingAudioInRange(blockStart, blockEnd)) return;
 
     std::unordered_map<std::string, std::vector<float>> overlapEnvelopeSums;
     std::unordered_map<std::string, std::vector<unsigned short>> overlapCounts;
@@ -2785,6 +3016,7 @@ void AudioEngine::stop()
 void AudioEngine::setPosition(double seconds)
 {
     timelineSample.store(static_cast<juce::int64>(std::max(0.0, seconds) * outputSampleRate.load()));
+    if (!auditionMode.load()) renderService.setPlaybackPosition(position());
     sendChangeMessage();
 }
 
@@ -2799,6 +3031,30 @@ float AudioEngine::trackPeak(const juce::String& trackId) const
     if (const auto found = trackMeters.find(trackId.toStdString()); found != trackMeters.end())
         return found->second->load(std::memory_order_relaxed);
     return 0.0f;
+}
+
+bool AudioEngine::pendingAudioInRange(double start, double end) const
+{
+    const auto until = playUntilSeconds.load(std::memory_order_relaxed);
+    if (until > start) end = std::min(end, until);
+    for (const auto& loaded : loadedClips)
+    {
+        const auto& state = loaded->rendered;
+        if (loaded->clip.muted || state == nullptr
+            || state->ready.load(std::memory_order_acquire)
+            || state->finished.load(std::memory_order_acquire)) continue;
+        const auto from = loaded->clip.startSeconds + state->timelineOffsetSeconds;
+        const auto to = loaded->clip.startSeconds + loaded->clip.durationSeconds;
+        if (from < end && to > start) return true;
+    }
+    return false;
+}
+
+bool AudioEngine::playbackNeedsRender(double lookAheadSeconds) const
+{
+    const juce::ScopedReadLock guard(renderLock);
+    if (auditionMode.load()) return false;
+    return pendingAudioInRange(position(), position() + std::max(0.001, lookAheadSeconds));
 }
 
 std::optional<double> AudioEngine::renderProgress() const
@@ -2901,18 +3157,17 @@ juce::String AudioEngine::activeRenderWarnings() const
     return warnings.joinIntoString("; ");
 }
 
-juce::StringArray AudioEngine::renderCapabilityWarnings(const ProjectData& project)
+juce::StringArray AudioEngine::renderCapabilityWarnings(const ProjectData& project, UtauOutputEngine defaultEngine)
 {
-    // The UTAU resampler path (makeUtauRequest) is the only backend that reads
-    // oto flags, consonant velocity, preutterance/overlap overrides, STP and
-    // the four-region flag split.  Every other backend renders from analysed
-    // source audio through the common request, which already carries pitch,
-    // vibrato, amplitude, formant, tension, breath, gain, drift and modulation
-    // -- so those edits are honoured everywhere and are never warned about.
+    // Native NSF voicebank synthesis shares OTO timing, velocity and STP.
+    // HiFisampler implements its own FLAG catalogue; WCSNDM-only names warn.
+    // Audio-source backends keep their common pitch/amplitude parameters.
     juce::StringArray warnings;
     for (const auto& track : project.tracks)
     {
-        if (track.accompaniment || track.pitchAlgorithm == PitchAlgorithm::utau) continue;
+        const auto nativeOto = trackUsesVoicebankSynthesis(track) && !trackIsDiffSinger(track)
+            && effectiveUtauOutputEngine(track, defaultEngine) == UtauOutputEngine::pcNsfHifigan;
+        if (track.accompaniment || (track.pitchAlgorithm == PitchAlgorithm::utau && !nativeOto)) continue;
         auto usesFlags = track.utauGlobalFlags.trim().isNotEmpty();
         auto usesFlagCurve = false;
         auto usesConsonantVelocity = false;
@@ -2941,15 +3196,33 @@ juce::StringArray AudioEngine::renderCapabilityWarnings(const ProjectData& proje
         {
             warnings.addIfNotAlreadyThere("[" + track.name + "] " + feature);
         };
-        if (usesFlags || usesFlagCurve)
+        if (nativeOto) {
+            juce::StringArray ignored;
+            const auto inspect = [&](const juce::String& text) {
+                ignored.addArray(backend::HifisamplerFlags::parse(text).unsupported);
+            };
+            inspect(track.utauGlobalFlags);
+            for (const auto& clip : track.clips) for (const auto& n : clip.notes) {
+                inspect(n.utauFlags);
+                if (n.utauFlagSplit) for (const auto* value : { &n.utauRegionFlags1, &n.utauRegionFlags2, &n.utauRegionFlags3, &n.utauRegionFlags4 }) inspect(*value);
+                if (n.utauFlagCurveEnabled) for (const auto& c : n.utauFlagCurves) {
+                    const auto name = c.flag.startsWith("HIFI:") ? c.flag.substring(5) : c.flag;
+                    if (!backend::hifiDefinition(name)) ignored.addIfNotAlreadyThere(c.flag);
+                }
+            }
+            ignored.removeDuplicates(false);
+            if (!ignored.isEmpty()) note(juce::String::fromUTF8("HiFisampler 不支持这些 FLAG：") + ignored.joinIntoString(", "));
+        }
+        else if (usesFlags || usesFlagCurve)
             note(juce::String::fromUTF8("UTAU flags 仅在 UTAU 渲染后端生效，当前后端将忽略"));
-        if (usesConsonantVelocity)
+
+        if (usesConsonantVelocity && !nativeOto)
             note(juce::String::fromUTF8("辅音速度仅 UTAU 后端生效；其他后端用起音时间映射近似"));
-        if (usesTimingOverride)
+        if (usesTimingOverride && !nativeOto)
             note(juce::String::fromUTF8("先行/交叠覆盖仅 UTAU 后端生效"));
-        if (usesStp)
+        if (usesStp && !nativeOto)
             note(juce::String::fromUTF8("STP 仅 UTAU 后端生效"));
-        if (usesRegionFlags)
+        if (usesRegionFlags && !nativeOto)
             note(juce::String::fromUTF8("分区 flag 仅 UTAU 后端生效"));
     }
     return warnings;
@@ -2958,7 +3231,7 @@ juce::StringArray AudioEngine::renderCapabilityWarnings(const ProjectData& proje
 juce::String AudioEngine::componentExportIssue(const ProjectData& project,
     const juce::File& engine, const juce::String& trackId,
     const std::vector<juce::String>& noteIds, juce::Range<double> range,
-    const juce::String& auditionTrack)
+    const juce::String& auditionTrack, UtauOutputEngine defaultEngine)
 {
     const auto anySolo = std::any_of(project.tracks.begin(), project.tracks.end(),
         [](const auto& track) { return track.solo; });
@@ -2981,7 +3254,8 @@ juce::String AudioEngine::componentExportIssue(const ProjectData& project,
                     if (backend::isRestLyric(note.label)) continue;
                     hasSound = true;
                     if (!track.compose || backend::DiffSingerRenderer::isVoicebank(track.voicebankDirectory) || note.label.trim().isEmpty()
-                        || !backend::UtauRenderer::supportsComponentExport(engine, note.utauFlags + track.utauGlobalFlags))
+                        || effectiveUtauOutputEngine(track, defaultEngine) == UtauOutputEngine::pcNsfHifigan
+                        || !backend::UtauRenderer::supportsComponentExport(effectiveUtauResampler(track, engine), note.utauFlags + track.utauGlobalFlags))
                         return track.name + ": UTAU 分量导出需要 WCSNDM 的纯 K2 内核（无 u / Mm 混合）；DS 暂不支持。";
                 }
             }

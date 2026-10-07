@@ -1,7 +1,10 @@
+#include "LegacyTextCodec.h"
 #include "UtauRenderer.h"
+#include "PlaybackRenderPriority.h"
 #include "DiffSingerRenderer.h"
 #include "../SampleSettings.h"
 #include "AmplitudeEnvelopeCurve.h"
+#include "AdvancedEnvelope.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -27,6 +30,52 @@ namespace hachi::backend
 {
 namespace
 {
+#if JUCE_WINDOWS
+// Model warm-up remains asynchronous, but the daemon belongs to the editor
+// which started it. Windows also closes these job handles on abnormal exit,
+// preventing an orphaned pythonw from retaining the model indefinitely.
+struct OwnedHfDaemon
+{
+    HANDLE process = nullptr;
+    HANDLE job = nullptr;
+    int port = 0;
+    ~OwnedHfDaemon()
+    {
+        if (job != nullptr) CloseHandle(job); // KILL_ON_JOB_CLOSE, including descendants.
+        if (process != nullptr)
+        {
+            WaitForSingleObject(process, 2000);
+            CloseHandle(process);
+        }
+    }
+};
+
+struct HfDaemonLifetime
+{
+    std::mutex mutex;
+    bool closing = false;
+    std::vector<std::unique_ptr<OwnedHfDaemon>> processes;
+    ~HfDaemonLifetime() { shutdown(); }
+    void shutdown()
+    {
+        std::vector<std::unique_ptr<OwnedHfDaemon>> owned;
+        {
+            const std::scoped_lock lock(mutex);
+            closing = true;
+            owned.swap(processes);
+        }
+        // Wait only for processes we created; no port owner/name-based kill.
+        owned.clear();
+    }
+};
+
+HfDaemonLifetime& hfDaemonLifetime()
+{
+    static HfDaemonLifetime state;
+    return state;
+}
+#endif
+
 std::atomic<std::uint64_t>& voicebankCacheRevision()
 {
     static std::atomic<std::uint64_t> revision { 0 };
@@ -91,6 +140,7 @@ struct RenderedNote
     // A lyric the voicebank has no sample for: sung as the piano, and still
     // reported as missing.
     bool missing = false;
+    std::optional<UtauSampleTiming> timing;
 };
 
 struct ExternalResamplerAttempt
@@ -120,22 +170,7 @@ std::string foldedKey(const juce::String& text)
 
 juce::String decodeText(const juce::File& file)
 {
-    juce::MemoryBlock bytes;
-    if (!file.loadFileAsData(bytes) || bytes.getSize() == 0) return {};
-    const auto* data = static_cast<const char*>(bytes.getData());
-    const auto size = static_cast<int>(bytes.getSize());
-    if (juce::CharPointer_UTF8::isValidString(data, size))
-        return juce::String::fromUTF8(data, size);
-#if JUCE_WINDOWS
-    const auto wideLength = MultiByteToWideChar(932, 0, data, size, nullptr, 0);
-    if (wideLength > 0)
-    {
-        std::vector<wchar_t> wide(static_cast<std::size_t>(wideLength + 1), 0);
-        if (MultiByteToWideChar(932, 0, data, size, wide.data(), wideLength) > 0)
-            return juce::String(wide.data());
-    }
-#endif
-    return juce::String::fromUTF8(data, size);
+    juce::String error;const auto doc=LegacyTextCodec::read(file,error);return doc?doc->text:juce::String();
 }
 
 juce::String midiName(float midi)
@@ -539,6 +574,7 @@ struct FileStamp
 {
     juce::File file;
     juce::int64 modified = -1;
+    juce::int64 size = 0;
 };
 
 juce::int64 modifiedStamp(const juce::File& file)
@@ -558,22 +594,28 @@ std::vector<FileStamp> voicebankStamps(const juce::File& root)
     std::vector<FileStamp> stamps;
     const auto stamp = [&stamps](const juce::File& file)
     {
-        stamps.push_back({ file, modifiedStamp(file) });
+        stamps.push_back({ file, modifiedStamp(file), file.getSize() });
     };
     juce::Array<juce::File> otoFiles;
     root.findChildFiles(otoFiles, juce::File::findFiles, true, "oto.ini");
     for (const auto& oto : otoFiles)
     {
         stamp(oto);
+        stamp(LegacyTextCodec::directoryConfig(oto.getParentDirectory()));
         stamp(SampleSettings::jieClassicOtoFileFor(oto));
         stamp(SampleSettings::jieOtoFileFor(oto));
         stamp(SampleSettings::mouOtoFileFor(oto));
     }
     // A bank read from its sidecars has no oto yet; one appearing is a change.
-    if (otoFiles.isEmpty()) stamp(root.getChildFile("oto.ini"));
+    if (otoFiles.isEmpty()) {stamp(root.getChildFile("oto.ini"));stamp(LegacyTextCodec::directoryConfig(root));}
     juce::Array<juce::File> maps;
     root.findChildFiles(maps, juce::File::findFiles, true, "prefix.map");
-    for (const auto& map : maps) stamp(map);
+    for (const auto& map : maps) {stamp(map);stamp(LegacyTextCodec::directoryConfig(map.getParentDirectory()));}
+    // WAV headers determine duration and positive/negative cutoff geometry.
+    // Stamp before reading so replacing a recording also refreshes that index.
+    juce::Array<juce::File> recordings;
+    root.findChildFiles(recordings, juce::File::findFiles, true, "*.wav");
+    for (const auto& file : recordings) stamp(file);
     return stamps;
 }
 
@@ -633,7 +675,7 @@ bool entryCurrent(IndexCache::Entry& entry, const juce::File& root)
     if (now - entry.checkedAt < voicebankRecheckMs) return true;
     if (root.isDirectory() != entry.rootExisted) return false;
     for (const auto& stamp : entry.stamps)
-        if (modifiedStamp(stamp.file) != stamp.modified) return false;
+        if (modifiedStamp(stamp.file) != stamp.modified || stamp.file.getSize() != stamp.size) return false;
     entry.checkedAt = now;
     return true;
 }
@@ -853,6 +895,11 @@ ExternalResamplerAttempt runExternalResampler(
     double outputSeconds)
 {
     ExternalResamplerAttempt attempt;
+    if (request.cancelled && request.cancelled())
+    {
+        attempt.error = "resampler cancelled";
+        return attempt;
+    }
     if (!request.resamplerExecutable.existsAsFile())
     {
         attempt.error = "resampler executable was not found";
@@ -879,7 +926,7 @@ ExternalResamplerAttempt runExternalResampler(
     args.add(juce::String(consonantMs, 3));
     args.add(juce::String(cutoffMs, 3));
     args.add(juce::String(juce::jlimit(0, 200, static_cast<int>(std::lround(note.gain * 100.0f)))));
-    args.add("0");
+    args.add(juce::String(note.modulationPercent, 6));
     const auto noteBpm = note.bpm > 0.0 ? note.bpm : request.bpm;
     args.add("!" + juce::String(juce::jlimit(20.0, 400.0, noteBpm), 2));
     args.add(encodePitchbend(note, noteBpm, effectivePreutterance, outputSeconds));
@@ -954,7 +1001,7 @@ ExternalResamplerAttempt runExternalResampler(
         juce::StringArray curves;
         for (const auto& [flag, points] : note.flagCurves)
         {
-            if (flag.startsWith("DS:")) continue;
+            if (flag.startsWith("DS:") || flag.startsWith("HIFI:")) continue;
             if (points.empty()) continue;
             juce::StringArray written;
             for (const auto& [timeSeconds, value] : points)
@@ -975,6 +1022,16 @@ ExternalResamplerAttempt runExternalResampler(
     if (needFifteenth)
         args.add(flagArgument.isNotEmpty() ? flagArgument : juce::String("|||"));
     if (curveArgument.isNotEmpty()) args.add(curveArgument);
+    // A per-track resampler may differ from the one warmed in application
+    // preferences. Start its HF service here as well so the engine never
+    // needs to create an unowned daemon of its own.
+    (void) UtauRenderer::startHfDaemonIfNeeded(request.resamplerExecutable);
+    if (request.cancelled && request.cancelled())
+    {
+        output.deleteFile();
+        attempt.error = "resampler cancelled";
+        return attempt;
+    }
     juce::ChildProcess process;
     // Capture the engine's own diagnostics.  WCSNDM explains its failures on
     // stderr ("extension not installed", "daemon failed to start"), and
@@ -990,12 +1047,24 @@ ExternalResamplerAttempt runExternalResampler(
     // backend goes further: the first note of a session waits for the
     // vocoder daemon to load its model, which alone takes half a minute, so
     // 30 seconds killed exactly the note that needed the most patience.
-    if (!process.waitForProcessToFinish(120'000))
+    const auto processStarted = juce::Time::getMillisecondCounterHiRes();
+    auto cancelled = false;
+    auto timedOut = false;
+    while (process.isRunning())
+    {
+        cancelled = request.cancelled && request.cancelled();
+        timedOut = juce::Time::getMillisecondCounterHiRes() - processStarted >= 120'000.0;
+        if (cancelled || timedOut) break;
+        if (process.waitForProcessToFinish(50)) break;
+    }
+    cancelled = cancelled || (request.cancelled && request.cancelled());
+    if (cancelled || timedOut)
     {
         if (process.isRunning()) process.kill();
+        process.waitForProcessToFinish(2000);
         output.deleteFile();
         attempt.error = request.resamplerExecutable.getFileName()
-            + " timed out after 120 seconds";
+            + (cancelled ? " cancelled" : " timed out after 120 seconds");
         return attempt;
     }
     // Safe to drain only now that the child is gone: the pipe cannot refill.
@@ -1278,6 +1347,9 @@ struct NoteMixGain
     int sequenceFadeOut = 1;
     bool equalPowerFadeOut = false;
     int naturalFadeOut = 1;
+    int tailFadeMode = 0;
+    TailFadeSettings tailFadeSettings;
+    std::optional<UtauTailFadeSpan> tailFade,headEnvelope;
 
     // withEnvelope false leaves the envelope out and keeps the fades: the
     // piece as the line in the envelope lane acts on it.
@@ -1287,8 +1359,11 @@ struct NoteMixGain
         const auto destination = destinationStart + index;
         const auto localSeconds = static_cast<double>(index) / mixSampleRate
             - preutteranceSeconds;
-        auto gain = withEnvelope && envelope != nullptr
-            ? amplitudeGainAt(*envelope, localSeconds) : 1.0f;
+        const auto baseGainAt=[&](double t){return envelope!=nullptr?amplitudeGainAt(*envelope,t):1.0f;};
+        auto gain=withEnvelope?baseGainAt(localSeconds):1.0f;
+        if(withEnvelope&&(tailFade||headEnvelope))gain=advancedEnvelopeGain(tailFadeMode,localSeconds,
+            tailFade?tailFade->startSeconds:0,tailFade?tailFade->endSeconds:0,
+            headEnvelope?headEnvelope->startSeconds:0,headEnvelope?headEnvelope->endSeconds:0,tailFadeSettings,baseGainAt);
         if (index < fadeIn)
         {
             // Two linear ramps crossing sum to a dip in the middle, which is
@@ -1439,6 +1514,7 @@ std::string renderedNoteKey(const UtauRenderRequest& request, const VoiceSample&
                             double naturalOutputSeconds)
 {
     juce::MemoryOutputStream stream;
+    stream.writeDouble(note.modulationPercent);
     stream.writeInt(14); // Timeline PIT, including the actual lead-in and tail.
     stream.writeString(encodePitchbend(note, note.bpm > 0.0 ? note.bpm : request.bpm,
                                       naturalPreutterance, naturalOutputSeconds));
@@ -1606,6 +1682,17 @@ bool UtauRenderer::startHfDaemonIfNeeded(const juce::File& resamplerExecutable, 
     const auto backend = resamplerExecutable.getParentDirectory().getChildFile("hf_backend");
     const auto script = backend.getChildFile("hf_daemon.py");
     if (!resamplerExecutable.existsAsFile() || !script.existsAsFile()) return false;
+#if JUCE_WINDOWS
+    auto& lifetime = hfDaemonLifetime();
+    const std::scoped_lock lock(lifetime.mutex);
+    if (lifetime.closing) return false;
+    std::erase_if(lifetime.processes, [](const auto& owned)
+    { return WaitForSingleObject(owned->process, 0) == WAIT_OBJECT_0; });
+    // A warming process has not necessarily bound its socket yet. Retaining
+    // it also avoids duplicate launches in that startup window.
+    if (std::any_of(lifetime.processes.begin(), lifetime.processes.end(),
+        [port](const auto& owned) { return owned->port == port; })) return false;
+#endif
     {
         // A connection that says nothing is safe: the daemon answers it with
         // ERR and goes on serving.
@@ -1616,20 +1703,45 @@ bool UtauRenderer::startHfDaemonIfNeeded(const juce::File& resamplerExecutable, 
     const auto interpreter = hfDaemonInterpreter(resamplerExecutable.getParentDirectory());
     const auto commandText = "\"" + interpreter + "\" \"" + script.getFullPathName() + "\"";
     std::wstring commandLine(commandText.toWideCharPointer());
+    auto owned = std::make_unique<OwnedHfDaemon>();
+    owned->port = port;
+    owned->job = CreateJobObjectW(nullptr, nullptr);
+    if (owned->job == nullptr) return false;
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits {};
+    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    if (!SetInformationJobObject(owned->job, JobObjectExtendedLimitInformation,
+                                 &limits, sizeof(limits))) return false;
     STARTUPINFOW startup {};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION process {};
-    // Nothing of this process is handed on: the daemon outlives it, and a
-    // pipe or console it held would stay open for as long as it runs.
+    // No inherited console or pipe handles. Bind the suspended child to our
+    // job before it can load the model or spawn any further processes.
     const auto started = CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, FALSE,
-        DETACHED_PROCESS | CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP, nullptr,
+        DETACHED_PROCESS | CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_SUSPENDED, nullptr,
         backend.getFullPathName().toWideCharPointer(), &startup, &process);
     if (!started) return false;
+    owned->process = process.hProcess;
+    const auto assigned = AssignProcessToJobObject(owned->job, process.hProcess);
+    const auto resumed = assigned && ResumeThread(process.hThread) != static_cast<DWORD>(-1);
     CloseHandle(process.hThread);
-    CloseHandle(process.hProcess);
+    if (!resumed)
+    {
+        // Only the suspended process just created here; never an existing
+        // server. Do not leave a daemon alive when ownership cannot be set.
+        TerminateProcess(process.hProcess, 1);
+        return false;
+    }
+    lifetime.processes.push_back(std::move(owned));
     return true;
 #else
     return false;
+#endif
+}
+
+void UtauRenderer::shutdownHfDaemon()
+{
+#if JUCE_WINDOWS
+    hfDaemonLifetime().shutdown();
 #endif
 }
 
@@ -1679,6 +1791,19 @@ void UtauRenderer::diagnosticRecheckVoicebankFiles()
     for (auto& [key, entry] : cache.entries) entry.checkedAt = 0.0;
 }
 
+void UtauRenderer::recheckVoicebankFiles(const juce::File& root)
+{
+    auto& cache = indexCache();
+    const std::scoped_lock lock(cache.mutex);
+    const auto prefix = (root.getFullPathName()+"|").toStdString();
+    for (auto& [key, entry] : cache.entries)
+        if (key.starts_with(prefix)) {
+            // The caller has detected a changed file set, including new WAVs
+            // that did not exist when this index's stamps were captured.
+            entry.index.reset(); entry.checkedAt = 0.0;
+        }
+}
+
 juce::String UtauRenderer::diagnosticResolve(const juce::File& voicebankDirectory,
                                              const juce::String& alias, float midiNote,
                                              bool fourRegion, bool consonantClasses,
@@ -1691,6 +1816,59 @@ juce::String UtauRenderer::diagnosticResolve(const juce::File& voicebankDirector
     if (sample == nullptr) return "none";
     return sample->file.getFullPathName() + "|" + sample->alias + "|"
         + juce::String(sample->offset, 6);
+}
+
+std::optional<UtauTailFadeSpan> UtauRenderer::tailFadeSpan(
+    const UtauSampleTiming& timing,double soundStart,double soundEnd,double nominalDuration,
+    int velocity,bool fourRegion,bool mou,const std::array<double,3>* manual)
+{
+    if(soundEnd-soundStart<=1.e-9)return std::nullopt;
+    if(!fourRegion||!timing.hasRegions)
+    {
+        // Classic OTO has a fixed consonant followed by its stretching vowel.
+        const auto naturalLead=std::max(0.0,timing.preutteranceSeconds);
+        const auto consonant=std::max(0.0,timing.consonantSeconds);
+        // A pinned Pre retimes the lead-in, keeping the part after the beat in place.
+        const auto local=consonant<=naturalLead&&naturalLead>1.e-9
+            ? soundStart+consonant*(-soundStart)/naturalLead : consonant-naturalLead;
+        const auto start=juce::jlimit(soundStart,soundEnd,local);
+        if(soundEnd-start<=1.e-6)return std::nullopt;return UtauTailFadeSpan{start,soundEnd};
+    }
+    const bool spelling=readsOnlyFirstTwoRegions(fourRegion,mou,nominalDuration);
+    const int count=spelling?2:mou&&timing.mouClasses.length()>=2&&timing.mouClasses.length()<=4?timing.mouClasses.length():4;
+    const auto source=spelling?firstTwoRegions(timing.regionSeconds):timing.regionSeconds;
+    const auto split=regionSplit(source,soundEnd-soundStart,velocity,-soundStart,manual,
+                                mou&&timing.mouClasses.isNotEmpty()?&timing.mouClasses:nullptr);
+    if(!split.valid)return std::nullopt;
+    auto start=soundStart;for(int i=0;i<count-1;++i)start+=split.seconds[(size_t)i];
+    if(soundEnd-start<=1.e-6)return std::nullopt;return UtauTailFadeSpan{start,soundEnd};
+}
+
+std::optional<UtauTailFadeSpan> UtauRenderer::headEnvelopeSpan(
+    const UtauSampleTiming& timing,double soundStart,double soundEnd,double nominalDuration,
+    int velocity,bool fourRegion,bool mou,const std::array<double,3>* manual)
+{
+    if(soundEnd-soundStart<=1.e-9)return std::nullopt;
+    auto end=soundEnd;
+    if(!fourRegion||!timing.hasRegions)
+    {
+        const auto lead=std::max(0.0,timing.preutteranceSeconds),consonant=std::max(0.0,timing.consonantSeconds);
+        end=juce::jlimit(soundStart,soundEnd,consonant<=lead&&lead>1.e-9?soundStart+consonant*(-soundStart)/lead:consonant-lead);
+    }
+    else
+    {
+        const auto source=readsOnlyFirstTwoRegions(fourRegion,mou,nominalDuration)?firstTwoRegions(timing.regionSeconds):timing.regionSeconds;
+        const auto split=regionSplit(source,soundEnd-soundStart,velocity,-soundStart,manual,mou&&timing.mouClasses.isNotEmpty()?&timing.mouClasses:nullptr);
+        if(!split.valid)return std::nullopt;end=soundStart+split.seconds[0];
+    }
+    if(end-soundStart<=1.e-6)return std::nullopt;return UtauTailFadeSpan{soundStart,end};
+}
+
+std::vector<UtauAmplitudePoint> UtauRenderer::fitAmplitudeEnvelope(
+    const std::vector<UtauAmplitudePoint>& drawn, double preutteranceSeconds,
+    double soundingEndSeconds)
+{
+    return envelopeForNoteAsItIs(drawn, preutteranceSeconds, soundingEndSeconds);
 }
 
 UtauRegionSplit UtauRenderer::regionSplit(const std::array<double, 4>& sourceSeconds,
@@ -2027,6 +2205,9 @@ UtauRenderer::ResolvedSample UtauRenderer::resolveVoiceSample(
     resolved.overlapSeconds = overlapOverrideEnabled ? overlapSecondsOverride
                                                      : sample.overlap;
     resolved.sourceMidi = sample.sourceMidi;
+    resolved.hasRegions = fourRegion && sample.hasRegions;
+    resolved.regionSeconds = resolved.hasRegions ? sample.regionSeconds : std::array<double, 4>{};
+    resolved.mouClasses = consonantClasses ? sample.mouClasses : juce::String();
     return resolved;
 }
 
@@ -2096,6 +2277,14 @@ UtauRenderResult UtauRenderer::render(const UtauRenderRequest& request)
     if (DiffSingerRenderer::isVoicebank(request.voicebankDirectory))
         return DiffSingerRenderer::render(request);
     UtauRenderResult result;
+    if (request.requireExternalResampler && !request.resamplerExecutable.existsAsFile()) {
+        result.warning = "Selected resampler does not exist: " + request.resamplerExecutable.getFullPathName();
+        return result;
+    }
+    if (request.wavtoolExecutable != juce::File{} && !request.wavtoolExecutable.existsAsFile()) {
+        result.warning = "Selected wavtool does not exist: " + request.wavtoolExecutable.getFullPathName();
+        return result;
+    }
     result.sampleRate = mixSampleRate;
     if (request.progress) request.progress(0.01);
     const auto voicebank = loadVoicebankIndex(request.voicebankDirectory,
@@ -2117,7 +2306,12 @@ UtauRenderResult UtauRenderer::render(const UtauRenderRequest& request)
     std::vector<RenderedNote> renderedNotes(request.notes.size());
     // How much of each note's tail the note after it reaches back into.
     const auto crossfadeTailSeconds = crossfadeTails(request, *voicebank);
-    std::atomic<std::size_t> nextNote { 0 };
+    std::vector<std::pair<double, double>> prioritySpans;
+    prioritySpans.reserve(request.notes.size());
+    for (const auto& note : request.notes)
+        prioritySpans.emplace_back(request.timelineStartSeconds + note.startSeconds,
+            request.timelineStartSeconds + note.startSeconds + note.durationSeconds);
+    PlaybackNoteOrder nextNote(std::move(prioritySpans));
     std::atomic<std::size_t> completedNotes { 0 };
     std::atomic<bool> externalResamplerHealthy {
         request.resamplerExecutable.existsAsFile()
@@ -2127,8 +2321,11 @@ UtauRenderResult UtauRenderer::render(const UtauRenderRequest& request)
     {
         for (;;)
         {
-            const auto index = nextNote.fetch_add(1, std::memory_order_relaxed);
-            if (index >= request.notes.size()) break;
+            if (request.cancelled && request.cancelled()) break;
+            const auto next = nextNote.take(request.priorityPosition
+                ? std::optional<double>{request.priorityPosition()} : std::nullopt);
+            if (!next) break;
+            const auto index = *next;
             const auto& note = request.notes[index];
             auto& destination = renderedNotes[index];
             if (isRestLyric(note.alias))
@@ -2218,6 +2415,9 @@ UtauRenderResult UtauRenderer::render(const UtauRenderRequest& request)
                     naturalPreutterance + note.durationSeconds + 0.02 + tail);
                 const auto finalOutputSeconds = std::max(0.03,
                     destination.preutterance + note.durationSeconds + 0.02 + tail);
+                destination.timing=UtauSampleTiming{naturalPreutterance,
+                    sample.consonant*consonantVelocityScale(headConsonantVelocity(sample,note.consonantVelocity)),
+                    destination.overlap,sample.hasRegions,sample.regionSeconds,sample.mouClasses};
                 const auto cacheKey = renderedNoteKey(request, sample, note,
                     destination.preutterance, finalOutputSeconds,
                     naturalPreutterance, naturalOutputSeconds);
@@ -2230,6 +2430,10 @@ UtauRenderResult UtauRenderer::render(const UtauRenderRequest& request)
                         ? runExternalResampler(request, sample, note,
                             naturalPreutterance, naturalOutputSeconds)
                         : ExternalResamplerAttempt {};
+                    // Cancelling an external request is not an engine error;
+                    // do not begin a potentially long native fallback while
+                    // the application's render queue is waiting to stop.
+                    if (request.cancelled && request.cancelled()) break;
                     if (external.succeeded)
                     {
                         destination.audio = std::move(external.audio);
@@ -2290,6 +2494,8 @@ UtauRenderResult UtauRenderer::render(const UtauRenderRequest& request)
     for (std::size_t worker = 0; worker < workerCount; ++worker)
         workers.emplace_back(renderOne);
     for (auto& worker : workers) worker.join();
+
+    if (request.cancelled && request.cancelled()) return {};
 
     auto externalCount = 0;
     auto nativeCount = 0;
@@ -2367,14 +2573,28 @@ UtauRenderResult UtauRenderer::render(const UtauRenderRequest& request)
                 }
             }
         }
-        const auto envelope = envelopeForNoteAsItIs(note.amplitudeEnvelope,
+        const auto envelope = fitAmplitudeEnvelope(note.amplitudeEnvelope,
             rendered.preutterance, note.durationSeconds + crossfadeTailSeconds[index]);
-        const auto gain = noteMixGain(rendered.audio.getNumSamples(), start,
+        auto gain = noteMixGain(rendered.audio.getNumSamples(), start,
                                       rendered.preutterance, envelope,
                                       rendered.overlap,
                                       note.splice && rendered.overlap > 0.0,
                                       sequenceFadeOutStart, sequenceFadeOutSeconds,
                                       equalPowerFadeOut);
+        if((note.tailFadeMode!=0||note.tailFadeSettings.head.mode!=0)&&rendered.timing)
+        {
+            auto end=note.durationSeconds+crossfadeTailSeconds[index];
+            if(sequenceFadeOutStart)end=std::max(-rendered.preutterance+.001,
+                (*sequenceFadeOutStart/mixSampleRate+sequenceFadeOutSeconds)-note.startSeconds);
+            gain.tailFade=tailFadeSpan(*rendered.timing,-rendered.preutterance,end,
+                note.durationSeconds,note.consonantVelocity,request.fourRegion,request.consonantClasses,
+                note.jieSplitSet?&note.jieSplit:nullptr);
+            gain.headEnvelope=headEnvelopeSpan(*rendered.timing,-rendered.preutterance,end,
+                note.durationSeconds,note.consonantVelocity,request.fourRegion,request.consonantClasses,
+                note.jieSplitSet?&note.jieSplit:nullptr);
+            gain.tailFadeMode=note.tailFadeMode;
+            gain.tailFadeSettings=note.tailFadeSettings;
+        }
         // Handed over before it is mixed, which is the only moment it is
         // this note's audio and nothing else's, with the very gain the mix
         // is about to apply, so that what is drawn is shaped as it is heard.
@@ -2433,6 +2653,73 @@ UtauRenderResult UtauRenderer::render(const UtauRenderRequest& request)
         if (result.warning.isNotEmpty()) result.warning += "; ";
         result.warning += juce::String(missingCount)
             + " alias(es) were not found, played as piano";
+    }
+    if (request.requireExternalResampler && nativeCount > 0) {
+        result.buffer.setSize(0, 0);
+        result.warning = "Selected resampler failed; no fallback used: " + externalFailure;
+        return result;
+    }
+    if (request.wavtoolExecutable != juce::File{} && result.buffer.getNumSamples() > 0) {
+        juce::TemporaryFile input(".wav"), output(".wav");
+        const auto whd = juce::File(output.getFile().getFullPathName() + ".whd");
+        const auto dat = juce::File(output.getFile().getFullPathName() + ".dat");
+        struct Sidecars { juce::File whd, dat; ~Sidecars() { whd.deleteFile(); dat.deleteFile(); } } cleanup { whd, dat };
+        const auto fail = [&](const juce::String& error) {
+            result.warning = "wavtool: " + error;
+            result.buffer.setSize(0, 0);
+        };
+        {
+            // The original wavtool assumes the canonical 44-byte, mono PCM16 header.
+            // JUCE writes a JUNK/RF64 reservation chunk which that tool mistakes for fmt.
+            auto stream = input.getFile().createOutputStream();
+            if (!stream) { fail("could not write assembly input"); return result; }
+            const auto samples = result.buffer.getNumSamples();
+            const auto rate = static_cast<int>(std::lround(result.sampleRate));
+            stream->write("RIFF", 4); stream->writeInt(36 + samples * 2); stream->write("WAVEfmt ", 8);
+            stream->writeInt(16); stream->writeShort(1); stream->writeShort(1);
+            stream->writeInt(rate); stream->writeInt(rate * 2); stream->writeShort(2); stream->writeShort(16);
+            stream->write("data", 4); stream->writeInt(samples * 2);
+            for (int i = 0; i < samples; ++i) {
+                float value = 0;
+                for (int c = 0; c < result.buffer.getNumChannels(); ++c) value += result.buffer.getSample(c, i);
+                value /= static_cast<float>(result.buffer.getNumChannels());
+                stream->writeShort(static_cast<short>(std::lround(juce::jlimit(-1.0f, 1.0f, value) * 32767.0f)));
+            }
+            stream->flush();
+            if (stream->getStatus().failed()) { fail("could not write assembly input"); return result; }
+        }
+        const auto seconds = result.buffer.getNumSamples() / result.sampleRate;
+        const auto bpm = std::max(1.0, request.bpm);
+        juce::StringArray args { request.wavtoolExecutable.getFullPathName(), output.getFile().getFullPathName(),
+            input.getFile().getFullPathName(), "0", juce::String(seconds * bpm * 8.0, 8) + "@" + juce::String(bpm, 8),
+            "0", "0", "0", "100", "100", "100", "100", "0", "0", "0", "100" };
+        juce::ChildProcess process;
+        if (!process.start(args, juce::ChildProcess::wantStdOut | juce::ChildProcess::wantStdErr)) {
+            fail("could not start selected tool"); return result;
+        }
+        const auto deadline = juce::Time::getMillisecondCounterHiRes() + 120000.0;
+        while (process.isRunning()) {
+            if ((request.cancelled && request.cancelled()) || juce::Time::getMillisecondCounterHiRes() >= deadline) {
+                process.kill(); fail("cancelled or timed out"); return result;
+            }
+            juce::Thread::sleep(20);
+        }
+        const auto diagnostics = process.readAllProcessOutput().trim();
+        if (process.getExitCode() != 0) { fail("exit " + juce::String(process.getExitCode()) + " " + diagnostics); return result; }
+        // UTAU wavtool produces header/data sidecars; other tools may write WAV directly.
+        if (!output.getFile().existsAsFile() && whd.existsAsFile() && dat.existsAsFile()) {
+            auto combined = output.getFile().createOutputStream();
+            auto header = whd.createInputStream(); auto data = dat.createInputStream();
+            if (combined && header && data) {
+                combined->writeFromInputStream(*header, -1); combined->writeFromInputStream(*data, -1);
+            }
+        }
+        juce::AudioBuffer<float> assembled;
+        double rate = 0;
+        if (!readAudio(output.getFile(), assembled, rate)) { fail("tool did not produce a readable WAV: " + diagnostics); return result; }
+        result.buffer = std::move(assembled);
+        result.sampleRate = rate;
+        result.backend = result.backend.replace("internal-wavtool", "external-wavtool:" + request.wavtoolExecutable.getFileName());
     }
     if (request.progress) request.progress(1.0);
     return result;

@@ -1,4 +1,5 @@
 #include "McpServer.h"
+#include "LegacyTextCodec.h"
 #include "MelodyneProvider.h"
 #include "AudioFileReader.h"
 #include "AnalysisService.h"
@@ -119,7 +120,7 @@ std::vector<Param> withAnalysis(std::vector<Param> params)
     params.push_back({ .name = "fcpe_model", .type = "string",
         .description = "FCPE model file, instead of the configured one" });
     params.push_back({ .name = "game_model", .type = "string",
-        .description = "Which GAME model to run", .choices = { "large", "small" } });
+        .description = "Which GAME model to run (bundled default: medium)", .choices = { "medium", "large", "small" } });
     params.push_back({ .name = "inference", .type = "string",
         .description = "What runs the models",
         .choices = { "automatic", "cpu", "directml", "cuda", "coreml" } });
@@ -215,7 +216,7 @@ AnalysisConfig analysisConfig(const juce::var& args)
     if (const auto path = string(args, "fcpe_model"); path.isNotEmpty())
         config.fcpeModelPath = juce::File(path);
     const auto variant = string(args, "game_model").toLowerCase();
-    if (variant.isNotEmpty()) config.performanceMode = variant == "small";
+    if (variant.isNotEmpty()) config.gameModel = variant;
     const auto inference = string(args, "inference").toLowerCase();
     if (inference.isNotEmpty())
         config.inference = inference == "cpu" ? InferenceBackend::cpu
@@ -232,7 +233,7 @@ juce::String analysisSummary(const AnalysisStatus& status)
 {
     return "requested=" + status.requestedBackend
         + "; active=" + AnalysisService::backendText(status)
-        + "; game_variant=" + (status.performanceMode ? "small" : "large")
+        + "; game_variant=" + status.gameModel
         + "; game_ready=" + juce::String(status.gameModelReady ? 1 : 0)
         + "; game_path=" + status.gameModelDirectory.getFullPathName()
         + "; fcpe_ready=" + juce::String(status.fcpeModelReady ? 1 : 0)
@@ -475,9 +476,15 @@ juce::var McpServer::diagnosticTools()
                 { .name = "path", .type = "string",
                   .description = "Where to write the .mid", .required = true },
             }),
+            makeTool("export_ust", "Export one monophonic track as UST, retaining imported opaque data / 导出单轨 UST", {
+                {.name="path",.type="string",.description="Output .ust path",.required=true},
+                {.name="track_id",.type="string",.description="Track to export",.required=true},
+                {.name="encoding",.type="string",.description="auto (preserve), UTF-8, Shift-JIS, GBK, Big5 or GB18030"},
+            }),
             makeTool("import_ust", "Import a UTAU project as a plain UTAU track / 导入 UST", {
                 { .name = "path", .type = "string",
                   .description = "The .ust to add as a track", .required = true },
+                {.name="encoding",.type="string",.description="auto, UTF-8, Shift-JIS, GBK, Big5 or GB18030"},
             }),
             makeTool("import_melodyne", "Import Melodyne MPD edits; recursive_media, preserve_edits and source_pitch control import / 导入 Melodyne 工程并控制素材搜索、工程编辑与原始 F0",
                 withAnalysis({
@@ -530,6 +537,11 @@ juce::var McpServer::diagnosticTools()
                                  "and utaumou (mou) are the four-region modes.",
                   .choices = { "mld5", "mld3", "llsm2", "world", "vslib", "nsf-hifigan",
                                "utau", "utau4", "jie", "utaumou", "mou" } },
+                { .name = "output_engine", .type = "string",
+                  .description = "UTAU output backend, independent of classic/jie/mou editing mode. pc-nsf-hifigan selects HiFisampler (PC-NSF-HiFiGAN); inherit follows Settings; DiffSinger keeps its own renderer.",
+                  .choices = { "inherit", "resampler", "pc-nsf-hifigan" } },
+                { .name = "output_resampler", .type = "string", .description = "Per-track resampler path; empty follows Settings." },
+                { .name = "output_wavtool", .type = "string", .description = "Per-track assembly tool path; empty follows Settings." },
                 { .name = "stretch_algorithm", .type = "string",
                   .description = "What changes a recording's length",
                   .choices = { "melodyne-hybrid", "variable-mel-hop", "loop", "soundtouch",
@@ -639,13 +651,35 @@ juce::var McpServer::diagnosticTools()
                 { .name = "amplitude_envelope", .type = "array",
                   .description = "[[seconds, dB], ...] from the note's start; negative seconds "
                                  "reach into the preutterance" },
+                { .name = "tail_fade", .type = "string", .description = "OTO last-region amplitude effect for non-DS UTAU; off, linear, smooth", .choices = {"off","linear","smooth"} },
+                { .name = "tail_fade_start_percent", .type = "number", .description = "Fade start within OTO tail, 0..99.9 percent" },
+                { .name = "tail_fade_end_percent", .type = "number", .description = "Fade end within OTO tail, 0.1..100 percent; strictly after start" },
+                { .name = "tail_fade_start_gain_percent", .type = "number", .description = "Amplitude multiplier before fade, 0..200 percent" },
+                { .name = "tail_fade_end_gain_percent", .type = "number", .description = "Amplitude multiplier after fade, 0..200 percent; not greater than start gain" },
+                { .name = "tail_fade_curve_power", .type = "number", .description = "Time curve exponent, 0.25..4; 1 is neutral" },
+                { .name = "head_envelope", .type = "string", .description = "OTO first-region envelope mode: off, linear, curve", .choices = {"off","linear","curve"} },
+                { .name = "head_envelope_custom_curve", .type = "boolean", .description = "Use Bezier control points for the head envelope" },
+                { .name = "head_envelope_start_percent", .type = "number", .description = "First-region envelope start_percent; gain 0..200%, ordered time/progress 0..100%, power 0.25..4" },
+                { .name = "head_envelope_end_percent", .type = "number", .description = "First-region envelope end_percent; gain 0..200%, ordered time/progress 0..100%, power 0.25..4" },
+                { .name = "head_envelope_start_gain_percent", .type = "number", .description = "First-region envelope start_gain_percent; gain 0..200%, ordered time/progress 0..100%, power 0.25..4" },
+                { .name = "head_envelope_end_gain_percent", .type = "number", .description = "First-region envelope end_gain_percent; gain 0..200%, ordered time/progress 0..100%, power 0.25..4" },
+                { .name = "head_envelope_curve_power", .type = "number", .description = "First-region envelope curve_power; gain 0..200%, ordered time/progress 0..100%, power 0.25..4" },
+                { .name = "head_envelope_control1_time_percent", .type = "number", .description = "First-region envelope control1_time_percent; gain 0..200%, ordered time/progress 0..100%, power 0.25..4" },
+                { .name = "head_envelope_control1_progress_percent", .type = "number", .description = "First-region envelope control1_progress_percent; gain 0..200%, ordered time/progress 0..100%, power 0.25..4" },
+                { .name = "head_envelope_control2_time_percent", .type = "number", .description = "First-region envelope control2_time_percent; gain 0..200%, ordered time/progress 0..100%, power 0.25..4" },
+                { .name = "head_envelope_control2_progress_percent", .type = "number", .description = "First-region envelope control2_progress_percent; gain 0..200%, ordered time/progress 0..100%, power 0.25..4" },
+                { .name = "tail_fade_custom_curve", .type = "boolean", .description = "Use cubic Bezier controls in smooth mode; false preserves the legacy S curve" },
+                { .name = "tail_fade_control1_time_percent", .type = "number", .description = "Bezier time coordinate, 0..100; control 1 must not exceed control 2" },
+                { .name = "tail_fade_control1_progress_percent", .type = "number", .description = "Bezier fade progress coordinate, 0..100; control 1 must not exceed control 2" },
+                { .name = "tail_fade_control2_time_percent", .type = "number", .description = "Bezier time coordinate, 0..100; control 1 must not exceed control 2" },
+                { .name = "tail_fade_control2_progress_percent", .type = "number", .description = "Bezier fade progress coordinate, 0..100; control 1 must not exceed control 2" },
                 { .name = "amplitude_envelope_base", .type = "number",
                   .description = "The envelope's height as a whole, in UTAU's linear percent: "
                                  "100 is the envelope as drawn, 200 twice as loud, 0 silence.  "
                                  "A note with no envelope has a flat 100% one, raised the same "
                                  "way.  0 to 200." },
                 { .name = "utau_flags", .type = "string",
-                  .description = "Flags handed to the engine for this note alone" },
+                  .description = "Flags for this note. HiFisampler supports g[-600,600], Hb[0,500], Hv[0,150], Ht[-100,100], HG[0,100], P[0,100], t[-1200,1200] cents, A[-100,100], G and He. WCSNDM flags depend on the selected resampler." },
                 { .name = "utau_consonant_velocity", .type = "integer",
                   .description = "Consonant velocity, 0 to 200; 100 is as recorded" },
                 { .name = "utau_splice", .type = "boolean",
@@ -662,7 +696,7 @@ juce::var McpServer::diagnosticTools()
                 { .name = "flag_curve_enabled", .type = "boolean",
                   .description = "Whether this note's flag curves are drawn on" },
                 { .name = "flag_curve", .type = "object",
-                  .description = "One flag's curve across the note",
+                  .description = "One flag's curve across the note. HiFisampler keys are HIFI:g, HIFI:Hb, HIFI:Hv, HIFI:Ht, HIFI:HG, HIFI:P, HIFI:t, HIFI:A; these preserve the native flag units.",
                   .shape = flagCurveShape },
                 { .name = "flag_curve_g", .type = "array",
                   .description = "The g curve on its own, as [[seconds, value], ...]; an empty "
@@ -973,7 +1007,7 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
                 juce::StringArray annotationWarnings;
                 SampleSettings::convertMelodyneProject(imported->project,
                                                        annotationWarnings);
-                project.replace(std::move(imported->project));
+                project.resetDocument(std::move(imported->project));
                 return toolResult(summary(project.snapshot())
                     + (annotationWarnings.isEmpty() ? juce::String()
                         : "; annotation_warnings="
@@ -997,7 +1031,7 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
             const auto clipId = project.addAudioFile(file,
                 static_cast<double>(reader->lengthInSamples) / reader->sampleRate);
             auto analysis = AnalysisService::analyse(file, analysisConfig(args), error);
-            (void) project.setClipNotesIfEmpty(clipId, std::move(analysis.notes));
+            (void) project.setClipAudioAnalysis(clipId, std::move(analysis.notes));
             return toolResult(summary(project.snapshot()));
         }
         else error = "Unsupported or unreadable file";
@@ -1013,7 +1047,7 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
             auto analysis = AnalysisService::analyse(file, analysisConfig(args), error);
             const auto backend = AnalysisService::backendText(analysis.status);
             const auto noteCount = analysis.notes.size();
-            (void) project.setClipNotesIfEmpty(clipId, std::move(analysis.notes));
+            (void) project.setClipAudioAnalysis(clipId, std::move(analysis.notes));
             return toolResult("ok; backend=" + backend + "; notes="
                 + juce::String(static_cast<juce::int64>(noteCount))
                 + (analysis.warning.isNotEmpty() ? "; warning=" + analysis.warning
@@ -1043,10 +1077,14 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
         if (ProjectModel::writeMidiFile(project.snapshot(), file, error))
             return toolResult("written=" + file.getFullPathName());
     }
-    else if (name == "import_ust")
+    else if (name == "export_ust" || name == "import_ust")
     {
+        const auto encoding=string(args,"encoding");const auto cp=LegacyTextCodec::codePage(encoding);
+        if(cp==0&&encoding.isNotEmpty()&&!encoding.equalsIgnoreCase("auto"))return toolResult("Unsupported encoding: "+encoding,true);
         juce::StringArray warnings;
-        if (project.addUstFile(juce::File(string(args, "path")), error, warnings))
+        const bool ok=name=="export_ust"?project.exportUst(juce::File(string(args,"path")),string(args,"track_id"),error,warnings,cp)
+            :project.addUstFile(juce::File(string(args,"path")),error,warnings,ProjectModel::UstImportMode::addTrack,nullptr,cp);
+        if (ok)
             return toolResult(warnings.isEmpty()
                 ? juce::String("ok")
                 : "ok; " + warnings.joinIntoString("; "));
@@ -1073,7 +1111,7 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
             juce::StringArray annotationWarnings;
             SampleSettings::convertMelodyneProject(imported->project,
                                                    annotationWarnings);
-            project.replace(std::move(imported->project));
+            project.resetDocument(std::move(imported->project));
             return toolResult(summary(project.snapshot())
                 + (annotationWarnings.isEmpty() ? juce::String()
                     : "; annotation_warnings="
@@ -1101,7 +1139,8 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
                 && ((args.hasProperty("compose") && static_cast<bool>(args["compose"]))
                     || args.hasProperty("pitch_algorithm") || args.hasProperty("stretch_algorithm")
                     || args.hasProperty("render_order") || args.hasProperty("voicebank_directory")
-                    || args.hasProperty("utau_global_flags")))
+                    || args.hasProperty("utau_global_flags") || args.hasProperty("output_engine")
+                    || args.hasProperty("output_resampler") || args.hasProperty("output_wavtool")))
                 return toolResult("Accompaniment tracks play original audio and cannot enable tuning engines", true);
         if (args.hasProperty("pitch_algorithm"))
         {
@@ -1141,6 +1180,20 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
                 : value.startsWith("utau") ? PitchAlgorithm::utau
                 : PitchAlgorithm::mld5);
             project.setTrackUtauMode(id, parseUtauMode(value));
+        }
+        if (args.hasProperty("output_engine") || args.hasProperty("output_resampler") || args.hasProperty("output_wavtool"))
+        {
+            for (const auto& track : project.snapshot().tracks) if (track.id == id) {
+                if (!trackUsesVoicebankSynthesis(track) || trackIsDiffSinger(track))
+                    return toolResult("Output engine selection requires a non-DiffSinger UTAU track", true);
+                const auto key = args.hasProperty("output_engine") ? string(args, "output_engine") : utauOutputEngineKey(track.outputEngine);
+                if (key != "inherit" && key != "resampler" && key != "pc-nsf-hifigan")
+                    return toolResult("Invalid output_engine", true);
+                project.setTrackOutputEngine(id, parseUtauOutputEngine(key),
+                    key == "inherit" ? juce::File{} : args.hasProperty("output_resampler") ? juce::File(string(args, "output_resampler")) : track.outputResampler,
+                    key == "inherit" ? juce::File{} : args.hasProperty("output_wavtool") ? juce::File(string(args, "output_wavtool")) : track.outputWavtool);
+                break;
+            }
         }
         if (args.hasProperty("stretch_algorithm"))
         {
@@ -1247,6 +1300,48 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
     else if (name == "set_note")
     {
         const auto id = string(args, "note_id");
+        const bool editsTail=args.hasProperty("tail_fade")||args.hasProperty("tail_fade_start_percent")||args.hasProperty("tail_fade_end_percent")||args.hasProperty("tail_fade_start_gain_percent")||args.hasProperty("tail_fade_end_gain_percent")||args.hasProperty("tail_fade_curve_power")||args.hasProperty("tail_fade_custom_curve")||args.hasProperty("tail_fade_control1_time_percent")||args.hasProperty("tail_fade_control1_progress_percent")||args.hasProperty("tail_fade_control2_time_percent")||args.hasProperty("tail_fade_control2_progress_percent")||args.hasProperty("head_envelope_start_percent")||args.hasProperty("head_envelope_end_percent")||args.hasProperty("head_envelope_start_gain_percent")||args.hasProperty("head_envelope_end_gain_percent")||args.hasProperty("head_envelope_curve_power")||args.hasProperty("head_envelope_control1_time_percent")||args.hasProperty("head_envelope_control1_progress_percent")||args.hasProperty("head_envelope_control2_time_percent")||args.hasProperty("head_envelope_control2_progress_percent")||args.hasProperty("head_envelope")||args.hasProperty("head_envelope_custom_curve");
+        backend::TailFadeSettings tailSettings;int tailMode=0;
+        if(editsTail)
+        {
+            bool eligible=false;const auto data=project.snapshot();
+            for(const auto& t:data.tracks)for(const auto& c:t.clips)for(const auto& n:c.notes)
+                if(n.id==id&&t.pitchAlgorithm==PitchAlgorithm::utau&&!trackIsDiffSinger(t))
+                {eligible=true;tailSettings=n.utauTailFade;tailMode=n.utauTailFadeMode;}
+            if(!eligible)return toolResult("tail_fade requires a non-DS UTAU note with OTO regions",true);
+            if(args.hasProperty("tail_fade"))
+            {
+                const auto mode=string(args,"tail_fade");
+                if(mode!="off"&&mode!="linear"&&mode!="smooth")return toolResult("tail_fade must be off, linear or smooth",true);
+                tailMode=mode=="off"?0:mode=="linear"?1:2;
+            }
+            if(args.hasProperty("tail_fade_start_percent"))tailSettings.startFraction=number(args,"tail_fade_start_percent")/100.0;
+            if(args.hasProperty("tail_fade_end_percent"))tailSettings.endFraction=number(args,"tail_fade_end_percent")/100.0;
+            if(args.hasProperty("tail_fade_start_gain_percent"))tailSettings.startGain=number(args,"tail_fade_start_gain_percent")/100.0;
+            if(args.hasProperty("tail_fade_end_gain_percent"))tailSettings.endGain=number(args,"tail_fade_end_gain_percent")/100.0;
+            if(args.hasProperty("tail_fade_curve_power"))tailSettings.curvePower=number(args,"tail_fade_curve_power")/1.0;
+            if(args.hasProperty("tail_fade_custom_curve"))tailSettings.customCurve=(bool)args.getProperty("tail_fade_custom_curve",false);
+            if(args.hasProperty("tail_fade_control1_time_percent"))tailSettings.control1Time=number(args,"tail_fade_control1_time_percent")/100.0;
+            if(args.hasProperty("tail_fade_control1_progress_percent"))tailSettings.control1Progress=number(args,"tail_fade_control1_progress_percent")/100.0;
+            if(args.hasProperty("tail_fade_control2_time_percent"))tailSettings.control2Time=number(args,"tail_fade_control2_time_percent")/100.0;
+            if(args.hasProperty("tail_fade_control2_progress_percent"))tailSettings.control2Progress=number(args,"tail_fade_control2_progress_percent")/100.0;
+            if(args.hasProperty("head_envelope"))
+            {
+                const auto mode=string(args,"head_envelope");if(mode!="off"&&mode!="linear"&&mode!="curve")return toolResult("head_envelope must be off, linear or curve",true);
+                tailSettings.head.mode=mode=="off"?0:mode=="linear"?1:2;
+            }
+            if(args.hasProperty("head_envelope_custom_curve"))tailSettings.head.customCurve=(bool)args.getProperty("head_envelope_custom_curve",false);
+            if(args.hasProperty("head_envelope_start_percent"))tailSettings.head.startFraction=number(args,"head_envelope_start_percent")/100.0;
+            if(args.hasProperty("head_envelope_end_percent"))tailSettings.head.endFraction=number(args,"head_envelope_end_percent")/100.0;
+            if(args.hasProperty("head_envelope_start_gain_percent"))tailSettings.head.startGain=number(args,"head_envelope_start_gain_percent")/100.0;
+            if(args.hasProperty("head_envelope_end_gain_percent"))tailSettings.head.endGain=number(args,"head_envelope_end_gain_percent")/100.0;
+            if(args.hasProperty("head_envelope_curve_power"))tailSettings.head.curvePower=number(args,"head_envelope_curve_power")/1.0;
+            if(args.hasProperty("head_envelope_control1_time_percent"))tailSettings.head.control1Time=number(args,"head_envelope_control1_time_percent")/100.0;
+            if(args.hasProperty("head_envelope_control1_progress_percent"))tailSettings.head.control1Progress=number(args,"head_envelope_control1_progress_percent")/100.0;
+            if(args.hasProperty("head_envelope_control2_time_percent"))tailSettings.head.control2Time=number(args,"head_envelope_control2_time_percent")/100.0;
+            if(args.hasProperty("head_envelope_control2_progress_percent"))tailSettings.head.control2Progress=number(args,"head_envelope_control2_progress_percent")/100.0;
+            if(!tailSettings.valid())return toolResult("Invalid tail fade settings: range must be ordered within 0..100%, gains 0..200% and decreasing, power 0.25..4, Bezier coordinates ordered within 0..100%",true);
+        }
         if (args.hasProperty("label")) project.setNoteLabel(id, string(args, "label"));
         if (args.hasProperty("jie_split"))
         {
@@ -1354,6 +1449,7 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
             project.setNoteFormant(id, static_cast<float>(number(args, "formant_semitones")));
         if (args.hasProperty("gain"))
             project.setNoteGain(id, static_cast<float>(number(args, "gain", 1.0)));
+        if(editsTail)project.setNotesTailFade({id},tailMode,tailSettings);
         if (args.hasProperty("amplitude_envelope_base"))
             project.setNotesAmplitudeEnvelopeBase({ id },
                 static_cast<float>(number(args, "amplitude_envelope_base", 100.0)));
@@ -1706,6 +1802,28 @@ juce::var McpServer::noteJson(const NoteData& note, bool includeCurves)
     set(noteValue, "breath", note.breath);
     set(noteValue, "formant_semitones", note.formantSemitones);
     set(noteValue, "gain", note.gain);
+    set(noteValue,"tail_fade",note.utauTailFadeMode==1?"linear":note.utauTailFadeMode==2?"smooth":"off");
+    set(noteValue,"tail_fade_start_percent",note.utauTailFade.startFraction*100.0);
+    set(noteValue,"tail_fade_end_percent",note.utauTailFade.endFraction*100.0);
+    set(noteValue,"tail_fade_start_gain_percent",note.utauTailFade.startGain*100.0);
+    set(noteValue,"tail_fade_end_gain_percent",note.utauTailFade.endGain*100.0);
+    set(noteValue,"tail_fade_curve_power",note.utauTailFade.curvePower*1.0);
+    set(noteValue,"tail_fade_custom_curve",note.utauTailFade.customCurve);
+    set(noteValue,"head_envelope",note.utauTailFade.head.mode==0?"off":note.utauTailFade.head.mode==1?"linear":"curve");
+    set(noteValue,"head_envelope_custom_curve",note.utauTailFade.head.customCurve);
+    set(noteValue,"head_envelope_start_percent",note.utauTailFade.head.startFraction*100.0);
+    set(noteValue,"head_envelope_end_percent",note.utauTailFade.head.endFraction*100.0);
+    set(noteValue,"head_envelope_start_gain_percent",note.utauTailFade.head.startGain*100.0);
+    set(noteValue,"head_envelope_end_gain_percent",note.utauTailFade.head.endGain*100.0);
+    set(noteValue,"head_envelope_curve_power",note.utauTailFade.head.curvePower*1.0);
+    set(noteValue,"head_envelope_control1_time_percent",note.utauTailFade.head.control1Time*100.0);
+    set(noteValue,"head_envelope_control1_progress_percent",note.utauTailFade.head.control1Progress*100.0);
+    set(noteValue,"head_envelope_control2_time_percent",note.utauTailFade.head.control2Time*100.0);
+    set(noteValue,"head_envelope_control2_progress_percent",note.utauTailFade.head.control2Progress*100.0);
+    set(noteValue,"tail_fade_control1_time_percent",note.utauTailFade.control1Time*100.0);
+    set(noteValue,"tail_fade_control1_progress_percent",note.utauTailFade.control1Progress*100.0);
+    set(noteValue,"tail_fade_control2_time_percent",note.utauTailFade.control2Time*100.0);
+    set(noteValue,"tail_fade_control2_progress_percent",note.utauTailFade.control2Progress*100.0);
     set(noteValue, "attack_speed", note.attackSpeed);
     set(noteValue, "robust_pitch_curve", note.robustPitchCurve);
     set(noteValue, "connected_previous", note.connectedToPrevious);
@@ -1771,6 +1889,7 @@ juce::var McpServer::projectJson() const
     set(root, "denominator", data.denominator);
     set(root, "grid", data.gridDivision);
     set(root, "base_scale", data.baseScale);
+    set(root, "hamood", juce::JSON::parse(data.hamoodState));
     std::vector<juce::var> nativeConnections;
     for (const auto& connection : data.nativeConnections)
     {
@@ -1790,6 +1909,10 @@ juce::var McpServer::projectJson() const
         set(trackValue, "id", track.id);
         set(trackValue, "name", track.name);
         set(trackValue, "voicebank_directory", track.voicebankDirectory.getFullPathName());
+        set(trackValue, "output_engine", utauOutputEngineKey(track.outputEngine));
+        if (track.outputEngine == UtauOutputEngine::pcNsfHifigan) set(trackValue, "output_engine_name", juce::String::fromUTF8("HiFisampler（PC-NSF-HiFiGAN）"));
+        set(trackValue, "output_resampler", track.outputResampler.getFullPathName());
+        set(trackValue, "output_wavtool", track.outputWavtool.getFullPathName());
         set(trackValue, "diffsinger", trackIsDiffSinger(track));
         set(trackValue, "compose", track.compose && !track.accompaniment);
         set(trackValue, "accompaniment", track.accompaniment);

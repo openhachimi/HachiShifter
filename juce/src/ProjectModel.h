@@ -3,6 +3,7 @@
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "backend/UtauOtoOverride.h"
+#include "backend/TailFadeSettings.h"
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -265,6 +266,7 @@ struct FlagCurveKind
     float defaultValue = 0.0f;
 };
 [[nodiscard]] const std::vector<FlagCurveKind>& flagCurveKinds();
+[[nodiscard]] const std::vector<FlagCurveKind>& hifisamplerFlagCurveKinds();
 [[nodiscard]] const std::vector<FlagCurveKind>& diffSingerFlagCurveKinds();
 [[nodiscard]] const std::vector<FlagCurveKind>& diffSingerParameterKinds();
 [[nodiscard]] const FlagCurveKind& flagCurveKindFor(const juce::String& flag);
@@ -328,6 +330,9 @@ struct NoteData
     // offset, so shifting the offset carries all of them along together.  It
     // changes which audio is played, never where the note sits in the piece.
     double utauStpSeconds = 0.0;
+    double utauModulationPercent = 0.0;
+    juce::String ustSourceSection, ustBaseline;
+    int ustSourceSectionIndex = -1;
     // This note's own oto entry, edited for it alone through 单独OTO编辑.  When
     // enabled the note renders from it instead of its voicebank entry, and the
     // oto files are never touched.  It describes one recording, so a new lyric
@@ -395,6 +400,9 @@ struct NoteData
     juce::String melodyneVowelNoteId;
     float midiNote = 60.0f;
     float sourceMidiCenter = -1.0f;
+    // Unlike a hand-created target pitch, this centre/contour was measured
+    // from the source recording and can prove that a native render is a no-op.
+    bool sourcePitchMeasured = false;
     float modulation = 1.0f;
     float drift = 1.0f;
     float tension = 0.0f;
@@ -425,6 +433,9 @@ struct NoteData
     // the envelope as drawn, 200 twice as tall, 0 silence.  A note with no
     // envelope has a flat 100% one, so this raises it just the same.
     float amplitudeEnvelopeBasePercent = 100.0f;
+    // OTO-linked amplitude effect: 0 off, 1 linear, 2 smooth curve.
+    int utauTailFadeMode = 0;
+    backend::TailFadeSettings utauTailFade;
     std::vector<double> sibilantMarkers;
 };
 
@@ -490,7 +501,21 @@ struct ClipData
     // Source-only children, with starts relative to this clip. Notes are owned
     // by the parent and refer to these stable ids through clipPartId.
     std::vector<ClipData> parts;
+    // Explicitly linked native sources share one editing time warp.
+    bool nativeAudioLinked = false;
 };
+
+enum class UtauOutputEngine { inherit = 0, resampler = 1, pcNsfHifigan = 2 };
+inline juce::String utauOutputEngineKey(UtauOutputEngine engine)
+{
+    return engine == UtauOutputEngine::pcNsfHifigan ? "pc-nsf-hifigan"
+        : engine == UtauOutputEngine::resampler ? "resampler" : "inherit";
+}
+inline UtauOutputEngine parseUtauOutputEngine(const juce::String& key)
+{
+    return key == "pc-nsf-hifigan" ? UtauOutputEngine::pcNsfHifigan
+        : key == "resampler" ? UtauOutputEngine::resampler : UtauOutputEngine::inherit;
+}
 
 struct TrackData
 {
@@ -507,6 +532,7 @@ struct TrackData
     float volume = 1.0f;
     float pan = 0.0f;
     bool smoothOverlaps = false;
+    bool allowNativeAudioOverlap = false;
     bool normalizeVolume = false;
     // UTAU tracks select samples from this directory instead of using the
     // MIDI clip's sourceFile as audio.  The path is stored per track so one
@@ -519,6 +545,8 @@ struct TrackData
     // original consonant duration; larger values make consonants faster.
     int utauConsonantVelocity = 100;
     juce::String utauGlobalFlags;
+    juce::String ustSourceDocument, ustSourceEncoding, ustSourceBytes, ustBaseline;
+    bool ustSourceBom = false;
     // The four-region ("Jie/UTAU") variant of the UTAU mode.  It is a flag on
     // the existing utau algorithm rather than a separate PitchAlgorithm value
     // because "is this a UTAU track?" is asked in ~27 places across the piano
@@ -537,6 +565,9 @@ struct TrackData
     std::vector<ClipData> clips;
     // Backing audio always uses the source reader; engine fields are inert.
     bool accompaniment = false;
+    UtauOutputEngine outputEngine = UtauOutputEngine::inherit;
+    // Empty per-track paths use global settings, then bundled resampler / internal mixer.
+    juce::File outputResampler, outputWavtool;
 };
 
 // One pitch line for UTAU notes whose pitch points reach into one another.
@@ -631,6 +662,41 @@ struct SharedPitchLines
         && track.utauMode == UtauMode::mou
         && track.voicebankDirectory.getChildFile("dsconfig.yaml").existsAsFile();
 }
+// OTO timing and regional editing are shared by classic resamplers and native NSF.
+// FLAG DSP remains a separate capability. DiffSinger keeps its own renderer.
+[[nodiscard]] inline bool trackUsesVoicebankSynthesis(const TrackData& track)
+{
+    return !track.accompaniment && (track.pitchAlgorithm == PitchAlgorithm::utau
+        || (track.pitchAlgorithm == PitchAlgorithm::nsfHifigan
+            && (utauModeUsesRegions(track.utauMode) || track.voicebankDirectory.isDirectory())
+            && !track.voicebankDirectory.getChildFile("dsconfig.yaml").existsAsFile()));
+}
+// Native recordings are edited as one track-wide timeline. Voicebank and
+// source-file editors retain their selected-region scope.
+[[nodiscard]] inline bool trackShowsAllNativeRegions(const TrackData& track)
+{
+    return track.compose && !track.accompaniment
+        && !trackUsesVoicebankSynthesis(track) && !trackIsDiffSinger(track);
+}
+[[nodiscard]] inline UtauOutputEngine effectiveUtauOutputEngine(const TrackData& track,
+    UtauOutputEngine defaultEngine = UtauOutputEngine::resampler)
+{
+    if (trackIsDiffSinger(track)) return UtauOutputEngine::resampler;
+    if (track.outputEngine != UtauOutputEngine::inherit) return track.outputEngine;
+    // Compatibility for legacy in-memory requests; old project files migrate on load.
+    if (track.pitchAlgorithm == PitchAlgorithm::nsfHifigan && trackUsesVoicebankSynthesis(track))
+        return UtauOutputEngine::pcNsfHifigan;
+    return defaultEngine == UtauOutputEngine::pcNsfHifigan ? defaultEngine : UtauOutputEngine::resampler;
+}
+[[nodiscard]] inline juce::File effectiveUtauResampler(const TrackData& track, const juce::File& fallback)
+{
+    return track.outputEngine == UtauOutputEngine::inherit || track.outputResampler == juce::File{} ? fallback : track.outputResampler;
+}
+[[nodiscard]] inline juce::File effectiveUtauWavtool(const TrackData& track, const juce::File& fallback)
+{
+    return track.outputEngine == UtauOutputEngine::inherit || track.outputWavtool == juce::File{} ? fallback : track.outputWavtool;
+}
+
 [[nodiscard]] inline bool trackTakesFlagCurves(const TrackData& track)
 {
     return !track.accompaniment && track.pitchAlgorithm == PitchAlgorithm::utau
@@ -681,6 +747,8 @@ struct ProjectData
     std::vector<TempoChange> tempoChanges;
     std::vector<NativeConnection> nativeConnections;
     std::vector<TrackData> tracks;
+    // Immutable JSON avoids sharing mutable metadata between undo snapshots.
+    juce::String hamoodState;
 
     [[nodiscard]] double durationSeconds() const;
     [[nodiscard]] double secondsForQuarterPosition(double quarterPosition) const;
@@ -697,7 +765,10 @@ public:
     [[nodiscard]] ProjectData snapshot() const;
     [[nodiscard]] std::uint64_t revisionNumber() const;
     void replace(ProjectData replacement);
+    // Opening/new documents never share undo history with the previous document.
+    void resetDocument(ProjectData replacement = {});
     void clear();
+    bool setHamoodState(const juce::String& state, juce::String& error);
     bool undo();
     bool redo();
     [[nodiscard]] bool canUndo() const;
@@ -711,6 +782,8 @@ public:
     void setTrackReferenceOnly(const juce::String& trackId, bool referenceOnly);
     void setTrackName(const juce::String& trackId, const juce::String& name);
     bool setClipNotesIfEmpty(const juce::String& clipId, std::vector<NoteData> notes);
+    bool setClipAudioAnalysis(const juce::String& clipId, std::vector<NoteData> notes,
+                              const ClipData& importedClip = ClipData{});
     bool addMidiFile(const juce::File& file, juce::String& error);
     // One track of a MIDI file, as the import offers it.
     struct MidiTrackChoice
@@ -753,7 +826,9 @@ public:
     bool addUstFile(const juce::File& file, juce::String& error,
                     juce::StringArray& warnings,
                     UstImportMode mode = UstImportMode::addTrack,
-                    juce::String* importedTrackId = nullptr);
+                    juce::String* importedTrackId = nullptr, int encoding = 0);
+    bool exportUst(const juce::File& file, const juce::String& trackId,
+                   juce::String& error, juce::StringArray& warnings, int encoding = 0) const;
     void setTempo(double bpm, int numerator, int denominator = 4);
     // Keep the existing musical-time remapping by default. With false, only
     // the tempo map changes; clips, notes and their curves keep their seconds.
@@ -779,6 +854,8 @@ public:
     void setTrackUtauGlobalFlags(const juce::String& trackId, const juce::String& flags);
     void setUtauMode(UtauMode mode);
     void setTrackUtauMode(const juce::String& trackId, UtauMode mode);
+    void setTrackOutputEngine(const juce::String& trackId, UtauOutputEngine engine,
+                              const juce::File& resampler = {}, const juce::File& wavtool = {});
     void setNotesVibrato(const std::vector<juce::String>& noteIds,
                          const NoteData& parameters, bool enabled);
     void setNotesVibratoRealLine(const std::vector<juce::String>& noteIds, bool enabled);
@@ -842,7 +919,7 @@ public:
     void removeClips(const std::vector<juce::String>& clipIds);
     [[nodiscard]] bool canMergeClips(const std::vector<juce::String>& clipIds) const;
     [[nodiscard]] juce::String mergeClips(const std::vector<juce::String>& clipIds);
-    void moveClips(const std::vector<juce::String>& clipIds, double deltaSeconds);
+    void moveClips(const std::vector<juce::String>& clipIds, double deltaSeconds, int trackDelta = 0);
     void removeTrack(const juce::String& trackId);
     void transposeNote(const juce::String& noteId, float semitones);
     void transposeNotes(const std::vector<juce::String>& noteIds, float semitones);
@@ -850,7 +927,12 @@ public:
     // overlaps an existing note, the phrase is inserted immediately before
     // the first collision and the following notes are shifted to the right.
     bool moveUtauNotes(const std::vector<juce::String>& noteIds,
-                       double deltaSeconds, float semitones);
+                       double deltaSeconds, float semitones, juce::String* error = nullptr);
+    // Native timing keeps shared boundaries connected and warps the source
+    // clock; an outer note moves rigidly while its neighbour stretches.
+    bool moveNativeNotes(const std::vector<juce::String>& noteIds,
+                         double deltaSeconds, float semitones, juce::String* error = nullptr);
+    bool resizeNativeNoteEdge(const juce::String& noteId, double deltaSeconds, bool leftEdge);
     void setNotesMidi(const std::vector<juce::String>& noteIds, float midiNote);
     void averageNotesMidi(const std::vector<juce::String>& noteIds);
     void quantizeNotesMidi(const std::vector<juce::String>& noteIds, float stepSemitones = 1.0f);
@@ -862,6 +944,9 @@ public:
     [[nodiscard]] std::vector<juce::String> insertNotes(
         const juce::String& clipId, const std::vector<NoteData>& noteTemplates,
         double absoluteStartSeconds);
+    [[nodiscard]] std::vector<juce::String> insertNativeAudioClips(
+        const juce::String& trackId, const std::vector<ClipData>& templates,
+        const std::vector<NativeConnection>& connections, double atSeconds);
     [[nodiscard]] std::vector<juce::String> duplicateNotes(
         const std::vector<juce::String>& noteIds, const juce::String& targetClipId,
         double absoluteStartSeconds);
@@ -872,6 +957,9 @@ public:
     // Explicitly connect selected notes without destructively merging their
     // editable data. Pairs may cross clips and source-material regions.
     void setNotesConnection(const std::vector<juce::String>& noteIds, bool enabled);
+    bool disconnectNativeAudio(const std::vector<juce::String>& noteIds);
+    bool linkNativeAudio(const std::vector<juce::String>& noteIds);
+    bool setNativeAudioOverlap(const juce::String& trackId, bool enabled);
     // Inserts a zero-length lead-in note in front of this one carrying the same
     // lyric, and pins the following note's preutterance to 0 with the given
     // overlap, so a consonant can be sung ahead of the beat.  Returns the new
@@ -884,6 +972,9 @@ public:
     void setNoteBreath(const juce::String& noteId, float breath);
     void setNoteFormant(const juce::String& noteId, float semitones);
     void setNoteGain(const juce::String& noteId, float gain);
+    bool setNotesTailFade(const std::vector<juce::String>& noteIds, int mode);
+    bool setNotesTailFade(const std::vector<juce::String>& noteIds, int mode,
+                          const backend::TailFadeSettings& settings);
     void setNotesAmplitudeEnvelopeBase(const std::vector<juce::String>& noteIds,
                                        float basePercent);
     void setNoteAttack(const juce::String& noteId, double consonantSeconds, float attackSpeed);
@@ -1036,6 +1127,7 @@ public:
     // shifted by the difference between the two -- so an octave error in the
     // measurement still comes out as an octave error in the result.
     void flattenNotePitch(const std::vector<juce::String>& noteIds);
+    bool restoreNativeSourcePitch(const std::vector<juce::String>& noteIds);
     [[nodiscard]] static double firstFreeStartFrom(double startSeconds,
                                                    const std::vector<NoteSpan>& occupied);
     // Returns an empty id when there is no room, rather than making an overlap.
@@ -1069,6 +1161,8 @@ public:
 
     bool save(const juce::File& file, juce::String& error) const;
     bool load(const juce::File& file, juce::String& error);
+    static bool saveRecoverySnapshot(ProjectData data, const juce::File& recoveryFile,
+                                     const juce::File& originalFile, juce::String& error);
 
 private:
     [[nodiscard]] std::optional<double> clipSplitPositionLocked(
@@ -1077,6 +1171,7 @@ private:
     [[nodiscard]] bool canSplitClipAt(const juce::String& clipId, double absoluteSeconds) const;
     [[nodiscard]] juce::String splitClipAt(const juce::String& clipId, double absoluteSeconds);
     void pushUndoLocked();
+    void replaceInternal(ProjectData replacement, bool newDocument);
     // Whether a clip's source is a recording -- audio the engine plays
     // straight out when there are no notes left to play it through.
     //

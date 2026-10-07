@@ -60,6 +60,39 @@ inline bool MainComponent::diagnosticClipEditorScope(const juce::File& folder)
     check("split_project_save_reopen",project.save(saved,error)&&loaded.load(saved,error));
     project.replace(loaded.snapshot());project.dispatchPendingMessages();stopTimer();click(3.7);
     check("reopened_region_is_independent",pianoRoll.diagnosticHitCount()==2&&selectedClipId==right);
+    // Real timeline clicks must retain native clips and cross-region selection,
+    // while a note edit still goes to its owning region.
+    auto native=split;native.tracks[0].pitchAlgorithm=PitchAlgorithm::nsfHifigan;
+    native.tracks[0].utauMode=UtauMode::classic;
+    auto outside=native.tracks[0];outside.id="outside";outside.clips.resize(1);outside.clips[0].id="outside-clip";
+    for(auto& n:outside.clips[0].notes)n.id="outside-"+n.id;
+    native.tracks.push_back(outside);project.replace(native);project.dispatchPendingMessages();stopTimer();
+    click(1.7);check("native_timeline_click_keeps_all_regions",pianoRoll.diagnosticHitCount()==4);
+    pianoRoll.selectAllNotes();check("native_select_all_spans_regions",chosen({"n0","n1","n2","n3"}));
+    click(3.7);check("native_region_switch_retains_visible_selection",pianoRoll.diagnosticHitCount()==4&&chosen({"n0","n1","n2","n3"}));
+    const auto nativeRevision=project.revisionNumber();focusClip("whole");
+    check("native_visibility_is_not_a_project_edit",project.revisionNumber()==nativeRevision
+        &&!project.snapshot().tracks[0].clips[1].showNormalDisplay);
+    pianoRoll.clearNoteSelection();pianoRoll.setTool(PianoRollComponent::Tool::note);
+    const auto down=pianoRoll.diagnosticHitBounds(2).getCentre(),to=down+juce::Point<float>(0,-22);
+    pianoRoll.mouseDown(event(pianoRoll,down,down));pianoRoll.mouseDrag(event(pianoRoll,to,down));pianoRoll.mouseUp(event(pianoRoll,to,down));
+    project.dispatchPendingMessages();stopTimer();
+    const auto editedNative=project.snapshot();
+    check("native_other_region_note_edit_keeps_owner",editedNative.tracks[0].clips[1].notes[0].id=="n2"
+        &&editedNative.tracks[0].clips[1].notes[0].midiNote>64.5f
+        &&editedNative.tracks[0].clips[0].notes[0].midiNote==60&&editedNative.tracks[1].clips[0].notes[0].midiNote==60);
+    check("native_edit_retains_all_visible_regions",pianoRoll.diagnosticHitCount()==4);
+    project.save(folder.getChildFile("native-regions.hjpx"),error);ProjectModel nativeReload;
+    check("native_region_save_reopen",nativeReload.load(folder.getChildFile("native-regions.hjpx"),error));
+    project.replace(nativeReload.snapshot());project.dispatchPendingMessages();stopTimer();focusClip("whole");
+    check("native_reopened_regions_visible_without_flags",pianoRoll.diagnosticHitCount()==4);
+    auto nativePreview=folder.getChildFile("native-all-regions.png").createOutputStream();
+    check("native_shared_region_preview_written",nativePreview&&juce::PNGImageFormat().writeImageToStream(
+        pianoRoll.createComponentSnapshot({0,static_cast<int>(pianoRoll.diagnosticYForMidi(72)),800,380}),*nativePreview));
+    auto nativeMenu=clipContextMenu("whole",1.7);bool nativeNormalToggle=false;
+    for(juce::PopupMenu::MenuItemIterator it(nativeMenu);it.next();)nativeNormalToggle|=it.getItem().itemID==4;
+    check("native_default_visibility_needs_no_normal_display_toggle",!nativeNormalToggle);
+    focusClip("outside-clip");check("native_track_switch_excludes_other_tracks",pianoRoll.diagnosticHitCount()==2);
     // Standalone rolls compare the actual painted output with the other
     // region removed, including curve, reference, amplitude and FLAG modes.
     const auto equalPixels=[](const juce::Image& a,const juce::Image& b)
@@ -82,7 +115,7 @@ inline bool MainComponent::diagnosticClipEditorScope(const juce::File& folder)
         {UtauNoteWaveform w;w.noteId=n.id;w.audioHash=AudioEngine::utauNoteAudioHash(n);w.durationSeconds=.5;
             w.unshapedMaxima.assign(60,.5f);w.unshapedMinima.assign(60,-.5f);waves->push_back(w);}
         roll.setUtauNoteWaveforms(waves);
-        check("all_engines_region_hit_scope",roll.diagnosticHitCount()==2);
+        check("engine_specific_region_hit_scope",roll.diagnosticHitCount()==(mode==0?4:2));
         const auto area=juce::Rectangle<int>(58,static_cast<int>(roll.diagnosticYForMidi(70)),670,300);
         const auto hiddenBounds=juce::Rectangle<int>(static_cast<int>(roll.diagnosticEdgeX(3)),area.getY(),260,300);
         for(const auto tool:{PianoRollComponent::Tool::note,PianoRollComponent::Tool::points,
@@ -91,7 +124,8 @@ inline bool MainComponent::diagnosticClipEditorScope(const juce::File& folder)
             roll.setTool(tool);const auto full=roll.createComponentSnapshot(hiddenBounds);
             auto isolated=scoped;isolated.tracks[0].clips.resize(1);model.replace(isolated);model.dispatchPendingMessages();roll.diagnosticRefresh();
             const auto single=roll.createComponentSnapshot(hiddenBounds);
-            check("hidden_region_does_not_paint_notes_curves_or_waveforms",equalPixels(full,single));
+            check(mode==0?"native_other_region_paints_notes_curves_and_waveforms":"hidden_region_does_not_paint_notes_curves_or_waveforms",
+                  mode==0?!equalPixels(full,single):equalPixels(full,single));
             model.replace(scoped);model.dispatchPendingMessages();roll.diagnosticRefresh();
         }
         roll.setTool(PianoRollComponent::Tool::points);
@@ -125,6 +159,8 @@ inline bool MainComponent::diagnosticClipEditorScope(const juce::File& folder)
                 check("region_preview_written",out&&juce::PNGImageFormat().writeImageToStream(image,*out));}
         }
         roll.setSourceEditMode(true);roll.setFocusedClip("whole");check("source_edit_stays_region_local",roll.diagnosticHitCount()==2);
+        if(mode==0){roll.setSourceEditMode(false);roll.selectAllNotes();roll.setSourceEditMode(true);
+            check("native_source_edit_prunes_other_region_selection",roll.selectedNoteIds().size()==2);}
     }
     return ok;
 }
