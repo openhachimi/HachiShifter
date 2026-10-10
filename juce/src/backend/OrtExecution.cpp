@@ -43,6 +43,11 @@ Ort::SessionOptions makeOrtSessionOptions(const OrtExecutionConfig& config,
 {
     Ort::SessionOptions options;
     options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+    // Cached sessions must sleep between inference calls. GAME's separate
+    // encoder/segmenter/estimator pools otherwise compete with each other and
+    // with GUI/audio threads while another session is doing useful work.
+    options.AddConfigEntry("session.intra_op.allow_spinning", "0");
+    options.AddConfigEntry("session.inter_op.allow_spinning", "0");
     const auto resolved = resolvedInferenceBackend(config.requested);
     activeBackend = inferenceBackendName(resolved);
     if (resolved == InferenceBackend::directML)

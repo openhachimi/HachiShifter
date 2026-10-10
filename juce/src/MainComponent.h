@@ -16,6 +16,7 @@
 #include "backend/MelodyneProvider.h"
 #include "backend/AnalysisService.h"
 #include <juce_gui_extra/juce_gui_extra.h>
+#include <set>
 
 namespace hachi
 {
@@ -248,6 +249,7 @@ public:
         // roll shows where notes are but not what they do.
         bool pitchLine = true;
         bool originalPitchLine = true; // unedited source pitch, drawn as a dashed reference
+        bool consonantPitchDashed = false; // optional source-aperiodicity evidence on the target line
         bool lyrics = true;
     };
     // The settings keys are the ones the two buttons already used, so a
@@ -418,6 +420,7 @@ public:
     [[nodiscard]] bool diagnosticModelessOto(const juce::File& directory);
     [[nodiscard]] bool diagnosticOtoContinuity(const juce::File& directory,const juce::File& profileBank = {});
     [[nodiscard]] bool diagnosticAdvancedEnvelopePanel(const juce::File& directory);
+    [[nodiscard]] bool diagnosticNativeEnvelope(const juce::File& directory);
     [[nodiscard]] bool diagnosticEmptyTuningClip(const juce::File& directory);
     [[nodiscard]] bool diagnosticClipEditorScope(const juce::File& directory);
     [[nodiscard]] bool diagnosticNoteHints(const juce::File& directory);
@@ -427,7 +430,9 @@ public:
     [[nodiscard]] bool diagnosticNormalDisplay(const juce::File& directory);
     [[nodiscard]] bool diagnosticIndependentZoom();
     [[nodiscard]] bool diagnosticNsfPicker();
+    void diagnosticNativeVibrato(const juce::File& folder, std::function<void(bool)> finished);
     [[nodiscard]] bool diagnosticOutputEngine(const juce::File& folder, const juce::File& modelFolder, const juce::File& wavtool);
+    [[nodiscard]] bool diagnosticChineseCvvc(const juce::File& folder, const juce::File& modelFolder);
 
 private:
     [[nodiscard]] juce::PopupMenu clipContextMenu(const juce::String& clipId, double seconds);
@@ -529,6 +534,7 @@ private:
                               double startSeconds = 0.0,
                               const juce::String& targetTrackId = {});
     void scheduleAnalysis(const juce::File& file, const juce::String& clipId);
+    void scheduleNativeTrimSourceAnalysis(const ProjectData& data);
     void importMidi();
     void exportMidi();
     void exportUst();
@@ -608,6 +614,7 @@ private:
     ToolButton drawButton;
     juce::TextButton lineButton;
     ToolButton pointButton;
+    juce::TextButton trimButton;
     juce::TextButton connectButton;
     juce::TextButton pitchParamButton;
     juce::TextButton driftParamButton;
@@ -620,10 +627,13 @@ private:
     // curve.  The lane is only reachable once the notes are switched over:
     // with flags held as a single number there is no curve to show.
     ToolButton flagCurveButton, flagEnvelopeButton;
-    DropdownButton advancedEnvelopeButton;
+    juce::TextButton advancedEnvelopeButton;
     void showAdvancedEnvelopeMenu();
     DropdownButton showViewMenuButton;
     juce::ToggleButton nativeAudioOverlapButton;
+    juce::ToggleButton nsfPitchTransitionsButton;
+    juce::ToggleButton nsfNoiseProtectionButton;
+    juce::TextButton nativeVibratoButton;
     ViewOptions viewOptions;
     void showViewMenu();
     void applyViewOptions();
@@ -688,6 +698,7 @@ private:
     bool playWhenRenderReady = false;
     int activeUtauSelectionCount = 0;
     int pendingNativeAnalyses = 0;
+    std::set<juce::String> nativeTrimAnalysisAttempts;
     double nativeAnalysisProgress = 0.0;
     juce::String nativeAnalysisName;
 

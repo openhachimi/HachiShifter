@@ -76,6 +76,8 @@ jobs:
           Copy-Item $engines "$stage/engines" -Recurse
           New-Item -ItemType Directory -Force -Path "$stage/licenses/hifisampler" | Out-Null
           Copy-Item third_party/hifisampler/LICENSE, third_party/hifisampler/NOTICE.txt "$stage/licenses/hifisampler/"
+          New-Item -ItemType Directory -Force -Path "$stage/licenses/openutau" | Out-Null
+          Copy-Item third_party/openutau/LICENSE.txt, third_party/openutau/NOTICE.md "$stage/licenses/openutau/"
 
           # Bundle the redistributable CRT required by both the application
           # and ONNX Runtime on machines without Visual Studio installed.

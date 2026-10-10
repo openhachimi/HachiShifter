@@ -141,14 +141,15 @@ void HachiLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& butto
     // so active/disabled buttons cannot change another button's cached image.
     static const auto toolIcons = []
     {
-        std::array<std::unique_ptr<juce::Drawable>, 6> icons;
-        const std::array<const char*, 6> shapes {{
+        std::array<std::unique_ptr<juce::Drawable>, 7> icons;
+        const std::array<const char*, 7> shapes {{
             "<path d='M5 3 L5 19 L9 15 L13 22 L16 20 L12 13 L19 13 Z'/>",
             "<path d='M4 20 L5 15 L16 4 Q18 2 20 4 Q22 6 20 8 L9 19 Z M5 15 L9 19 M14 6 L18 10 M4 20 L8 19'/>",
             "<path d='M5 19 L19 5'/><rect x='2' y='16' width='5' height='5'/><rect x='17' y='2' width='5' height='5'/>",
             "<path d='M4 18 C9 18 11 6 20 6'/><circle cx='4' cy='18' r='2'/><circle cx='12' cy='12' r='2'/><circle cx='20' cy='6' r='2'/>",
             "<path d='M14 3 A6 6 0 0 0 11 12 L3 20 L6 23 L14 15 A6 6 0 0 0 21 7 L17 11 L13 7 L17 3 Z'/>",
-            "<path d='M9 15 L15 9 M8 12 L5 15 A3 3 0 0 0 9 19 L12 16 M12 8 L15 5 A3 3 0 0 1 19 9 L16 12'/>"
+            "<path d='M9 15 L15 9 M8 12 L5 15 A3 3 0 0 0 9 19 L12 16 M12 8 L15 5 A3 3 0 0 1 19 9 L16 12'/>",
+            "<path d='M7 3 V17 H21 M3 7 H17 V21 M10 10 H14 V14'/>"
         }};
         for (std::size_t index = 0; index < icons.size(); ++index)
         {
@@ -159,14 +160,14 @@ void HachiLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& butto
         }
         return icons;
     }();
-    const std::array<const char*, 6> toolIds {{ "icon.pointer", "icon.draw",
-        "icon.line", "icon.points", "icon.wrench", "icon.connect" }};
+    const std::array<const char*, 7> toolIds {{ "icon.pointer", "icon.draw",
+        "icon.line", "icon.points", "icon.wrench", "icon.connect", "icon.trim" }};
     for (std::size_t index = 0; index < toolIds.size(); ++index)
         if (id == toolIds[index] && toolIcons[index])
         {
             auto icon = toolIcons[index]->createCopy();
             icon->replaceColour(juce::Colours::black,
-                button.getToggleState() ? Palette::accent.contrasting(0.85f) : Palette::text);
+                (button.getToggleState() ? Palette::accent.contrasting(0.85f) : Palette::text).withMultipliedAlpha(button.isEnabled() ? 1.f : .35f));
             icon->drawWithin(g, button.getLocalBounds().toFloat().reduced(4.0f),
                 juce::RectanglePlacement::centred, button.isEnabled() ? 1.0f : 0.4f);
             return;

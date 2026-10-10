@@ -1,10 +1,14 @@
 {
   "public_version": "0.2.4",
-  "documentation_revision": "108",
-  "created_at": "2026-10-07T22:22:20.620535+08:00",
-  "description": "Current editor working-tree source snapshot including updates through 108",
-  "source_file_count": 583,
-  "source_bytes": 21442086,
+  "documentation_revision": "143",
+  "engine_version": "0.0803",
+  "created_at": "2026-10-10T22:21:19.461062+08:00",
+  "description": "Current editor working-tree source snapshot including updates through 143",
+  "previous_published_commit": "994656985032237774402ae1b7b175ce74f0ebf1",
+  "repository": "openhachimi/HachiShifter",
+  "branch": "next",
+  "source_file_count": 624,
+  "source_bytes": 22115982,
   "excluded": {
     ".deps/": 1,
     ".git/": 1,
@@ -19,7 +23,7 @@
     "juce/engines/diffsinger/pronunciation-data/pypinyin/style/__pycache__/": 1,
     "juce/tests/__pycache__/": 1,
     "models/": 1,
-    "suffix:.log": 115,
+    "suffix:.log": 119,
     "suffix:.mp3": 1,
     "suffix:.pt": 2,
     "test-output/": 1,
@@ -57,14 +61,17 @@
     "wheels"
   ],
   "excluded_suffixes": [
+    ".7z",
     ".a",
     ".ckpt",
     ".dll",
     ".dylib",
     ".exe",
     ".flac",
+    ".hjm",
     ".hjpx",
     ".hspx",
+    ".key",
     ".lib",
     ".log",
     ".mkv",
@@ -74,6 +81,7 @@
     ".obj",
     ".onnx",
     ".pdb",
+    ".pem",
     ".pt",
     ".pth",
     ".pyc",
@@ -85,17 +93,39 @@
     ".zip"
   ],
   "validation": {
-    "compiled_exe_sha256": "d5f9cfce770b35703a74a428e022991f64e7c802ec0c7cfc51c95231abdd279b",
-    "build_and_installed_regression_groups": [
-      "native-shutdown",
-      "hf-prewarm",
-      "nsf-regions",
-      "hifisampler",
-      "rendered-waveform",
-      "daemon-lifecycle"
-    ],
+    "compiled_exe_sha256": "38f48edc084aee28a8cfefeef538b289fbcf6781a052d48d4d186099350642d2",
+    "completed_update": "143",
     "all_groups_passed": true,
-    "note": "Code compiled and tested before packaging; packaging only changed CI and documentation."
+    "development_groups": 9,
+    "development_checks": {
+      "visibility": 32,
+      "display": 29,
+      "unpitched": 35,
+      "source": 69,
+      "linked": 49,
+      "trim": 41,
+      "vibrato": 12,
+      "restore": 22,
+      "flatten": 21
+    },
+    "development_check_count": 310,
+    "installed_groups": 3,
+    "installed_check_count": 96,
+    "new_models_added": false,
+    "note": "Existing update 143 build and installed regressions verified before packaging."
+  },
+  "packaging_validation": {
+    "all_source_files_match": true,
+    "python_syntax_files": 173,
+    "python_syntax_passed": true,
+    "local_cpp_include_references": 565,
+    "missing_local_cpp_includes": 0,
+    "cmake_source_resource_references": 95,
+    "missing_cmake_source_resources": 0,
+    "required_licenses_and_g2p_data_present": true,
+    "plausible_embedded_credentials_found": 0,
+    "archive_crc_and_file_hashes_verified": true,
+    "note": "Packaging checks only; no new local compilation or model regression run."
   },
   "files": [
     {
@@ -110,8 +140,8 @@
     },
     {
       "path": ".github/workflows/windows-build.yml",
-      "size": 6331,
-      "sha256": "b70d904e8ff6a72e0e734e1be3fb7cff6a6604ad0176d394292cec25b16e12d1"
+      "size": 6533,
+      "sha256": "640387c14702d4fb37d7643bce413e0e6463738921fba8490d0b7eb5da401e6d"
     },
     {
       "path": ".gitignore",
@@ -130,13 +160,18 @@
     },
     {
       "path": "AGENTS.md",
-      "size": 762,
-      "sha256": "9da3b56a559e1ad37156c977da2c8730574cf60d03f82511b623f5da33bad83f"
+      "size": 1650,
+      "sha256": "094433b19ccda58897f580a09ca47f8c45a012fd1dc613ea9a10d33ef67d0a47"
     },
     {
       "path": "LICENSE",
       "size": 2611,
       "sha256": "6ea1e02d8b8288efcec8db0293559fc4138f970091a29572f0fb2b9286ebd1aa"
+    },
+    {
+      "path": "README.md",
+      "size": 7523,
+      "sha256": "0fae648ad053e23b61c48c9f365130e68762a80ff7ed2e2a4e6da9ab99a579a1"
     },
     {
       "path": "build-local.ps1",
@@ -149,19 +184,39 @@
       "sha256": "b2df60a740ba8c969d79f7b35aa16ea6ff752536f24de49a714054a72f83e8ae"
     },
     {
+      "path": "docs/AI_CODE_GUIDE.md",
+      "size": 53709,
+      "sha256": "71991b1624e2cba49cef0e08230ebecf17d4e209811a40640f5e0f15cbcd2f6b"
+    },
+    {
+      "path": "docs/AI_SOURCE_INDEX.md",
+      "size": 67006,
+      "sha256": "0b8b1f7e9a0d09d7f4674458d6734f3b7c6fae2cbfa41160b8d0ca413d4e2943"
+    },
+    {
+      "path": "docs/SOURCE_STATUS.md",
+      "size": 3188,
+      "sha256": "e74276f1fa2f0c4f9f732d2a83d85ec8f33cf970f93ad2bbe365d11a25036d55"
+    },
+    {
       "path": "docs/accompaniment.md",
       "size": 1756,
       "sha256": "c8f5c272e2274d2bc8aece8dbcd7b1b6b5e460b3d5b782834e8522f3a01e8645"
     },
     {
       "path": "docs/advanced-envelope.md",
-      "size": 3654,
-      "sha256": "0ab560061aec3c0ddacf9e7a9da9e4959d1c5d37e6d34936983da85732e3418b"
+      "size": 7061,
+      "sha256": "cf5b36b7a64d161465ecfe4f2239da3d5a26a7ba9ada61f1a2cf225a446cb227"
     },
     {
       "path": "docs/audio-export.md",
       "size": 3880,
       "sha256": "ef398d43b7cd3fcffbe732b50a45dea973edaa09c19ba78cdb3c52ae886c51c0"
+    },
+    {
+      "path": "docs/chinese-cvvc.md",
+      "size": 4827,
+      "sha256": "5adfcfbed3bee121cdaa47a11c3ac9516affcc152e80a98eb18bc0d283b9f567"
     },
     {
       "path": "docs/diffsinger-audit.md",
@@ -215,8 +270,8 @@
     },
     {
       "path": "docs/mcp.md",
-      "size": 11529,
-      "sha256": "9967326a0afb6fa11a09da88323de9f9694eaaf6bd41d39e83d703507b738851"
+      "size": 11582,
+      "sha256": "546aac79fee3147dc8e5bb508517657cbbb99967f343bc8c38a76b7bd3c8c830"
     },
     {
       "path": "docs/nsf-hifigan-model.md",
@@ -245,8 +300,8 @@
     },
     {
       "path": "docs/updates.md",
-      "size": 96829,
-      "sha256": "f4bb6cb7722c52e61fb96d01b3119462d11e9be33026fddd8b3a2b2f74a5e101"
+      "size": 129132,
+      "sha256": "6c22e90fe68c002c1dc64f8a2e0ed2d3b154383be1f53b84667dd5405104e234"
     },
     {
       "path": "docs/ust-fidelity.md",
@@ -275,8 +330,8 @@
     },
     {
       "path": "juce/CMakeLists.txt",
-      "size": 20957,
-      "sha256": "61418a3354edc9732b232a2a94b6f6b574ff585039dd02917d724253f0b19d2b"
+      "size": 21030,
+      "sha256": "4d7dc8730c04d0f6fa8017cbe223601ba7b6db9342710735edde04c9ea57e48f"
     },
     {
       "path": "juce/README.md",
@@ -840,8 +895,8 @@
     },
     {
       "path": "juce/src/AdvancedEnvelopePanel.h",
-      "size": 30242,
-      "sha256": "06600ae91f450ef6a1d2cd81827a21ec9fef7f8980e78a65ce305ae200b41778"
+      "size": 42675,
+      "sha256": "ccd447c7ae3da7bc1e60b21174b6a961b8f760780e5131e2f9f105f51bf9e2bb"
     },
     {
       "path": "juce/src/AssetManagerComponent.cpp",
@@ -855,18 +910,18 @@
     },
     {
       "path": "juce/src/AudioEngine.cpp",
-      "size": 182600,
-      "sha256": "258062502ba2221faf47660eeaabed47c0052e0b52a2021ccceb955a673aa64d"
+      "size": 188838,
+      "sha256": "66515b4f3da6ffd0c20aa5ac127242449d44f231af77d01d78806e7a3217d3fc"
     },
     {
       "path": "juce/src/AudioEngine.h",
-      "size": 19234,
-      "sha256": "b04b95cf25bc339bfbbec86bc0c878d85f4778f3e7b6db52b98c6347904761cc"
+      "size": 19358,
+      "sha256": "d235e892a18f84b4786259fad205f882fb3d34ed7937f5399e3eaf06c883df2a"
     },
     {
       "path": "juce/src/ClipParts.h",
-      "size": 7760,
-      "sha256": "3998d7280aecc28242c91300b0d35b2d4d1585c3537adc49bd3e3c8e35cb66fd"
+      "size": 8467,
+      "sha256": "b60d1b8e6c4397bd54107afcfe096ef249d3798a946c975d245d0047fb797456"
     },
     {
       "path": "juce/src/DiffSingerParameterCurves.h",
@@ -900,8 +955,8 @@
     },
     {
       "path": "juce/src/DiffSingerRequest.h",
-      "size": 1815,
-      "sha256": "a5dd4136750976b99a343816a6a6d3033cff59b5b315c3e422c93a1f6e144135"
+      "size": 1862,
+      "sha256": "6a0bd6e3c45c267d2131ddca1952b4bcc3b86d837fdc8685fa7a1243d84c4f68"
     },
     {
       "path": "juce/src/FlagCurveDrawing.h",
@@ -935,8 +990,8 @@
     },
     {
       "path": "juce/src/I18n.cpp",
-      "size": 68604,
-      "sha256": "c3f2f29b60c376aa3dd2ee590aee6f9a0b364678b8e4789bb7596a188d787614"
+      "size": 74015,
+      "sha256": "e18ffd7efcc6d67e6dfa0a51f64b980a51ce5122487bc104075f0d7a42eb0be4"
     },
     {
       "path": "juce/src/I18n.h",
@@ -945,18 +1000,18 @@
     },
     {
       "path": "juce/src/Main.cpp",
-      "size": 1165327,
-      "sha256": "adafbecb78d158e1cd1e558e0468c25e350eb336f140f2ca00fb564e8e7793b6"
+      "size": 1175894,
+      "sha256": "e29e4e03da6773d42a10a0925b197de268119fee5437d6818b2d40839056f45a"
     },
     {
       "path": "juce/src/MainComponent.cpp",
-      "size": 291754,
-      "sha256": "bcf65a0fe61af0e65683a17884a887796cd14042e324d8273d147148281e7eea"
+      "size": 300664,
+      "sha256": "3c6821a6555734e6a65c2f42430c2e83d8b144e5956807e4cd02b8feadd8405e"
     },
     {
       "path": "juce/src/MainComponent.h",
-      "size": 42288,
-      "sha256": "6046af7ee0e85c3d7f7a9c14105aeca7a0390a8828b6a498a2b09b1c37108529"
+      "size": 42986,
+      "sha256": "24be357468cd15709e7bcfbb18bbcd291a81f5557c223bb861bacb5bc724d8aa"
     },
     {
       "path": "juce/src/MainComponentDiffSinger.cpp",
@@ -980,13 +1035,13 @@
     },
     {
       "path": "juce/src/NativeAudioClipboard.h",
-      "size": 5043,
-      "sha256": "0f0945ea86f9713718fe8d220d3cfa9b839da28ec3a014c585982fa1e1f91a04"
+      "size": 5325,
+      "sha256": "2411508494c5b1b263f55362b0907b3d477d7bdde707c5f88d7a90af6ece0622"
     },
     {
       "path": "juce/src/NativeAudioDisconnect.h",
-      "size": 3540,
-      "sha256": "942911f1b47d00fed34485b421aeb9932fc0f044643294907f8b2f8a814a136a"
+      "size": 3609,
+      "sha256": "58f70913945a9a36fbcd74811794dd64b70b64ffa129290402ee5729fbd44385"
     },
     {
       "path": "juce/src/NativeAudioFocus.h",
@@ -1000,23 +1055,58 @@
     },
     {
       "path": "juce/src/NativeAudioOverlap.h",
-      "size": 10533,
-      "sha256": "f85f51637ef448baffb26af5219861f2823d82c83e35a3ed178bac0555bd3657"
+      "size": 11115,
+      "sha256": "ba1619fed3dd2fcbf1c8b387aad712069e4e9f9239855701dd9ad69cdf1489ec"
+    },
+    {
+      "path": "juce/src/NativeAudioTrim.h",
+      "size": 11811,
+      "sha256": "57a926cb639ef4e8912a03cdcf5a6e7391e1c803fcb5da61622f5a31ca9e2475"
+    },
+    {
+      "path": "juce/src/NativeNoteJoin.h",
+      "size": 10012,
+      "sha256": "afc1eef74b749b0af8a0370ae64af6a1860c77979d54ceb7df45bb29dcfe0a08"
     },
     {
       "path": "juce/src/NativeNoteTiming.h",
-      "size": 16996,
-      "sha256": "f4881b98036d9879936c6871531f281c05edd12ac88e2129ab3a4a85dcbe9648"
+      "size": 20476,
+      "sha256": "d7e63254e747d6c182bed7b575d6ab94e8600eb15672f24ceee942fce847a228"
     },
     {
       "path": "juce/src/NativePitchIdentity.h",
-      "size": 789,
-      "sha256": "c97abecba5f0fbde2ecf399eeed617ba41159c067351c818a944d3a9a52ee381"
+      "size": 1901,
+      "sha256": "0dad7fed65647eb77204589918a02b2d8b29e9cf5813511003d99ccaff99794d"
+    },
+    {
+      "path": "juce/src/NativePitchVoicingDisplay.cpp",
+      "size": 14265,
+      "sha256": "7d7ad5276e8000fe2326565ef3452b736bbcc792a3b6f78324620746c0c01cdf"
+    },
+    {
+      "path": "juce/src/NativePitchVoicingDisplay.h",
+      "size": 2646,
+      "sha256": "c1fcdd4a0ca416d99c1542f041b90de33b2dba4b56c199aaec8e95201355acf7"
+    },
+    {
+      "path": "juce/src/NativeSharedEnvelope.h",
+      "size": 5639,
+      "sha256": "198c52c99438e36d5e9cc178991d7816ed500beb576fd55e7e8100dff270cec9"
     },
     {
       "path": "juce/src/NativeSourceTimeMap.h",
       "size": 5111,
       "sha256": "c5556ce3849c9b117b7f9bd6128f8bed37d933ce63539d4eba4c91c2df926056"
+    },
+    {
+      "path": "juce/src/NativeTrimSource.h",
+      "size": 10247,
+      "sha256": "db028ae2ac5964a072e37126d1e710f4cd1908c025a8dcac8d96aedaabc5fe59"
+    },
+    {
+      "path": "juce/src/NativeUnpitchedRegions.h",
+      "size": 5797,
+      "sha256": "30639aa5aed0c580f65d8b006306b42c4b6cd23dbd4d43f22b3f50dd5e8f119f"
     },
     {
       "path": "juce/src/NoteDanceAnimation.h",
@@ -1040,13 +1130,13 @@
     },
     {
       "path": "juce/src/PianoRollComponent.cpp",
-      "size": 502012,
-      "sha256": "375c3dd92c95e68dd44c615dd696b7cc55cc72e13814dce81c8daf917ea86269"
+      "size": 536170,
+      "sha256": "6ac311a63ba14ffb30774d14f2903394158084c6204ec3753410a2a56ae29171"
     },
     {
       "path": "juce/src/PianoRollComponent.h",
-      "size": 73978,
-      "sha256": "f2489fb0e87ba4530065d557e4f3fe14a296c5dd260da2bb77fc510c66585d10"
+      "size": 75328,
+      "sha256": "7b56e5207cd1e2d22a70aceb45006081df900def1b22a6b272728fce08309339"
     },
     {
       "path": "juce/src/PianoRollDiffSingerOffset.h",
@@ -1075,13 +1165,13 @@
     },
     {
       "path": "juce/src/ProjectModel.cpp",
-      "size": 402594,
-      "sha256": "5bd115faed78c09badcf584e11480edb16ce93570394b34aec7c389ff1a09b70"
+      "size": 434183,
+      "sha256": "2b34ac0b9aa35f746f4bef1e39794e7880b2d884c7bea0c69cdc8a116bf6b6c1"
     },
     {
       "path": "juce/src/ProjectModel.h",
-      "size": 67709,
-      "sha256": "6c19e758fc424f8458870e6f4fa57699b780b77acf72047eef9f5e251eb9d60f"
+      "size": 71451,
+      "sha256": "4a91170524a72be161e244e37c43fbc5d3429ac278a3e9b61643c3f05e454192"
     },
     {
       "path": "juce/src/ProjectRecovery.h",
@@ -1095,18 +1185,18 @@
     },
     {
       "path": "juce/src/SampleSettings.cpp",
-      "size": 88571,
-      "sha256": "9dab127e682fadfba1a1dea7515c3a3305dbc8290862a20f9d0f82f882a8cc69"
+      "size": 88882,
+      "sha256": "6b335bee7bf4eb6839655ed5ac6fe313cb73d97d43706bc6366a2605c79e1fff"
     },
     {
       "path": "juce/src/SampleSettings.h",
-      "size": 11711,
-      "sha256": "283d06661d60ab58064d58f032f3b4817b5cd56961fe09bb8bcf0ad73c990b65"
+      "size": 11745,
+      "sha256": "ee8230ffe57a09135f56bae0b6527a26512b1551c1784fd2aa97b7e92218e10d"
     },
     {
       "path": "juce/src/SettingsComponent.cpp",
-      "size": 31179,
-      "sha256": "eacd83bed2348f3a0472a1d782ab9b9834b06a63ebe53b582cc98b275515dea0"
+      "size": 31287,
+      "sha256": "1428e1e9bd7b2f2048ab774eeafc06f564ae5f3b3d7a1746a007118dc3704366"
     },
     {
       "path": "juce/src/SettingsComponent.h",
@@ -1125,13 +1215,13 @@
     },
     {
       "path": "juce/src/TailFadePresetStore.h",
-      "size": 6772,
-      "sha256": "e77cd6c86413e68e7ac2e3b3bacab5b013aa5a13cd462b83570c0022ee4ec169"
+      "size": 7353,
+      "sha256": "b2b4ace66ed7c4b78d8cb7831cf6884bf6482d3756f9f7c2619e174599484908"
     },
     {
       "path": "juce/src/Theme.cpp",
-      "size": 16312,
-      "sha256": "b5cb92e61530c85130a0751132725b61eaa3434d094d93bffd33d5f60280b3a7"
+      "size": 16449,
+      "sha256": "7d0b3e68df0518939b2593652ba8fb6dcc742b5a64e3e9c9cb5518679e8fd11e"
     },
     {
       "path": "juce/src/Theme.h",
@@ -1160,8 +1250,8 @@
     },
     {
       "path": "juce/src/TrackListComponent.cpp",
-      "size": 22265,
-      "sha256": "07ff18aa7568b652f101465d3770bebb7b725802bc52ac42d2dc366f5c08f0f6"
+      "size": 22477,
+      "sha256": "d26188dccf2910e7c16bb43604b1656365f2e3b41b4dea7dcd2304eb513e3170"
     },
     {
       "path": "juce/src/TrackListComponent.h",
@@ -1195,8 +1285,8 @@
     },
     {
       "path": "juce/src/backend/AdvancedEnvelope.h",
-      "size": 6460,
-      "sha256": "9d8e3e802e2df06129c0b2c5e07f83a1032c9c28a2d4280bb6bcb7bea0586fe7"
+      "size": 7956,
+      "sha256": "5c41ad1e5c04afefd2d3845cbb489ebd7bdcb7a47a2104ec6048d43bfb059263"
     },
     {
       "path": "juce/src/backend/AmplitudeEnvelopeCurve.h",
@@ -1205,8 +1295,8 @@
     },
     {
       "path": "juce/src/backend/AnalysisService.cpp",
-      "size": 19361,
-      "sha256": "e0eb62c42d0e5a78d354ad1fb114150bf64c75e63c564d3870d9bb93b123f630"
+      "size": 20096,
+      "sha256": "fa8647a5f7286208d5422ce43651ddcfce9d4d01361313be7e108f398eb6c0ab"
     },
     {
       "path": "juce/src/backend/AnalysisService.h",
@@ -1222,6 +1312,11 @@
       "path": "juce/src/backend/AudioFileReader.h",
       "size": 261,
       "sha256": "c96886af354f0b4a1383511b0eca10506cac39716a32b1ca68f1623f75e47ccd"
+    },
+    {
+      "path": "juce/src/backend/ChineseCvvcPhonemizer.h",
+      "size": 14032,
+      "sha256": "acee2daa9077171ccd5f3b18d4af6f8a60fb44a7d1720ca0aec4e1da42cb1d85"
     },
     {
       "path": "juce/src/backend/DiffSingerOptions.h",
@@ -1250,8 +1345,8 @@
     },
     {
       "path": "juce/src/backend/FcpeAnalyzer.cpp",
-      "size": 16913,
-      "sha256": "e09aa25f826b6b6cb9264104e62d97a4bd08083f48e9c1f8fe5fd6b6c127e49d"
+      "size": 17165,
+      "sha256": "4b046ccb742e1c4e15bb277e56e6e1b02f1ac58fcdb533850552415b064e1b6d"
     },
     {
       "path": "juce/src/backend/FcpeAnalyzer.h",
@@ -1267,6 +1362,11 @@
       "path": "juce/src/backend/GameAnalyzer.h",
       "size": 922,
       "sha256": "6c054c2f4747b7b3841c97944e20332f6b694f5a164e564b2259244c51a520bd"
+    },
+    {
+      "path": "juce/src/backend/HiFiShifterMelSmoke.inc",
+      "size": 4934,
+      "sha256": "6e2bbeafc3d19ef823004f5355f5f002ca6c5b86dcf8734f7dfd8af91533f39a"
     },
     {
       "path": "juce/src/backend/HifisamplerDsp.inc",
@@ -1310,8 +1410,8 @@
     },
     {
       "path": "juce/src/backend/McpServer.cpp",
-      "size": 117007,
-      "sha256": "d032c84cd66337e61b80bb85009ad11079447051eb79d055d5a92ce77d5ff7a4"
+      "size": 118174,
+      "sha256": "968bf960a95b940bcb267bb81c8851e3287efd185d02ba4abfcd2247435bcc9b"
     },
     {
       "path": "juce/src/backend/McpServer.h",
@@ -1337,6 +1437,11 @@
       "path": "juce/src/backend/MelodyneProvider.h",
       "size": 1853,
       "sha256": "215eb3cb5eff68c4c743dc68dbb1260331f1432fa5ab766238c97c7e73e2e1ed"
+    },
+    {
+      "path": "juce/src/backend/MixedEnvelopeIO.h",
+      "size": 2631,
+      "sha256": "ebc4043f61efd5cdbc302f21520846019a666afa5afb72e65c347d33676065ba"
     },
     {
       "path": "juce/src/backend/Mld3Renderer.cpp",
@@ -1369,19 +1474,39 @@
       "sha256": "bc7789a26210cbd88063c176d7ca3436bc6f0666125998e2c90654d1c36cb05b"
     },
     {
+      "path": "juce/src/backend/NativeEnvelope.h",
+      "size": 6657,
+      "sha256": "e70a60f79a4d0e74b29d18da9cc014e50f51bd91819b89a6feb1d7d432bd4e5c"
+    },
+    {
+      "path": "juce/src/backend/NativeNoiseSmoke.inc",
+      "size": 11417,
+      "sha256": "1798f086bde2421c1b98ce088f354a7151e8cfb7fb97f19a69b4fe1351f6f80b"
+    },
+    {
       "path": "juce/src/backend/NsfHifiganRenderer.cpp",
-      "size": 88627,
-      "sha256": "d988cf56717f77ca43aba5092c9cb4250911ab9dc852ae325315bc4f951c1aa6"
+      "size": 96988,
+      "sha256": "dbf9bd68f0a66db445b62900f3d1139adaed39f70847fd7131d5321aadfe36d4"
     },
     {
       "path": "juce/src/backend/NsfHifiganRenderer.h",
-      "size": 6924,
-      "sha256": "1c92391b0fb494fa10117c723af35b9255fca5675e90eb341086c0b5f7d543f5"
+      "size": 7859,
+      "sha256": "6d9d30c01afc42e8e750c0ab490f6ec880348ab6b566c092bd61773fd1ca049f"
+    },
+    {
+      "path": "juce/src/backend/NsfPitchTransitionsSmoke.inc",
+      "size": 3751,
+      "sha256": "f8848ce31b8b4bce2b8e2f287120c1a50ae89a342583b20ce1de4812a82f754e"
+    },
+    {
+      "path": "juce/src/backend/NsfRenderChunkCache.h",
+      "size": 2201,
+      "sha256": "4484e6ddcbf6d4849a196d897898707479e55f57ce7c5107dc6fb7096ac6e1b4"
     },
     {
       "path": "juce/src/backend/OrtExecution.cpp",
-      "size": 2603,
-      "sha256": "84b9d66f60369d41458bc462f8c11e1fa3e23f2aff7cccb1be0cbb4f74b8c939"
+      "size": 2966,
+      "sha256": "cab00ddffd715419d48357b7ef2d8a6173beb9dcbe719d49eacc3818fc1cca14"
     },
     {
       "path": "juce/src/backend/OrtExecution.h",
@@ -1405,23 +1530,33 @@
     },
     {
       "path": "juce/src/backend/PlaybackRenderQueue.h",
-      "size": 5819,
-      "sha256": "c9723563f506dfd889609c1f603e2f2c2a975a3bf2459567dc42e5f3b94e9ff2"
+      "size": 6235,
+      "sha256": "9cbc2a75ad1b5603c788ddff68c50bf4ec48d1af68e7fe12f3b7f87006da658e"
     },
     {
       "path": "juce/src/backend/RenderService.cpp",
-      "size": 58633,
-      "sha256": "ef191c286de65028fe68e19a35608cd809cfe9b93e31f614a130bb60551e6a4d"
+      "size": 61188,
+      "sha256": "7915a136159d1abcb6d8e1d82c161fed40043cc942230414f542246bf72a4692"
     },
     {
       "path": "juce/src/backend/RenderService.h",
-      "size": 4489,
-      "sha256": "424f9385c3afec9e51643cccfc8b8e927f615df318b648e7b6b58b8f66261157"
+      "size": 4568,
+      "sha256": "35f0ea6d03596e151887e67dc539bc99a74bdf47bd6e3b4b2ce5da3253bab79e"
+    },
+    {
+      "path": "juce/src/backend/SourceBreathiness.h",
+      "size": 8055,
+      "sha256": "ef077143ba0eb67c63fd416d403ad05a9f9db7e8ab4664e921cfd0456c60809c"
+    },
+    {
+      "path": "juce/src/backend/SourceVoicing.h",
+      "size": 5082,
+      "sha256": "4038c84d972a1a0bc5ef48ad437046cf257ba3ddeb8556b237d3dad51cdae6ea"
     },
     {
       "path": "juce/src/backend/TailFadeSettings.h",
-      "size": 3839,
-      "sha256": "a6cdb4120dd5c559b49293f873549c8dc47c7b286722ed05aef049c9d19d59ff"
+      "size": 5834,
+      "sha256": "a7bfe56cea06a708773c6ecbe46bbff7ff18b33a437a31e5959b1a8e131ec363"
     },
     {
       "path": "juce/src/backend/UstExchange.h",
@@ -1450,13 +1585,13 @@
     },
     {
       "path": "juce/src/backend/UtauRenderer.cpp",
-      "size": 133610,
-      "sha256": "53a3a941b5316df91e81b86074db0f3865e29aa74bd4c18eb032918d580e737b"
+      "size": 135451,
+      "sha256": "79581a384f0dd88e40428cd5e2948632dd3aebd18058918dfccd487088d78d39"
     },
     {
       "path": "juce/src/backend/UtauRenderer.h",
-      "size": 18450,
-      "sha256": "a77e9893e8181a0d57d8e408c9a27d88d7f0973647ade202c4cf629e72c5c5ad"
+      "size": 18878,
+      "sha256": "42ef384de6813a1fa7b3b69fdd0f42fc637c125bda006f4a6b41916d10f350e5"
     },
     {
       "path": "juce/src/backend/WorldRenderer.cpp",
@@ -1475,13 +1610,18 @@
     },
     {
       "path": "juce/src/tests/AdvancedEnvelopePanelSmoke.h",
-      "size": 24678,
-      "sha256": "878d3c2700728f6d3daf7d09153137755a1bd403127f686eeae89748920abdd9"
+      "size": 36543,
+      "sha256": "a7729c12f14b1ffac36066895806b65d9b26ac38b5d9ebe62f265c708db72847"
     },
     {
       "path": "juce/src/tests/AdvancedEnvelopeSmoke.h",
       "size": 12923,
       "sha256": "3cb03fcc9d56489dc2eae70d9b229c263206f718bc01e503df1b3296aa7bd5eb"
+    },
+    {
+      "path": "juce/src/tests/ChineseCvvcSmoke.h",
+      "size": 13651,
+      "sha256": "7239625005bd87ec3de16e4d9837033af837174344860f32f5f52d779ae1c719"
     },
     {
       "path": "juce/src/tests/ClassicFlagUiSmoke.h",
@@ -1640,8 +1780,8 @@
     },
     {
       "path": "juce/src/tests/NativeAudioDisconnectSmoke.h",
-      "size": 11685,
-      "sha256": "ec5843bce2a4a09302ba9dc9e61ecc409221ababde68ec25bef956c77c46bf56"
+      "size": 12173,
+      "sha256": "fb4c9e7aa775e0f9ea2cc0f8a4f8b0f558c5e29e2b66d5336d40ee302a11468d"
     },
     {
       "path": "juce/src/tests/NativeAudioLinkSmoke.h",
@@ -1659,14 +1799,69 @@
       "sha256": "9c5b940d9bc2582466168b375893b10a70c319f87a01c1e50d7cc1509ad21326"
     },
     {
+      "path": "juce/src/tests/NativeAudioTrimSmoke.h",
+      "size": 10705,
+      "sha256": "e88742649eda09be1808d1edbc8868ba11f553c304591c9b9921ec083c3ba334"
+    },
+    {
+      "path": "juce/src/tests/NativeBatchFlattenSmoke.h",
+      "size": 11692,
+      "sha256": "c0e0959bcb13238d9bde4dda06eba5b901f87aa7c9143d709bc957a92265f79f"
+    },
+    {
+      "path": "juce/src/tests/NativeConsonantDisplaySmoke.h",
+      "size": 9942,
+      "sha256": "a2cabd6d2ec4c8e6c314a16ec81c92370794ad40293b8c7beac9e20649d0f326"
+    },
+    {
+      "path": "juce/src/tests/NativeEnvelopeSmoke.h",
+      "size": 14884,
+      "sha256": "999488f4d1488d38e04f0d6a891cea9454d7edccf8fc3263e1876ce07d6f8075"
+    },
+    {
+      "path": "juce/src/tests/NativeImportPerformanceSmoke.h",
+      "size": 6727,
+      "sha256": "6da712f4a4d694e6ba116dcecc012ae39854c77f4ba934e4ec33d04ab27349a7"
+    },
+    {
+      "path": "juce/src/tests/NativeIncrementalRenderSmoke.h",
+      "size": 9138,
+      "sha256": "9baaef17e0eca36b674ab9a60b1ce22c6505c76684d1c61f01a7fdc275cf4f19"
+    },
+    {
+      "path": "juce/src/tests/NativeLinkedEnvelopeSmoke.h",
+      "size": 12153,
+      "sha256": "e52bf660f226e9ec7b5503261e5ad56d6ce69ec45e7829ea3cfb82a13a921af4"
+    },
+    {
+      "path": "juce/src/tests/NativeLinkedPitchSmoke.h",
+      "size": 20565,
+      "sha256": "c60b754f339352569e3c1f18445d77d272bc476188623851f26060f7eaa62e93"
+    },
+    {
+      "path": "juce/src/tests/NativeNoiseOptionSmoke.h",
+      "size": 7329,
+      "sha256": "afb1a2a8f11efb0bec9c8d21ad364364b5e2b3ae1b9d22d9fff930fd8e2ebe8a"
+    },
+    {
       "path": "juce/src/tests/NativeNoteCopyPasteSmoke.h",
       "size": 11602,
       "sha256": "0d37b24648b309cf53075f1c2db81ef5d0bb56b22a4e43d03f41032ef8e6ba34"
     },
     {
+      "path": "juce/src/tests/NativeNoteJoinSmoke.h",
+      "size": 13851,
+      "sha256": "6ec6fe9fb88dcf1e05c48f314b0459a0926973e7a2f062349c654154e036a357"
+    },
+    {
       "path": "juce/src/tests/NativeNoteMoveSmoke.h",
-      "size": 30866,
-      "sha256": "be1227f2bd971cbbb8289f7db46d6e0fd21e247b54f297db923641d4a2190a75"
+      "size": 35451,
+      "sha256": "e66e81a6019fe9175f6521dac05ccc0be0d8e77d919ab018b93a6026d856fcfe"
+    },
+    {
+      "path": "juce/src/tests/NativePitchVisibilitySmoke.h",
+      "size": 13909,
+      "sha256": "26f6d5cf117a51e5ab664d6db10c2a9305e0afb6571baef3d38bc7257763e095"
     },
     {
       "path": "juce/src/tests/NativeRenderedWaveformSmoke.h",
@@ -1685,8 +1880,23 @@
     },
     {
       "path": "juce/src/tests/NativeSourcePitchSmoke.h",
-      "size": 25576,
-      "sha256": "6df63219931a1dd44d85cdba8da97ae23e78224852f798d85208f4dcd20fcbba"
+      "size": 25599,
+      "sha256": "04fda900d61ebedf216a5b2bd280fe8d74621b9a6e4fb597b4ded186827c54bc"
+    },
+    {
+      "path": "juce/src/tests/NativeTrimExpandSmoke.h",
+      "size": 11611,
+      "sha256": "1d46e4c00abf5fa14a70edfd9051544af5e81cfed57b0e36b2c1a3d20b22e66e"
+    },
+    {
+      "path": "juce/src/tests/NativeUnpitchedRegionsSmoke.h",
+      "size": 13125,
+      "sha256": "58b24734e996bd573c8d92c637d1635116da958fd8129fe2c1880a5de507869c"
+    },
+    {
+      "path": "juce/src/tests/NativeVibratoSmoke.h",
+      "size": 20623,
+      "sha256": "608ee54b05f51dfdf3e64e6a48213573c9c30cb359fb1977837350a8e348325c"
     },
     {
       "path": "juce/src/tests/NativeWaveformPreviewSmoke.h",
@@ -1710,8 +1920,8 @@
     },
     {
       "path": "juce/src/tests/NsfPickerSmoke.h",
-      "size": 1796,
-      "sha256": "071e1cf9c38bfad595fa600ea3cd37839d4022111b0c94091429296364e1ace0"
+      "size": 14379,
+      "sha256": "5ca188c63f9b18766f609a0a43f3b6a4a8833892c0d22277f4a032dacb2a637e"
     },
     {
       "path": "juce/src/tests/NsfProjectNoteSmoke.h",
@@ -1745,8 +1955,8 @@
     },
     {
       "path": "juce/src/tests/PlaybackRenderSmoke.h",
-      "size": 11642,
-      "sha256": "cb11d33a4506de60e3ec6a9d03587e6ca1cda523960ad3e077c8718bd4fe48d8"
+      "size": 13336,
+      "sha256": "9834e442a54bd5f49402ee0344dd68f836eb2709462265959ffb1d5a96215ee4"
     },
     {
       "path": "juce/src/tests/ProjectSafetySmoke.h",
@@ -1757,6 +1967,11 @@
       "path": "juce/src/tests/ScrollZoomSmoke.h",
       "size": 9175,
       "sha256": "5dc9661806041012a53d486d3748dd244571735098f463854800b4288ccaa61a"
+    },
+    {
+      "path": "juce/src/tests/SourceBreathinessSmoke.h",
+      "size": 8245,
+      "sha256": "d4ac2b756e8bb157ece3505bd2fe5b1678f5461a4725b8f0e2fbb114ff4b9b5d"
     },
     {
       "path": "juce/src/tests/TempoChangeSmoke.h",
@@ -2529,6 +2744,16 @@
       "sha256": "437ec46d0659238de26f313c73efe48e28dc7e3fa20d799be608d8af061c4ba6"
     },
     {
+      "path": "third_party/openutau/LICENSE.txt",
+      "size": 1074,
+      "sha256": "cdef6370f9e705c804fd1acbe1b1c65027c13186c466b51ccb0323d5607cc9c4"
+    },
+    {
+      "path": "third_party/openutau/NOTICE.md",
+      "size": 926,
+      "sha256": "4edebd89708ee803d4532a6cfc2daf872346b22fe58f1458207b63a0d2cf30e2"
+    },
+    {
       "path": "tools/breaks/amplitude_waveform.py",
       "size": 6852,
       "sha256": "6c1ce7407f20447f5097852d605b2abf1e98ad638bea5c689da29e865ad0768f"
@@ -2979,6 +3204,11 @@
       "sha256": "863c27780170b7b2d530a4432befc2d4bbe8de641d697541f1bae82899dc9983"
     },
     {
+      "path": "tools/organize-distribution.py",
+      "size": 4384,
+      "sha256": "bbdfc2e20dba0fea333cbb342e4da09977dbccb40f03853229793e7b872fe9ae"
+    },
+    {
       "path": "tools/package-current-distribution.py",
       "size": 3908,
       "sha256": "d52c29536867d1093582c2e9cef4239bf53a100943cf6bcd508d7c13eca39d10"
@@ -3012,6 +3242,11 @@
       "path": "tools/verify_midi.py",
       "size": 5998,
       "sha256": "ceef3f9cc3ece2aa369a2846ef5dc18e1853b2f7bd423bf54be6bf1ce43067e9"
+    },
+    {
+      "path": "源码包说明.md",
+      "size": 2263,
+      "sha256": "0f2015a255b63dbb78ad9198116ff38d5ef98ace0d6ee3eb53fca098953d0cbf"
     }
   ]
 }

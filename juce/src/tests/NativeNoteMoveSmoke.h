@@ -302,6 +302,25 @@ inline bool MainComponent::diagnosticNativeNoteMove(const juce::File& folder)
         check("long_stretch_remains_audible_through_end",minimum>.002f);}
     else check("long_stretch_audio_readable",false);
     longEngine.releaseResources();
+    const auto nsfDirectory=juce::SystemStats::getEnvironmentVariable("HACHI_TEST_NSF_MODEL_DIR",{});
+    if(nsfDirectory.isNotEmpty())
+    {
+        longProject.tracks[0].pitchAlgorithm=PitchAlgorithm::nsfHifigan;
+        longProject.tracks[0].nativeNsfAudio=true;
+        AudioEngine neural;neural.setHifiganModelDirectory(juce::File(nsfDirectory));
+        neural.setInferenceConfiguration(backend::InferenceBackend::cpu,0);neural.prepareToPlay(256,48000);neural.syncProject(longProject);
+        for(int i=0;i<5000&&neural.renderProgress();++i)juce::Thread::sleep(10);
+        check("actual_nsf_long_stretch_uses_model",neural.hasCurrentRenderedAudio()&&neural.activeRenderBackends().contains("nsf-hifigan"));
+        const auto neuralWav=folder.getChildFile("nsf-long-stretched.wav");
+        check("actual_nsf_long_stretch_exported",neural.exportWav(neuralWav,error,"native",1,7,options));
+        reader.reset(formats.createReaderFor(neuralWav));
+        check("nsf_long_stretch_audio_has_exact_duration",reader&&std::abs(reader->lengthInSamples-288000)<=1);
+        float minimum=0;
+        if(reader){juce::AudioBuffer<float> audio(2,static_cast<int>(reader->lengthInSamples));reader->read(&audio,0,audio.getNumSamples(),0,true,true);
+            minimum=1;for(int i=2400;i+4800<audio.getNumSamples();i+=4800)minimum=std::min(minimum,audio.getRMSLevel(0,i,4800));}
+        check("nsf_long_stretch_remains_audible_through_end",minimum>.002f);
+        neural.releaseResources();
+    }
     // Default edge drags use the same fine note-edit step in both directions,
     // relative to the original edge rather than the coarse drawing grid.
     auto snappedData=paddedData;snappedData.gridDivision="1/4";snappedData.noteEditDivision=64;
@@ -339,6 +358,36 @@ inline bool MainComponent::diagnosticNativeNoteMove(const juce::File& folder)
     const auto beforeVertical=model.revisionNumber();roll.mouseDown(event(roll,verticalEdge,verticalEdge,plain));
     roll.mouseDrag(event(roll,verticalEnd,verticalEdge,plain));roll.mouseUp(event(roll,verticalEnd,verticalEdge,plain));
     check("vertical_edge_drag_does_not_snap_original_timing",model.revisionNumber()==beforeVertical);
+    // Timeline-region resizing has a separate path from piano-roll edges.
+    // Its implicit consonant clock must remain exact beyond the velocity range.
+    auto timeline=data;auto& tc=timeline.tracks[0].clips[0];tc.notes[0].attackSpeed=.5;
+    tc.notes[0].amplitudeEnvelope={{0,-12,true},{.6,-3,true},{1.2,-9,true}};
+    tc.notes[0].vibratoEnabled=true;tc.notes[0].vibratoReferenceDurationSeconds=1.5;tc.notes[0].vibratoTimeOffsetSeconds=.3;
+    tc.gainEnvelope={{0,-3},{.6,-9},{1.2,-3}};
+    tc.inheritedGainEnvelopes={{{0,-6},{1.2,0}}};
+    const auto timelineClock=nativeClipClock(tc);model.replace(timeline);const auto beforeTimeline=model.contentFingerprint();
+    model.resizeClip(tc.id,tc.startSeconds,36);const auto timelineLong=model.snapshot().tracks[0].clips[0];
+    check("timeline_long_stretch_duration",near(timelineLong.durationSeconds,36)&&near(timelineLong.notes[0].durationSeconds,36));
+    bool exactClock=true;for(double t=0;t<=1.2;t+=.007)
+        exactClock &= near(nativeSourceTimeAt(nativeClipClock(timelineLong),t*30),nativeSourceTimeAt(timelineClock,t));
+    check("timeline_long_stretch_keeps_consonant_source_anchor",exactClock);
+    check("timeline_long_stretch_scales_loudness_handles",near(timelineLong.notes[0].amplitudeEnvelope[1].timeSeconds,18)
+        &&near(timelineLong.notes[0].amplitudeEnvelope.back().timeSeconds,36));
+    check("timeline_long_stretch_scales_clip_gain_layers",near(timelineLong.gainEnvelope[1].timeSeconds,18)
+        &&near(timelineLong.inheritedGainEnvelopes[0].back().timeSeconds,36));
+    check("timeline_long_stretch_scales_vibrato_clock",near(timelineLong.notes[0].vibratoReferenceDurationSeconds,45)
+        &&near(timelineLong.notes[0].vibratoTimeOffsetSeconds,9));
+    model.resizeClip(tc.id,tc.startSeconds,1.2);const auto timelineBack=model.snapshot().tracks[0].clips[0];
+    check("timeline_stretch_round_trip_restores_source_and_loudness",near(nativeSourceTimeAt(nativeClipClock(timelineBack),.1),.05)
+        &&near(timelineBack.notes[0].amplitudeEnvelope[1].timeSeconds,.6)&&near(timelineBack.notes[0].vibratoTimeOffsetSeconds,.3));
+    model.undo();model.undo();check("timeline_long_stretch_undo_restores_original",model.contentFingerprint()==beforeTimeline);
+    model.replace(split);model.disconnectNativeAudio({"head",middle,tail});model.linkNativeAudio({"head",middle,tail});
+    const auto childBefore=model.snapshot().tracks[0].clips[0];
+    model.resizeClip(childBefore.id,childBefore.startSeconds,childBefore.durationSeconds*30);const auto childAfter=model.snapshot().tracks[0].clips[0];
+    const auto beforeSources=expandedClipParts(childBefore),afterSources=expandedClipParts(childAfter);bool childClocks=beforeSources.size()==afterSources.size();
+    for(std::size_t i=0;childClocks&&i<beforeSources.size();++i)for(double t=0;t<=beforeSources[i].durationSeconds;t+=.013)
+        childClocks &= near(nativeSourceTimeAt(nativeClipClock(afterSources[i]),t*30),nativeSourceTimeAt(nativeClipClock(beforeSources[i]),t));
+    check("timeline_linked_children_long_stretch_preserves_source_clocks",childClocks);
     std::cout<<"native_note_move_ok="<<ok<<"; checks="<<checks<<std::endl;return ok;
 }
 }

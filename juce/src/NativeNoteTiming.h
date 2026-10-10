@@ -1,6 +1,7 @@
 #pragma once
 #include "NativeSourceTimeMap.h"
 #include "ClipParts.h"
+#include "NativeSharedEnvelope.h"
 #include <optional>
 #include <limits>
 
@@ -88,6 +89,17 @@ inline std::optional<NativeNoteMovePlan> planNativeNoteMove(
                     anchors.push_back({point.sourceSeconds-offset,nativeSourceTimeAt(clock,point.sourceSeconds-offset)});
             std::stable_sort(anchors.begin(),anchors.end(),[](const auto& a,const auto& b){return a.targetSeconds<b.targetSeconds;});
             part.sourceTimeMap.clear();
+            part.nativeTrimClock=old->nativeTrimClock;
+            for(auto& point:part.nativeTrimClock)
+            {
+                auto right=std::upper_bound(commonClock.begin(),commonClock.end(),offset+point.targetSeconds,
+                    [](double t,const auto& p){return t<p.sourceSeconds;});
+                if(right==commonClock.begin())++right;if(right==commonClock.end())--right;
+                const auto& a=*std::prev(right);const auto& b=*right;
+                const auto span=b.sourceSeconds-a.sourceSeconds;
+                point.targetSeconds=a.targetSeconds+(b.targetSeconds-a.targetSeconds)
+                    *(offset+point.targetSeconds-a.sourceSeconds)/std::max(1.e-12,span)-newStart;
+            }
             for(auto point:anchors)
             {
                 point.targetSeconds=warp(offset+point.targetSeconds)-newStart;
@@ -260,20 +272,55 @@ inline std::optional<NativeNoteMovePlan> planNativeNoteMove(
         if (result.sourceTimeMap.empty() || point.targetSeconds > result.sourceTimeMap.back().targetSeconds + 1.0e-7)
             result.sourceTimeMap.push_back(point);
     }
+    TrackData envelopeTrack;envelopeTrack.pitchAlgorithm=PitchAlgorithm::world;envelopeTrack.clips={original};
+    const auto sharedEnvelopes=nativeSharedEnvelopes(envelopeTrack);
     for (auto& note : result.notes)
     {
+        // Fragment endpoints may only be storage cuts in one shared fade.
+        // Materialize what was actually heard before warping the local slice.
+        const auto shared=sharedEnvelopes.find(note.id);
+        const auto defaultLevel=scaledEnvelopeGainDb(0,note.amplitudeEnvelopeBasePercent/100.0);
+        if(shared!=sharedEnvelopes.end() && (!note.amplitudeEnvelope.empty()
+            ||std::any_of(shared->second.points->begin(),shared->second.points->end(),
+                [&](const auto& p){return std::abs(p.gainDb-defaultLevel)>1.e-6;})))
+            materializeNativeSharedEnvelope(note,sharedEnvelopes);
         bindNativeNoteSource(note, original, &clock);
         const auto start = warp(note.startSeconds);
         const auto duration = warp(note.startSeconds + note.durationSeconds) - start;
         const auto ratio = duration / note.durationSeconds;
-        const auto local = [&](double t) { return t < 0 ? t : t * ratio; };
+        // Shared pitch/envelope handles can live outside this fragment. They
+        // follow the recording's common clock, not this note's length ratio:
+        // a handle in a rigidly moving neighbour must not be stretched twice.
+        const auto local = [&](double t) { return warp(note.startSeconds + t) - start; };
         for (auto& point : note.contour) point.timeSeconds = local(point.timeSeconds);
         for (auto& point : note.pitchControlPoints) point.timeSeconds = local(point.timeSeconds);
         for (auto& point : note.diffSingerPitchReference) point.timeSeconds = local(point.timeSeconds);
         for (auto& point : note.diffSingerPitchOffset) point.timeSeconds = local(point.timeSeconds);
         for (auto& curve : note.utauFlagCurves) for (auto& point : curve.points) point.timeSeconds = local(point.timeSeconds);
+        // A linear envelope may cross a change in warp slope without having a
+        // handle there. Split that run before warping, retaining its level on
+        // both sides instead of spreading the fade across the wrong material.
+        const auto envelope = note.amplitudeEnvelope;
+        for (std::size_t i=1; i+1<edges.size() && envelope.size()>1; ++i)
+        {
+            const auto slope = [&](std::size_t a,std::size_t b)
+            { return (warp(edges[b].time)-warp(edges[a].time))/(edges[b].time-edges[a].time); };
+            if(std::abs(slope(i-1,i)-slope(i,i+1))<1.e-9)continue;
+            const auto t=edges[i].time-note.startSeconds;
+            const auto right=std::upper_bound(envelope.begin(),envelope.end(),t,
+                [](double time,const auto& p){return time<p.timeSeconds;});
+            const auto existing=std::find_if(note.amplitudeEnvelope.begin(),note.amplitudeEnvelope.end(),
+                [&](const auto& p){return std::abs(p.timeSeconds-t)<1.e-7;});
+            if(existing!=note.amplitudeEnvelope.end()){existing->nativeSeamAnchor=true;continue;}
+            if(right==envelope.begin()||right==envelope.end())continue;
+            note.amplitudeEnvelope.push_back({t,nativeEnvelopeDbAt(envelope,t),std::prev(right)->linearToNext,true});
+        }
+        std::stable_sort(note.amplitudeEnvelope.begin(),note.amplitudeEnvelope.end(),
+            [](const auto& a,const auto& b){return a.timeSeconds<b.timeSeconds;});
         for (auto& point : note.amplitudeEnvelope) point.timeSeconds = local(point.timeSeconds);
         for (auto& marker : note.sibilantMarkers) marker = local(marker);
+        note.vibratoReferenceDurationSeconds *= ratio;
+        note.vibratoTimeOffsetSeconds *= ratio;
         note.consonantSeconds *= ratio;
         note.startSeconds = start - origin; note.durationSeconds = duration;
         if (selected(note))
@@ -284,6 +331,7 @@ inline std::optional<NativeNoteMovePlan> planNativeNoteMove(
         result.durationSeconds = std::max(result.durationSeconds, note.startSeconds + note.durationSeconds);
     }
     const auto gainTime = [&](auto& points) { for (auto& point : points) point.timeSeconds = warp(point.timeSeconds) - origin; };
+    for(auto& point:result.nativeTrimClock)point.targetSeconds=warp(point.targetSeconds)-origin;
     gainTime(result.gainEnvelope);
     for (auto& layer : result.inheritedGainEnvelopes) gainTime(layer);
     return NativeNoteMovePlan { std::move(result), delta };

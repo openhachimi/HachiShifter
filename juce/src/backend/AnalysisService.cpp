@@ -1,6 +1,7 @@
 #include "AnalysisService.h"
 #include "GameAnalyzer.h"
 #include "../NativeSourceTimeMap.h"
+#include "../NativeTrimSource.h"
 #include "../ClipParts.h"
 #include <algorithm>
 #include <array>
@@ -241,7 +242,10 @@ AnalysisResult AnalysisService::analyse(const juce::File& file,
     {
         GameAnalyzer::Options options;
         options.performanceMode = result.status.gameModel == "small";
-        options.intraOpThreads = std::max(1, juce::SystemStats::getNumCpus());
+        // GAME keeps four sessions and FCPE a fifth. Giving every session all
+        // logical CPUs oversubscribes interactive imports and leaves no room
+        // for the editor/audio callback. More threads also slow these small ops.
+        options.intraOpThreads = juce::jlimit(1, 4, juce::SystemStats::getNumCpus() / 2);
         options.inference = config.inference;
         options.deviceIndex = config.deviceIndex;
         juce::String gameError;
@@ -273,11 +277,22 @@ std::size_t AnalysisService::applySourcePitch(ClipData& clip,
                                                const std::vector<NoteData>& sourceNotes)
 {
     if (sourceNotes.empty()) return 0;
+    clip.nativeSourcePitch=nativeSourcePitchReference(sourceNotes,[](double t){return t;});
+    clip.nativeSourcePitchComplete=true;
     const auto audio = nativeAudioPreviewClip(clip);
     const auto map = nativeSourceTimeMap(audio);
     auto updated = std::size_t(0);
     for (auto& note : clip.notes)
     {
+        if (note.nativeUnpitched)
+        {
+            note.sourceMidiCenter = note.midiNote;
+            note.sourcePitchMeasured = true;
+            note.contour = {{0, 0, 0, false}, {note.durationSeconds, 0, 0, false}};
+            note.pitchControlPoints.clear();
+            ++updated;
+            continue;
+        }
         const auto oldContour = note.contour;
         std::vector<PitchPoint> contour;
         std::vector<std::optional<std::pair<float, float>>> samples;

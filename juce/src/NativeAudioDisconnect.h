@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeNoteTiming.h"
+#include "NativeTrimSource.h"
 namespace hachi
 {
 inline bool nativeAudioDisconnectAvailable(const ProjectData& data,
@@ -30,6 +31,7 @@ inline std::optional<std::vector<ClipData>> disconnectedNativeClip(
     std::vector<ClipData> result;
     for (auto source : expandedClipParts(original))
     {
+        rememberNativeTrimSource(source);
         source.nativeAudioLinked=false;
         std::stable_sort(source.notes.begin(),source.notes.end(),
             [](const auto& a,const auto& b){return a.startSeconds<b.startSeconds;});

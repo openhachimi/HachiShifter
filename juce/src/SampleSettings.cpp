@@ -486,6 +486,7 @@ std::vector<SampleRegionSetting> SampleSettings::loadOrDerive(const juce::File& 
             row.confidence = static_cast<float>(number(values, 21, 0.0));
             if (values.size() > 22) row.segments = decodeSegments(values[22]);
             if (values.size() > 23) row.amplitudeEnvelope = decodeAmplitudeEnvelope(values[23]);
+            row.nativeUnpitched = number(values, 24, 0.0) != 0.0;
             if (row.regionEndSeconds > row.regionStartSeconds) rows.push_back(std::move(row));
         }
     }
@@ -535,6 +536,7 @@ std::vector<SampleRegionSetting> SampleSettings::loadOrDerive(const juce::File& 
         const auto ratio = item.clip->durationSeconds > 1.0e-9
             ? item.clip->sourceDurationSeconds / item.clip->durationSeconds : 1.0;
         SampleRegionSetting row;
+        row.nativeUnpitched = item.note->nativeUnpitched;
         row.name = item.note->label.isNotEmpty()
             ? item.note->label : "note " + juce::String(index + 1);
         row.regionStartSeconds = std::max(0.0, item.sourceStart);
@@ -570,7 +572,7 @@ bool SampleSettings::save(const juce::File& audio,
     {
         return left.regionStartSeconds < right.regionStartSeconds;
     });
-    juce::String csv = "name,region_start_sec,region_end_sec,note_alignment_sec,fixed_duration_sec,relative_pitch_cents,melodyne_project_data,melodyne_pitch_center_cents,melodyne_original_pitch_center_cents,melodyne_pitch_drift_factor,melodyne_pitch_modulation_factor,melodyne_transition_sec,melodyne_formant_offset_cents,melodyne_amplitude_factor,melodyne_sibilant_balance,melodyne_attack_duration_sec,melodyne_decay_elongation,utau_overlap_sec,hjm_version,native_role,native_provenance,native_confidence,native_segments,native_amplitude_envelope\n";
+    juce::String csv = "name,region_start_sec,region_end_sec,note_alignment_sec,fixed_duration_sec,relative_pitch_cents,melodyne_project_data,melodyne_pitch_center_cents,melodyne_original_pitch_center_cents,melodyne_pitch_drift_factor,melodyne_pitch_modulation_factor,melodyne_transition_sec,melodyne_formant_offset_cents,melodyne_amplitude_factor,melodyne_sibilant_balance,melodyne_attack_duration_sec,melodyne_decay_elongation,utau_overlap_sec,hjm_version,native_role,native_provenance,native_confidence,native_segments,native_amplitude_envelope,native_unpitched\n";
     for (std::size_t index = 0; index < rows.size(); ++index)
     {
         auto row = rows[index];
@@ -609,7 +611,8 @@ bool SampleSettings::save(const juce::File& audio,
         csv += "," + juce::String(row.hjmVersion) + "," + nativeSegmentRoleName(row.role)
             + "," + csvEscape(row.provenance) + "," + juce::String(row.confidence, 6)
             + "," + csvEscape(encodeSegments(row.segments))
-            + "," + csvEscape(encodeAmplitudeEnvelope(row.amplitudeEnvelope));
+            + "," + csvEscape(encodeAmplitudeEnvelope(row.amplitudeEnvelope))
+            + "," + juce::String(row.nativeUnpitched ? 1 : 0);
         csv += "\n";
     }
     const auto sidecar = sidecarFor(audio);

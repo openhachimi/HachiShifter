@@ -56,6 +56,12 @@ public:
                 if (!it->schedule.key.empty() && !activeKeys.contains(it->schedule.key))
                 { removed.push_back(std::move(*it)); it = pending.erase(it); }
                 else ++it;
+            // Content revisions invalidate running work too. Signal only: the
+            // renderer's cancellation checks drain it without blocking the UI.
+            // Seeking changes priority, not content, and never comes here.
+            for (auto* item : active)
+                if (!item->schedule.key.empty() && !activeKeys.contains(item->schedule.key))
+                    item->job->signalJobShouldExit();
         }
         for (auto& item : removed) discard(item);
         { const std::scoped_lock lock(mutex); if (updateDepth > 0) --updateDepth; }

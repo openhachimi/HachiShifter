@@ -19,6 +19,7 @@ inline backend::UtauRenderRequest diffSingerRequest(const ProjectData& data, con
         for (size_t i = 0; i < clip.notes.size(); ++i)
         {
             const auto& note = clip.notes[i];
+            if (note.nativeUnpitched) continue;
             backend::UtauNoteRenderSpec spec;
             if (i < rendered.size()) spec = rendered[i];
             spec.alias = note.label; spec.midiNote = note.midiNote;

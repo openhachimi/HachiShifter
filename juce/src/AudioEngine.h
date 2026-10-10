@@ -183,6 +183,7 @@ public:
     // ONNX model.  Empty when the indices are out of range.
     [[nodiscard]] static std::vector<float> diagnosticNativeTargetMidi(
         const ProjectData& project, int trackIndex, int clipIndex);
+    [[nodiscard]] static backend::Mld5FileRenderRequest diagnosticNativeRequest(const ClipData& clip,const TrackData& track);
 
     // The rendered UTAU notes, as peaks to draw.  Shared and immutable, so the
     // roll can hold one while a render replaces it.  Only notes whose audio is

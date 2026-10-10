@@ -3,6 +3,8 @@
 #include "I18n.h"
 #include "AudioEngine.h"
 #include "ProjectModel.h"
+#include "NativeSharedEnvelope.h"
+#include "NativePitchVoicingDisplay.h"
 #include "backend/UtauRenderer.h"
 #include "SampleSettings.h"
 #include "NoteDanceAnimation.h"
@@ -18,6 +20,7 @@
 
 namespace hachi
 {
+class NativePitchVoicingCache;
 class PianoRollComponent final : public juce::Component,
                                  public juce::SettableTooltipClient,
                                  private juce::ChangeListener,
@@ -29,7 +32,7 @@ public:
     void resetConsonant(const juce::String& noteId);
     // Deletes the selection and the time it took up, closing the gap.
     void deleteSelectedNotesRippling(const juce::String& noteId);
-    enum class Tool { note, draw, line, points, amplitude, flagCurve, connect };
+    enum class Tool { note, draw, line, points, amplitude, flagCurve, connect, trim };
 
     PianoRollComponent(ProjectModel& modelToUse, const I18n& stringsToUse);
     void setNoteDanceEnabled(bool enabled)
@@ -142,7 +145,7 @@ public:
     // an anchor at each end.  On ordinary audio tracks this resets the target
     // pitch line without changing the analysed source contour; on UTAU tracks
     // it is the same anchor baseline the renderer follows.
-    void flattenPitchLine(const juce::String& noteId);
+    void flattenPitchLine(const juce::String& noteId, bool snapNativeToSemitone = false);
     void restoreOriginalPitch(const juce::String& noteId);
     // A frequency as a MIDI pitch, and back.  Twelve-tone equal temperament
     // against concert A4 = 440 Hz, which is what the roll's vertical axis is.
@@ -244,6 +247,9 @@ public:
     [[nodiscard]] bool showsPitchLine() const { return showPitchLine; }
     void setShowOriginalPitchLine(bool show) { showOriginalPitchLine = show; repaint(); }
     [[nodiscard]] bool showsOriginalPitchLine() const { return showOriginalPitchLine; }
+    void setConsonantPitchDashed(bool show);
+    [[nodiscard]] bool showsConsonantPitchDashed() const { return consonantPitchDashed; }
+    [[nodiscard]] bool diagnosticConsonantAnalysisPending() const;
     [[nodiscard]] juce::Path diagnosticDiffSingerPitchReference(const juce::String& noteId) const;
     // Test seam: lets a harness paint the same strip with and without the
     // off-screen skip, which is the only way to tell a note that was correctly
@@ -679,6 +685,8 @@ public:
     void clearNoteSelection();
     void setSelectedNoteIds(const std::vector<juce::String>& noteIds);
     [[nodiscard]] std::vector<juce::String> selectedNoteIds() const;
+    [[nodiscard]] bool canEditSelectedNativeVibrato() const;
+    void showSelectedNativeVibratoDialog();
     // Removes the current selection, as the Delete key does.
     void deleteSelectedNotes();
     // When the selection begins and ends in the piece, lead-ins and tails
@@ -722,6 +730,7 @@ public:
     std::function<void(const juce::String&)> onNoteAliasCommitted;
     // Open the four-region / oto editor for this note's voicebank entry.
     std::function<void(const juce::String&)> onOpenRegionEditor;
+    std::function<void()> onOpenNativeEnvelope;
     std::function<void(const juce::String&)> onDiffSingerPronunciation, onDiffSingerPitch, onDiffSingerParameters;
     // 单独OTO编辑: the OTO editor, for this note's own copy of its entry.
     std::function<void(const juce::String&)> onOpenNoteOtoEditor;
@@ -841,6 +850,7 @@ private:
     std::vector<StandingSplit> pendingSplitRestate;
     void restateStandingSplits();
     void rebuildNoteHits();
+    [[nodiscard]] std::optional<std::pair<juce::String,juce::String>> nativeJoinAt(juce::Point<float>) const;
     [[nodiscard]] bool clipIsVisible(const TrackData& track, const ClipData& clip) const;
     void pruneHiddenNoteSelection();
     [[nodiscard]] const NoteHit* resizableTailAt(juce::Point<float> position,
@@ -1032,6 +1042,8 @@ private:
     juce::AudioFormatManager formats;
     juce::AudioThumbnailCache thumbnailCache { 96 };
     std::unordered_map<std::string, std::unique_ptr<juce::AudioThumbnail>> thumbnails;
+    std::unique_ptr<NativePitchVoicingCache> consonantVoicing;
+    void requestConsonantVoicing();
     // Dragging used to repaint the whole window at mouse-move rate.  Only a
     // vertical band actually changes, and these work out which one.
     [[nodiscard]] juce::Range<float> dragRepaintBand(float mouseX) const;
@@ -1124,6 +1136,7 @@ private:
     bool showEnvelope = false;
     bool showPitchLine = true;
     bool showOriginalPitchLine = true;
+    bool consonantPitchDashed = false;
     Tool tool = Tool::note;
     juce::String focusedClip;
     juce::String focusedTrack;
@@ -1135,6 +1148,7 @@ private:
     float previewMidi = 0.0f;
     float dragStartY = 0.0f;
     bool finePitchDrag = false;
+    bool nativeTrimDrag = false;
     enum class DragMode { none, pitch, moveUtauNote, moveNativeNote, resizeNativeLeft, resizeNativeRight,
                           resizeLeft, resizeRight, consonantLeadIn,
                           drawPitch, linePitch, drawNewNote,
@@ -1229,6 +1243,14 @@ private:
     [[nodiscard]] std::optional<double> firstShownPitchPoint(const juce::String& noteId,
                                                              double absoluteStart);
     mutable std::map<juce::String, SharedPitchLines> sharedLineCache;
+    mutable std::map<juce::String, NativeNoiseRanges> nativePitchVisibilityCache;
+    mutable std::map<juce::String, NativeNoiseRanges> nativePitchAuthoredCache;
+    [[nodiscard]] const NativeNoiseRanges& nativePitchVisibilityFor(
+        const ClipData&, const NoteData&) const;
+    [[nodiscard]] const NativeNoiseRanges& nativePitchAuthoredFor(
+        const ClipData&, const NoteData&) const;
+    mutable std::map<juce::String, NativeSharedEnvelopes> nativeEnvelopeCache;
+    [[nodiscard]] const NativeSharedEnvelopeMember* nativeEnvelopeMember(const juce::String& id) const;
     mutable std::uint64_t draggedSharedKey = 0;
     mutable SharedPitchLines draggedSharedLines;
     int draggedPitchAnchor = -1;

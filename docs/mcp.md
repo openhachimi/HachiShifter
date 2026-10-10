@@ -92,7 +92,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | "HachiShifte
 |---|---|---|
 | `set_tempo` | 设置速度与拍号 | bpm、numerator、denominator |
 | `add_track` | 新建空旋律、普通或伴奏轨道 | name、compose、accompaniment（true 时关闭调音） |
-| `set_track` | 设置轨道及算法 | **track_id**、name、compose、muted、solo、volume、pan、smooth_overlaps、normalize_volume、pitch_algorithm、stretch_algorithm、render_order、utau_global_flags、voicebank_directory |
+| `set_track` | 设置轨道及算法 | **track_id**、name、compose、muted、solo、volume、pan、smooth_overlaps、normalize_volume、nsf_smooth_pitch_transitions、nsf_noise_protection、pitch_algorithm、stretch_algorithm、render_order、utau_global_flags、voicebank_directory |
 | `remove_track` | 删除轨道 | **track_id** |
 
 ### 采样

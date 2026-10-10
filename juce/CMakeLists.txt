@@ -227,6 +227,8 @@ target_sources(HachiShifterNext PRIVATE
     src/Pinyin.h
     src/PianoRollComponent.cpp
     src/PianoRollComponent.h
+    src/NativePitchVoicingDisplay.cpp
+    src/NativePitchVoicingDisplay.h
     src/TrackListComponent.cpp
     src/TrackListComponent.h
     src/TimelineComponent.cpp

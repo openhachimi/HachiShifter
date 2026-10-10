@@ -77,6 +77,36 @@ inline bool playbackRenderSmoke(const juce::File& folder, const juce::File& prob
         check("queue_reusable_after_cancel",wait([&]{return other.load();}));queue.cancelAll();
     }
     {
+        PlaybackRenderQueue queue(2);
+        std::atomic<bool> started{false}, retainedStarted{false}, release{false}, retainedCancelled{false};
+        std::atomic<int> discarded{0}, published{0};
+        queue.add(std::make_unique<Job>([&](Job& job)
+        {
+            started = true;
+            wait([&] { return job.shouldExit() || release.load(); });
+            if (!job.shouldExit()) ++published;
+        }), {"old", 0, 2, [&] { ++discarded; }}, RenderLane::neural);
+        queue.add(std::make_unique<Job>([&](Job& job)
+        {
+            retainedStarted = true;
+            wait([&] { return release.load() || job.shouldExit(); });
+            retainedCancelled = job.shouldExit();
+        }), {"retained", 0, 2, {}}, RenderLane::parallel);
+        check("revision_jobs_started", wait([&] { return started && retainedStarted; }));
+        queue.beginUpdate();
+        queue.add(std::make_unique<Job>([&](Job&) { ++published; }),
+            {"new", 0, 2, {}}, RenderLane::neural);
+        const auto since = juce::Time::getMillisecondCounterHiRes();
+        queue.endUpdate({"new", "retained"});
+        check("revision_cancel_does_not_wait_on_ui", juce::Time::getMillisecondCounterHiRes() - since < 100);
+        check("obsolete_active_stops_and_replacement_runs", wait([&] { return discarded == 1 && published == 1; }, 1000));
+        release = true;
+        // Drain naturally before cancelAll, so the assertion really tests retention.
+        check("unrelated_running_job_retained", wait([&] { return !queue.hasActiveJobs(); }) && !retainedCancelled);
+        check("obsolete_result_not_published", published == 1 && discarded == 1);
+        queue.cancelAll();
+    }
+    {
         RenderService service;service.beginUpdate();service.setPlaybackPosition(50);
         std::vector<int> order;std::atomic<int> done{0};
         for (int i=0;i<3;++i)

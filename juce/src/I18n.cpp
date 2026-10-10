@@ -9,6 +9,8 @@ namespace
 using Row = std::array<const char*, 5>;
 const std::unordered_map<std::string, Row> strings {
     { "settings.softwareRendering", { "回退到软件绘制（关闭 GPU 界面加速）", "退回軟體繪製（關閉 GPU 介面加速）", "ソフトウェア描画に切替（GPU描画を無効化）", "소프트웨어 렌더링 사용 (GPU UI 가속 끄기)", "Use software rendering (disable GPU UI acceleration)" } },
+    { "note.unpitched", { "无音高", "無音高", "無音高", "무음정", "Unpitched" } },
+    { "clip.markUnpitched", { "标记无音高片段", "標記無音高片段", "無音高区間をマーク", "무음정 구간 표시", "Mark unpitched regions" } },
     { "app.title",       { "HachiShifter Next", "HachiShifter Next", "HachiShifter Next", "HachiShifter Next", "HachiShifter Next" } },
     { "file.recovery", { "恢复自动保存的工程…", "復原自動儲存的工程…", "自動保存から復元…", "자동 저장 프로젝트 복구…", "Recover Autosaved Project…" } },
     { "recovery.title", { "发现可恢复的工程", "發現可復原的工程", "復元可能なプロジェクト", "복구 가능한 프로젝트", "Recoverable projects" } },
@@ -30,6 +32,8 @@ const std::unordered_map<std::string, Row> strings {
     { "native.actualWave", { "渲染后真实波形", "渲染後真實波形", "レンダリング後の実波形", "렌더링된 실제 파형", "Actual rendered waveform" } },
     { "native.pitchLine", { "音高线", "音高線", "ピッチカーブ", "피치 곡선", "Pitch curve" } },
     { "native.display", { "显示", "顯示", "表示", "표시", "Display" } },
+    { "native.vibrato", { "颤音", "顫音", "ビブラート", "비브라토", "Vibrato" } },
+    { "native.vibratoHelp", { "选中音频片段后设置颤音；支持多选、预设和关闭颤音。", "選取音訊片段後設定顫音；支援多選、預設和關閉顫音。", "選択した音声ノートのビブラートを設定します。複数選択、プリセット、解除に対応。", "선택한 오디오 음표의 비브라토를 설정합니다. 다중 선택, 프리셋, 해제를 지원합니다.", "Set vibrato on selected audio notes; supports multiple selection, presets and disabling vibrato." } },
     { "native.velocityHelp", { "辅音速度：100 为基准，增大会缩短起音；保持音符总时长和源选区。", "子音速度：100 為基準，增大会縮短起音；保留音符總時長和來源範圍。", "子音速度：100が基準。値を上げるとアタックが短くなります。ノート全長と素材範囲は維持されます。", "자음 속도: 100이 기준입니다. 높이면 어택이 짧아지며 음표 길이와 원본 범위는 유지됩니다.", "Consonant velocity: 100 is neutral; higher values shorten the onset while retaining note duration and source range." } },
     { "file.recent",     { "最近工程", "最近工程", "最近使ったプロジェクト", "최근 프로젝트", "Recent Projects" } },
     { "file.recentEmpty", { "没有最近工程", "沒有最近工程", "最近のプロジェクトはありません", "최근 프로젝트 없음", "No Recent Projects" } },
@@ -41,7 +45,7 @@ const std::unordered_map<std::string, Row> strings {
     { "export.nonBreathOnly", { "仅导出非气声", "僅匯出非氣聲", "非息成分のみ", "비기식 성분만 내보내기", "Export non-breath only" } },
     { "export.componentHelp", { "两项互斥，均不选则导出完整人声。气声为引擎的噪声分量，可能包含清辅音；仅对本次导出生效。", "兩項互斥，均不選則匯出完整人聲。氣聲為引擎的噪聲分量，可能包含清子音；僅對本次匯出生效。", "未選択で全音声を書き出します。息成分には無声子音も含まれます。今回の書き出しのみに適用。", "둘 다 해제하면 전체 음성을 내보냅니다. 기식에는 무성 자음도 포함됩니다. 이번 내보내기에만 적용됩니다.", "Choose one or leave both off for the complete voice. Breath is the noise component and may include unvoiced consonants. Applies to this export only." } },
     { "export.wavSettings", { "WAV 导出设置", "WAV 匯出設定", "WAV 書き出し設定", "WAV 내보내기 설정", "WAV export settings" } },
-    { "export.wavHelp", { "单声道会混合左右声道；32 bit 使用浮点格式。设置会记住并用于下次导出。", "單聲道會混合左右聲道；32 bit 使用浮點格式。設定會保留供下次匯出。", "モノラルは左右をミックスします。32 bit は浮動小数点です。設定は次回も保持されます。", "모노는 좌우 채널을 합칩니다. 32 bit는 부동소수점 형식입니다. 설정은 다음에도 유지됩니다.", "Mono mixes left and right channels. 32 bit uses floating point. Settings are remembered for the next export." } },
+    { "export.wavHelp", { "单声道会混合左右声道；32 bit 使用浮点格式。设置会保留，并用于下次导出。", "單聲道會混合左右聲道；32 bit 使用浮點格式。設定會保留供下次匯出。", "モノラルは左右をミックスします。32 bit は浮動小数点です。設定は次回も保持されます。", "모노는 좌우 채널을 합칩니다. 32 bit는 부동소수점 형식입니다. 설정은 다음에도 유지됩니다.", "Mono mixes left and right channels. 32 bit uses floating point. Settings are remembered for the next export." } },
     { "export.channels", { "声道", "聲道", "チャンネル", "채널", "Channels" } },
     { "export.mono", { "单声道", "單聲道", "モノラル", "모노", "Mono" } },
     { "export.stereo", { "双声道（立体声）", "雙聲道（立體聲）", "ステレオ", "스테레오", "Stereo" } },
@@ -50,7 +54,7 @@ const std::unordered_map<std::string, Row> strings {
     { "export.sampleRate", { "采样率", "取樣率", "サンプルレート", "샘플 레이트", "Sample rate" } },
     { "export.followDevice", { "跟随播放设备（默认）", "跟隨播放裝置（預設）", "再生デバイスに合わせる（既定）", "재생 장치에 맞춤 (기본값)", "Follow playback device (default)" } },
     { "export.lastRenderSuffix", { "上次渲染", "上次算繪", "前回のレンダリング", "마지막 렌더링", "last render" } },
-    { "error.exportNoRender", { "还没有播放过框选的音符，没有可导出的渲染", "尚未播放過框選的音符，沒有可匯出的算繪", "選択したノートをまだ再生していないため、書き出せるレンダリングがありません", "선택한 음표를 재생한 적이 없어 내보낼 렌더링이 없습니다", "No marquee has been played yet, so there is no render to export" } },
+    { "error.exportNoRender", { "尚未播放所选音符，没有可导出的渲染音频。", "尚未播放所選音符，沒有可匯出的算繪音訊。", "選択したノートをまだ再生していないため、書き出せるレンダリングがありません", "선택한 음표를 재생한 적이 없어 내보낼 렌더링이 없습니다", "No marquee has been played yet, so there is no render to export" } },
     { "export.allTracks", { "全部轨道（每轨一个文件）", "全部音軌（每軌一個檔案）", "全トラック（トラックごとに1ファイル）", "모든 트랙 (트랙당 파일 1개)", "All tracks (one file each)" } },
     { "export.oneTrack", { "单个轨道", "單一音軌", "単一トラック", "단일 트랙", "A single track" } },
     { "export.untitledTrack", { "未命名轨道", "未命名音軌", "名称未設定トラック", "이름 없는 트랙", "Untitled track" } },
@@ -92,14 +96,18 @@ const std::unordered_map<std::string, Row> strings {
     { "edit.hanziToPinyin", { "汉字转拼音", "漢字轉拼音", "漢字をピンインに変換", "한자를 병음으로 변환", "Convert Chinese Lyrics to Pinyin" } },
     { "edit.cents", { "音分", "音分", "セント", "센트", "Cents" } },
     { "edit.midiNote", { "MIDI 音高", "MIDI 音高", "MIDI ノート", "MIDI 음높이", "MIDI Note" } },
-    { "edit.copyClip",   { "复制所选采样", "複製所選取樣", "選択クリップをコピー", "선택 클립 복사", "Copy Selected Clip" } },
-    { "edit.pasteClip",  { "在播放位置粘贴采样", "在播放位置貼上取樣", "再生位置にクリップを貼り付け", "재생 위치에 클립 붙여넣기", "Paste Clip at Playhead" } },
-    { "edit.duplicateClip", { "紧接复制所选采样", "緊接複製所選取樣", "選択クリップを直後に複製", "선택 클립 바로 뒤에 복제", "Duplicate Selected Clip" } },
+    { "edit.copyClip",   { "复制所选片段", "複製所選片段", "選択クリップをコピー", "선택 클립 복사", "Copy Selected Clip" } },
+    { "edit.pasteClip",  { "在播放位置粘贴片段", "在播放位置貼上片段", "再生位置にクリップを貼り付け", "재생 위치에 클립 붙여넣기", "Paste Clip at Playhead" } },
+    { "edit.duplicateClip", { "在所选片段后创建副本", "在所選片段後建立副本", "選択クリップを直後に複製", "선택 클립 바로 뒤에 복제", "Duplicate Selected Clip" } },
     { "view.zoomIn",     { "放大", "放大", "拡大", "확대", "Zoom In" } },
     { "view.zoomOut",    { "缩小", "縮小", "縮小", "축소", "Zoom Out" } },
-    { "view.zoomFit",    { "适合工程", "符合工程", "プロジェクト全体", "프로젝트 맞춤", "Fit Project" } },
+    { "view.zoomFit",    { "缩放至整个工程", "縮放至整個工程", "プロジェクト全体", "프로젝트 맞춤", "Fit Project" } },
     { "view.showWaveforms", { "显示波形", "顯示波形", "波形を表示", "파형 표시", "Show Waveforms" } },
     { "view.showLyrics", { "显示歌词", "顯示歌詞", "歌詞を表示", "가사 표시", "Show Lyrics" } },
+    { "native.nsfPitchTransitions", { "音高突变平滑", "音高突變平滑", "音高ジャンプを平滑化", "급격한 음높이 변화 완화", "Smooth pitch jumps" } },
+    { "native.nsfPitchTransitionsHelp", { "当前轨道的 NSF 渲染设置。开启时平滑音高突变以抑制爆音；关闭时保留编辑曲线的突变。清辅音保护由谐波/噪声分离开关独立控制。", "目前軌道的 NSF 渲染設定。開啟時平滑音高突變以抑制爆音；關閉時保留編輯曲線的突變。清輔音保護由諧波/雜訊分離開關獨立控制。", "急な音高変化を平滑化します。オフでは編集した音高ジャンプを保持します。無声子音の保護は調波・ノイズ分離の設定で独立に切り替えます。", "급격한 음높이 변화를 완화합니다. 끄면 편집한 변화를 유지합니다. 무성 자음 보호는 배음/잡음 분리 설정으로 따로 제어합니다.", "On smooths pitch jumps to reduce clicks; off retains authored jumps. Unvoiced protection is controlled independently by Harmonic/noise." } },
+    { "native.nsfNoiseProtection", { "谐波/噪声分离", "諧波/雜訊分離", "調波・ノイズ分離", "배음/잡음 분리", "Harmonic/noise" } },
+    { "native.nsfNoiseProtectionHelp", { "当前非 U NSF 轨道，默认开启：谐波经过变调，源噪声按拉伸和时间映射混回，明确清音恢复原始波形。关闭后对完整音频变调。缺少分离模型时仅保留明确清音保护；局部渲染不受此开关影响。", "目前非 U NSF 軌道，預設開啟：諧波經過變調，原雜訊依拉伸及時間映射混回，明確清音恢復原始波形。關閉後對完整音訊變調。缺少分離模型時僅保留明確清音保護；局部渲染不受影響。", "非 U NSF トラック：調波のみを変調し、元のノイズを時間マップに合わせて戻し、明確な無声音を元の波形で復元します。オフでは音声全体を変調します。分離モデルがない場合は無声音保護のみ。部分レンダリングは独立です。", "비 U NSF 트랙: 배음을 변조하고 시간 매핑에 맞춰 원본 잡음을 섞으며 명확한 무성음은 원본 파형으로 복원합니다. 끄면 전체 오디오를 변조합니다. 분리 모델이 없으면 무성음만 보호합니다. 부분 렌더링은 별도입니다.", "Native NSF, on by default: transpose harmonics, mix original noise through the time map and restore clear unvoiced PCM. Off transposes the full audio. Without the separation model only clear-unvoiced protection is available. Incremental rendering remains enabled." } },
     { "native.allowOverlap", { "允许音频重叠", "允許音訊重疊", "オーディオの重なりを許可", "오디오 겹침 허용", "Allow audio overlap" } },
     { "native.overlapHelp", { "当前轨道的音频重叠开关。默认禁止重叠；关闭时前段不变，裁掉后段重叠的开头并保留其结束位置。可一次撤销。", "目前軌道的音訊重疊開關。關閉時前段不變，裁掉後段重疊的開頭並保留結束位置。可復原。", "現在のトラックの重なり設定。オフにすると前の素材を保持し、後の素材の重なる先頭を切り取ります。終了位置は維持します。", "현재 트랙의 겹침 설정. 끄면 앞 소재는 유지하고 뒤 소재의 겹치는 시작 부분을 잘라냅니다. 끝 위치는 유지됩니다.", "Current track: off prevents overlap. Turning off trims the later source's overlapping head, keeps its end and leaves the earlier source unchanged. One undo restores the edit." } },
     { "native.overlap", { "重叠", "重疊", "重なり", "겹침", "Overlap" } },
@@ -110,6 +118,7 @@ const std::unordered_map<std::string, Row> strings {
     { "native.disconnectAudio", { "断开音频", "斷開音訊", "オーディオを切り離す", "오디오 연결 해제", "Disconnect Audio" } },
     { "native.restoreOriginalPitch", { "还原为原始素材音高", "還原為原始素材音高", "元の素材のピッチに戻す", "원본 소재 피치로 복원", "Restore Original Source Pitch" } },
     { "native.originalPitchLine", { "显示原始音高线（虚线）", "顯示原始音高線（虛線）", "元ピッチを表示（破線）", "원본 피치 표시 (점선)", "Show Original Pitch (Dashed)" } },
+    { "native.consonantPitchDashed", { "气声虚线", "氣聲虛線", "息成分を破線表示", "숨소리 점선 표시", "Dashed breathiness" } },
     { "view.vZoomIn", { "纵向放大", "縱向放大", "縦方向に拡大", "세로 확대", "Zoom In Vertically" } },
     { "view.vZoomOut", { "纵向缩小", "縱向縮小", "縦方向に縮小", "세로 축소", "Zoom Out Vertically" } },
     { "help.about",      { "关于 HachiShifter", "關於 HachiShifter", "HachiShifterについて", "HachiShifter 정보", "About HachiShifter" } },
@@ -122,6 +131,7 @@ const std::unordered_map<std::string, Row> strings {
     { "tool.draw",       { "自由绘制", "自由繪製", "フリーハンド", "자유 그리기", "Free Draw" } },
     { "tool.line",       { "直线工具", "直線工具", "直線ツール", "직선 도구", "Line Tool" } },
     { "tool.points",     { "标点音高工具", "標點音高工具", "ピッチポイント", "피치 포인트", "Pitch Points" } },
+    { "tool.trim", { "裁剪音频（仅非 U 模式）：拖动两端裁剪，不拉伸、不吸附网格；再次点击退出", "裁剪音訊（僅非 U 模式）：拖動兩端裁剪，不伸縮、不吸附網格；再次點擊退出", "オーディオの端をトリム（非UTAU、スナップなし）", "오디오 끝 자르기 (비 UTAU, 스냅 없음)", "Trim audio edges (non-UTAU): no stretching or grid snapping; click again to exit" } },
     { "stretch.unit", { "最小拉伸", "最小拉伸", "最小ストレッチ", "최소 늘이기", "Min Stretch" } },
     { "stretch.unitHelp", { "拉伸和移动音符时的最小单位，为一拍的 1/N。默认 1/64。", "拉伸和移動音符時的最小單位，為一拍的 1/N。預設 1/64。", "ノートの伸縮と移動の最小単位（1拍の 1/N）。既定は 1/64。", "노트 늘이기와 이동의 최소 단위(한 박의 1/N). 기본값 1/64.", "Smallest unit for stretching and moving notes, as 1/N of a beat. Default 1/64." } },
     { "pitchCurve.incomingSegment", { "上一点 → 当前点", "上一點 → 目前點", "前の点 → 現在の点", "이전 점 → 현재 점", "Previous Point → This Point" } },
@@ -171,6 +181,7 @@ const std::unordered_map<std::string, Row> strings {
     { "base.scale",      { "基准调", "基準調", "基準キー", "기준 키", "Key" } },
     { "algo.pitch",      { "变调算法", "變調演算法", "ピッチアルゴリズム", "피치 알고리즘", "Pitch Algorithm" } },
     { "algo.stretch",    { "拉伸算法", "拉伸演算法", "タイムアルゴリズム", "타임 알고리즘", "Stretch Algorithm" } },
+    { "algo.stretch.hifiShifterMel", { "HiFiShifter Mel 线性拉伸", "HiFiShifter Mel 線性拉伸", "HiFiShifter Mel 線形伸縮", "HiFiShifter Mel 선형 스트레치", "HiFiShifter linear Mel stretch" } },
     { "algo.stretch.melodyneHybrid", { "算法原生拉伸", "演算法原生拉伸", "エンジン標準伸縮", "엔진 기본 타임 스트레치", "Engine-native stretch" } },
     { "algo.stretch.nsfVariableMel", { "NSF 可变 Hop Mel 先拼接后合成", "NSF 可變 Hop Mel 先拼接後合成", "NSF 可変 Hop Mel 結合後合成", "NSF 가변 Hop Mel 연결 후 합성", "NSF Variable-Hop Mel: Splice then Synthesize" } },
     { "algo.stretch.nsfShiftThenSplice", { "NSF 先变调后拼接", "NSF 先變調後拼接", "NSF ピッチ後結合", "NSF 피치 먼저 연결", "NSF Shift then Splice" } },
@@ -198,17 +209,17 @@ const std::unordered_map<std::string, Row> strings {
     { "track.rename", { "重命名所选轨道…", "重新命名所選軌道…", "選択トラック名を変更…", "선택 트랙 이름 바꾸기…", "Rename Selected Track…" } },
     { "track.name", { "轨道名称", "軌道名稱", "トラック名", "트랙 이름", "Track Name" } },
     { "track.delete",    { "删除所选轨道", "刪除所選軌道", "選択トラックを削除", "선택 트랙 삭제", "Delete Selected Track" } },
-    { "clip.delete",     { "删除所选采样", "刪除所選取樣", "選択クリップを削除", "선택 클립 삭제", "Delete Selected Clip" } },
+    { "clip.delete",     { "删除所选片段", "刪除所選片段", "選択クリップを削除", "선택 클립 삭제", "Delete Selected Clip" } },
     { "clip.split",      { "拆分", "拆分", "分割", "분할", "Split" } },
-    { "clip.addEmptyTuning", { "添加空调音片段（10 秒）", "新增空白調音片段（10 秒）", "空の調声クリップを追加（10 秒）", "빈 튜닝 클립 추가 (10초)", "Add Empty Tuning Clip (10 s)" } },
-    { "clip.startNormalDisplay", { "开始正常显示", "開始正常顯示", "通常表示を開始", "일반 표시 시작", "Show Normally" } },
+    { "clip.addEmptyTuning", { "添加空白调音片段（10 秒）", "新增空白調音片段（10 秒）", "空の調声クリップを追加（10 秒）", "빈 튜닝 클립 추가 (10초)", "Add Empty Tuning Clip (10 s)" } },
+    { "clip.startNormalDisplay", { "开启正常显示", "開啟正常顯示", "通常表示を開始", "일반 표시 시작", "Show Normally" } },
     { "clip.stopNormalDisplay", { "关闭正常显示", "關閉正常顯示", "通常表示を終了", "일반 표시 끄기", "Stop Showing Normally" } },
-    { "clip.startNoteHints", { "开始提示显示", "開始提示顯示", "ノートガイドを表示", "음표 가이드 표시", "Show Note Hints" } },
+    { "clip.startNoteHints", { "开启提示显示", "開啟提示顯示", "ノートガイドを表示", "음표 가이드 표시", "Show Note Hints" } },
     { "clip.stopNoteHints", { "关闭提示显示", "關閉提示顯示", "ノートガイドを非表示", "음표 가이드 숨기기", "Hide Note Hints" } },
     { "clip.merge",      { "合并", "合併", "結合", "병합", "Merge" } },
-    { "clip.mute",       { "静音所选采样", "靜音所選取樣", "選択クリップをミュート", "선택 클립 음소거", "Mute Selected Clip" } },
-    { "clip.unmute",     { "取消采样静音", "取消取樣靜音", "クリップのミュート解除", "클립 음소거 해제", "Unmute Clip" } },
-    { "clip.gain",       { "设置采样增益…", "設定取樣增益…", "クリップゲインを設定…", "클립 게인 설정…", "Set Clip Gain…" } },
+    { "clip.mute",       { "静音所选片段", "靜音所選片段", "選択クリップをミュート", "선택 클립 음소거", "Mute Selected Clip" } },
+    { "clip.unmute",     { "取消片段静音", "取消片段靜音", "クリップのミュート解除", "클립 음소거 해제", "Unmute Clip" } },
+    { "clip.gain",       { "设置片段增益…", "設定片段增益…", "クリップゲインを設定…", "클립 게인 설정…", "Set Clip Gain…" } },
     { "clip.gainDb",     { "增益（dB）", "增益（dB）", "ゲイン（dB）", "게인 (dB)", "Gain (dB)" } },
     { "clip.gainKnobHint", { "片段响度：上下拖动，Shift 精细调节，双击恢复 0 dB。",
                             "片段響度：上下拖動，Shift 精細調節，雙擊恢復 0 dB。",
@@ -225,8 +236,8 @@ const std::unordered_map<std::string, Row> strings {
     { "track.envelopeReset", { "区域包络恢复 0 dB", "區域包絡恢復 0 dB", "リージョン音量を 0 dB に戻す", "영역 음량을 0 dB로 초기화", "Reset region envelope to 0 dB" } },
     { "track.audio",     { "普通音轨", "一般音軌", "通常トラック", "일반 트랙", "Audio Track" } },
     { "track.mute",      { "静音", "靜音", "ミュート", "음소거", "Mute" } },
-    { "track.tip.compose", { "旋律轨道：开启后音符才会按音高渲染，钢琴窗里也才看得到这条轨道；关闭则作为普通音轨，素材原样播放",
-                             "旋律軌道：開啟後音符才會依音高算繪，鋼琴窗中也才看得到這條軌道；關閉則作為一般音軌，素材原樣播放",
+    { "track.tip.compose", { "旋律轨道：开启后按音符音高渲染，并在钢琴卷帘中显示；关闭后作为普通音轨播放原始素材。",
+                             "旋律軌道：開啟後依音符音高算繪，並在鋼琴捲簾中顯示；關閉後作為一般音軌播放原始素材。",
                              "メロディックトラック：オンのときだけノートが音高どおりにレンダリングされ、ピアノロールにも表示されます。オフなら通常トラックとして素材をそのまま再生します",
                              "멜로디 트랙: 켜면 노트가 음높이대로 렌더링되고 피아노 롤에도 표시됩니다. 끄면 일반 트랙으로 소재를 그대로 재생합니다",
                              "Compose track: only then are its notes rendered at their pitch and shown in the piano roll. Off, it is an audio track and the material plays as it is" } },
@@ -258,15 +269,15 @@ const std::unordered_map<std::string, Row> strings {
     { "status.analysisComplete", { "音高与音符分析完成", "音高與音符分析完成", "ピッチとノートの解析が完了しました", "피치 및 노트 분석 완료", "Pitch and note analysis complete" } },
     { "status.analysisSkipped", { "已保留现有音符数据", "已保留現有音符資料", "既存のノートデータを保持しました", "기존 노트 데이터를 유지했습니다", "Existing note data preserved" } },
     { "status.exporting", { "正在导出 WAV…", "正在匯出 WAV…", "WAVを書き出しています…", "WAV 내보내는 중…", "Exporting WAV…" } },
-    { "status.clipCopied", { "已复制采样", "已複製取樣", "クリップをコピーしました", "클립을 복사했습니다", "Clip copied" } },
-    { "status.clipPasted", { "已粘贴采样", "已貼上取樣", "クリップを貼り付けました", "클립을 붙여넣었습니다", "Clip pasted" } },
+    { "status.clipCopied", { "已复制片段", "已複製片段", "クリップをコピーしました", "클립을 복사했습니다", "Clip copied" } },
+    { "status.clipPasted", { "已粘贴片段", "已貼上片段", "クリップを貼り付けました", "클립을 붙여넣었습니다", "Clip pasted" } },
     { "status.notesCopied", { "已复制音符", "已複製音符", "ノートをコピーしました", "음표를 복사했습니다", "Notes copied" } },
     { "status.notesCut", { "已剪切音符", "已剪下音符", "ノートを切り取りました", "음표를 잘라냈습니다", "Notes cut" } },
     { "status.notesPasted", { "已粘贴音符", "已貼上音符", "ノートを貼り付けました", "음표를 붙여넣었습니다", "Notes pasted" } },
     { "status.projectOpened", { "已打开工程", "已開啟工程", "プロジェクトを開きました", "프로젝트를 열었습니다", "Project opened" } },
     { "status.projectSaved", { "已保存工程", "已儲存工程", "プロジェクトを保存しました", "프로젝트를 저장했습니다", "Project saved" } },
     { "status.midiPending", { "MIDI 导入器将在下一阶段接入", "MIDI 匯入器將於下一階段接入", "MIDIインポーターは次段階で接続します", "MIDI 가져오기는 다음 단계에서 연결됩니다", "MIDI importer will be connected in the next stage" } },
-    { "status.noTracks", { "导入音频或工程以开始", "匯入音訊或工程以開始", "音声またはプロジェクトを読み込んでください", "오디오 또는 프로젝트를 가져오세요", "Import audio or a project to begin" } },
+    { "status.noTracks", { "请导入音频或打开工程以开始编辑", "請匯入音訊或開啟工程以開始編輯", "音声またはプロジェクトを読み込んでください", "오디오 또는 프로젝트를 가져오세요", "Import audio or a project to begin" } },
     { "edit.source",     { "原始采样编辑：此模式不允许拉伸", "原始取樣編輯：此模式不允許拉伸", "元サンプル編集：このモードではストレッチできません", "원본 샘플 편집: 이 모드에서는 늘이기를 사용할 수 없습니다", "Original sample edit: stretching is disabled" } },
     { "error.audio",     { "音频文件读取失败", "音訊檔案讀取失敗", "オーディオを読み込めません", "오디오 파일을 읽지 못했습니다", "Could not read audio file" } },
     { "error.midi",      { "MIDI 导入失败", "MIDI 匯入失敗", "MIDIの読み込みに失敗しました", "MIDI 가져오기에 실패했습니다", "MIDI import failed" } },
@@ -280,7 +291,7 @@ const std::unordered_map<std::string, Row> strings {
     { "mpd.stage.create_tracks", { "恢复音符和编辑", "還原音符與編輯", "ノートと編集を復元", "노트 및 편집 복원", "Restoring notes and edits" } },
     { "mpd.stage.reanalyse_pitch", { "重新分析原始 F0", "重新分析原始 F0", "元のF0を再解析", "원본 F0 재분석", "Reanalysing source F0" } },
     { "mpd.stage.complete", { "完成", "完成", "完了", "완료", "Complete" } },
-    { "mpd.compose.title", { "选择 Compose 轨道", "選擇 Compose 軌道", "Composeトラックを選択", "Compose 트랙 선택", "Choose Compose Tracks" } },
+    { "mpd.compose.title", { "选择旋律轨道", "選擇旋律軌道", "Composeトラックを選択", "Compose 트랙 선택", "Choose Compose Tracks" } },
     { "mpd.compose.description", { "勾选需要恢复 Melodyne 音符和修音的旋律轨道；其余轨道按普通音频播放。", "勾選需要還原 Melodyne 音符與修音的旋律軌道；其餘軌道作為一般音訊播放。", "Melodyneのノート編集を復元する旋律トラックを選択します。その他は通常の音声トラックとして扱います。", "Melodyne 노트 편집을 복원할 멜로디 트랙을 선택하세요. 나머지는 일반 오디오 트랙으로 처리됩니다.", "Select melodic tracks whose Melodyne note edits should be restored. Other tracks remain regular audio tracks." } },
     { "dialog.import", { "导入", "匯入", "読み込む", "가져오기", "Import" } },
     { "dialog.cancel", { "取消", "取消", "キャンセル", "취소", "Cancel" } }
@@ -333,7 +344,7 @@ const std::unordered_map<std::string, Row> strings {
     ,{ "settings.wheelScroll", { "滚动", "捲動", "スクロール", "스크롤", "Scroll" } }
     ,{ "settings.spacePlayback", { "空格键播放/暂停", "空白鍵播放/暫停", "スペースで再生/一時停止", "스페이스바 재생/일시정지", "Space toggles playback" } }
     ,{ "settings.confirmDestructive", { "删除前确认", "刪除前確認", "削除前に確認", "삭제 전 확인", "Confirm before delete" } }
-    ,{ "settings.melodyneCompose", { "Melodyne Compose 默认方式", "Melodyne Compose 預設方式", "Melodyne Composeの既定値", "Melodyne Compose 기본값", "Default Melodyne Compose" } }
+    ,{ "settings.melodyneCompose", { "Melodyne 旋律轨道导入方式", "Melodyne 旋律軌道匯入方式", "Melodyne Composeの既定値", "Melodyne Compose 기본값", "Default Melodyne Compose" } }
     ,{ "settings.composeAsk", { "每次询问", "每次詢問", "毎回確認", "매번 확인", "Ask Every Time" } }
     ,{ "settings.composeMelodic", { "旋律轨道", "旋律軌道", "メロディックトラック", "멜로디 트랙", "Melodic Tracks" } }
     ,{ "settings.composeAll", { "全部轨道", "全部軌道", "すべてのトラック", "모든 트랙", "All Tracks" } }
@@ -386,6 +397,10 @@ const std::unordered_map<std::string, Row> strings {
     ,{ "asset.melodyneFolderDone", { "已登记 {count} 个素材文件夹，可在素材管理器中复用。", "已登記 {count} 個素材資料夾，可在素材管理器中重複使用。", "{count} 個の素材フォルダーを登録しました。素材マネージャーで再利用できます。", "소재 폴더 {count}개를 등록했습니다. 소재 관리자에서 재사용할 수 있습니다.", "Registered {count} material folder(s), reusable in the Asset Manager." } }
     ,{ "settings.browse", { "浏览…", "瀏覽…", "参照…", "찾아보기…", "Browse…" } }
     ,{ "settings.utauOutputEngine", { "UTAU 默认输出引擎", "UTAU 預設輸出引擎", "UTAU 既定出力エンジン", "UTAU 기본 출력 엔진", "Default UTAU Output Engine" } }
+    ,{ "phonemizer.choose", { "发音器", "發音器", "音素変換器", "발음 변환기", "Phonemizer" } }
+    ,{ "phonemizer.manual", { "手动别名（默认）", "手動別名（預設）", "手動エイリアス（既定）", "수동 별칭 (기본)", "Manual aliases (default)" } }
+    ,{ "phonemizer.zhCvvc", { "中文 CVVC", "中文 CVVC", "中国語 CVVC", "중국어 CVVC", "Chinese CVVC" } }
+    ,{ "phonemizer.missingPresamp", { "中文 CVVC 需要音源目录中的 presamp.ini（包含 VOWEL 与 CONSONANT 配置）。请先选择对应音源并补齐配置。", "中文 CVVC 需要音源目錄中的 presamp.ini（包含 VOWEL 與 CONSONANT 配置）。", "中国語 CVVC には音源フォルダーの presamp.ini（VOWEL と CONSONANT）が必要です。", "중국어 CVVC에는 음원 폴더의 presamp.ini (VOWEL, CONSONANT)가 필요합니다.", "Chinese CVVC requires presamp.ini with VOWEL and CONSONANT sections in the voicebank folder." } }
     ,{ "output.choose", { "选择输出引擎", "選擇輸出引擎", "出力エンジンを選択", "출력 엔진 선택", "Choose Output Engine" } }
     ,{ "output.inherit", { "跟随设置", "跟隨設定", "設定に従う", "설정 따르기", "Follow Settings" } }
     ,{ "output.resampler", { "重采样器…", "重取樣器…", "リサンプラー…", "리샘플러…", "Resampler…" } }

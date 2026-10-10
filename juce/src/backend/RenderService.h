@@ -43,6 +43,8 @@ struct Mld5FileRenderRequest
     PitchRenderBackend pitchBackend = PitchRenderBackend::llsm2;
     int stretchAlgorithm = 0;
     bool normalizeVolume = false;
+    bool nsfSmoothPitchTransitions = true;
+    bool nsfNoiseProtection = true;
     bool matchNsfSourceLevel = false;
     // Source F0 is measured rather than a hand-created absolute target.
     // An identity request can play PCM directly, without vocoder coloration.

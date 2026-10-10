@@ -82,6 +82,9 @@ struct UtauNoteRenderSpec
     int tailFadeMode = 0;
     TailFadeSettings tailFadeSettings;
     double modulationPercent = 0.0;
+    // Generated phonemes retain the parent note's envelope clock.
+    bool preserveEnvelopeTiming = false;
+    bool aliasIsResolved = false;
 };
 
 struct UtauPhonemeSpan
@@ -92,6 +95,7 @@ struct UtauPhonemeSpan
 
 struct UtauRenderRequest
 {
+    bool chineseCvvc = false;
     juce::File voicebankDirectory;
     juce::String diffSingerLanguage = "zh";
     juce::String diffSingerSpeaker;
@@ -186,6 +190,9 @@ struct UtauTailFadeSpan {double startSeconds=0,endSeconds=0;};
 class UtauRenderer final
 {
 public:
+    // Strict OTO lookup for phonemizers: never use the one-recording/file-name fallback.
+    static std::optional<UtauSampleTiming> mappedAliasTiming(
+        const juce::File& directory, const juce::String& alias, float midiNote);
     // WCSNDM 0.0803 exposes Mx1/Mx2 only on pure K2. Its other kernels
     // either ignore Mx or mix an unfiltered L1 component back into the result.
     [[nodiscard]] static bool supportsComponentExport(const juce::File& engine,
@@ -312,7 +319,7 @@ public:
         bool consonantClasses = false, double stpSeconds = 0.0,
         bool preutteranceOverrideEnabled = false, double preutteranceSeconds = 0.0,
         bool overlapOverrideEnabled = false, double overlapSeconds = 0.0,
-        const UtauOtoOverride* noteOto = nullptr);
+        const UtauOtoOverride* noteOto = nullptr, bool aliasIsResolved = false);
     static UtauRenderResult render(const UtauRenderRequest& request);
     // The last existing OTO region, on the same sounding span shown in the roll.
     [[nodiscard]] static std::optional<UtauTailFadeSpan> tailFadeSpan(

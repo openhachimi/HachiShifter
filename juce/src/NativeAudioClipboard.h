@@ -1,5 +1,7 @@
 #pragma once
 #include "NativeAudioLink.h"
+#include "NativeSharedEnvelope.h"
+#include "NativeTrimSource.h"
 namespace hachi
 {
 struct NativeAudioClipboard
@@ -18,6 +20,7 @@ inline NativeAudioClipboard copyNativeAudioNotes(const ProjectData& data,
     for(const auto& track:data.tracks)
     {
         if(!trackShowsAllNativeRegions(track))continue;
+        const auto envelopes = nativeSharedEnvelopes(track);
         struct Placed { const NoteData* note;double start; };
         std::vector<Placed> ordered;
         for(const auto& clip:track.clips)for(const auto& note:clip.notes)
@@ -35,6 +38,7 @@ inline NativeAudioClipboard copyNativeAudioNotes(const ProjectData& data,
         for(auto source:expandedClipParts(parent))
         {
             if(!source.sourceFile.existsAsFile())continue;
+            rememberNativeTrimSource(source);
             std::stable_sort(source.notes.begin(),source.notes.end(),[](const auto& a,const auto& b){return a.startSeconds<b.startSeconds;});
             const auto absoluteStart=source.startSeconds;
             source.startSeconds=0;
@@ -67,7 +71,9 @@ inline NativeAudioClipboard copyNativeAudioNotes(const ProjectData& data,
             {
                 if(!selected(note.id)){flush();continue;}
                 if(!run.empty()&&note.startSeconds>run.back().startSeconds+run.back().durationSeconds+.002)flush();
-                run.push_back(note);
+                auto shaped = note;
+                materializeNativeSharedEnvelope(shaped, envelopes);
+                run.push_back(std::move(shaped));
             }
             flush();
         }

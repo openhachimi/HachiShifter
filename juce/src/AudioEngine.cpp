@@ -1,5 +1,7 @@
+#include "backend/MixedEnvelopeIO.h"
 #include "NativeSourceTimeMap.h"
 #include "NativePitchIdentity.h"
+#include "NativeSharedEnvelope.h"
 #include "AudioEngine.h"
 #include "ClipParts.h"
 #include "TrackGainEnvelope.h"
@@ -26,6 +28,7 @@ double automaticUtauPitchTransitionInset(double leftDuration, double rightDurati
 
 std::optional<std::pair<float, float>> contourAt(const NoteData& note, double localSeconds)
 {
+    if (note.nativeUnpitched) return std::nullopt;
     if (note.contour.empty()) return std::pair { 0.0f, 0.0f };
     const auto right = std::lower_bound(note.contour.begin(), note.contour.end(), localSeconds,
         [](const PitchPoint& point, double time) { return point.timeSeconds < time; });
@@ -65,16 +68,16 @@ float amplitudeGainAt(const std::vector<AmplitudeEnvelopePoint>& envelope,
     const auto right = std::lower_bound(envelope.begin(), envelope.end(), localSeconds,
         [](const auto& point, double time) { return point.timeSeconds < time; });
     if (right == envelope.begin())
-        return apply(std::pow(10.0f, right->gainDb / 20.0f));
+        return apply(backend::envelopeGainFromDb(right->gainDb));
     if (right == envelope.end())
-        return apply(std::pow(10.0f, envelope.back().gainDb / 20.0f));
+        return apply(backend::envelopeGainFromDb(envelope.back().gainDb));
     const auto& left = *(right - 1);
     const auto span = right->timeSeconds - left.timeSeconds;
     const auto amount = span > 1.0e-9
         ? static_cast<float>(juce::jlimit(0.0, 1.0,
             (localSeconds - left.timeSeconds) / span)) : 0.0f;
-    const auto db = left.gainDb + (right->gainDb - left.gainDb) * amount;
-    return apply(std::pow(10.0f, db / 20.0f));
+    const auto db = backend::envelopeDbBetween(left.gainDb,right->gainDb,amount,left.linearToNext);
+    return apply(backend::envelopeGainFromDb(db));
 }
 
 std::pair<float, float> panGains(float pan, bool mono)
@@ -89,13 +92,37 @@ std::pair<float, float> panGains(float pan, bool mono)
              pan < 0.0f ? std::sqrt(1.0f + pan) : 1.0f };
 }
 
+void applyNativeSharedPitch(backend::Mld5FileRenderRequest& request, const ClipData& clip,
+    const SharedPitchLines& lines, double requestOffset = 0.0)
+{
+    const auto period = request.framePeriodMs / 1000.0;
+    for (std::size_t frame = 0; frame < request.targetMidi.size(); ++frame)
+    {
+        if (!(request.targetMidi[frame] > 0.0f)) continue; // retain the unvoiced mask
+        const auto local = std::min(request.targetDurationSeconds, frame * period) - requestOffset;
+        for (const auto& note : clip.notes)
+        {
+            if (local < note.startSeconds - 1.0e-9
+                || local > note.startSeconds + note.durationSeconds + 1.0e-9) continue;
+            const auto* member = lines.memberFor(note.id);
+            if (!member || !member->nativeSharedCurve || !member->renderSharedCurve) continue;
+            request.targetMidi[frame] = member->line->midiAt(clip.startSeconds + local)
+                + static_cast<float>(vibratoCentsAt(note,
+                    juce::jlimit(0.0, note.durationSeconds, local - note.startSeconds)) / 100.0);
+            break;
+        }
+    }
+}
+
 // joinedStart / joinedEnd say that the clip meets its neighbour there with a
 // Melodyne pitch join; see AudioEngine::clipsJoinAt.
 backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const TrackData& track,
                                                   const juce::File& hifiganModelDirectory,
                                                   const backend::OrtExecutionConfig& inference,
                                                   bool joinedStart = false,
-                                                  bool joinedEnd = false)
+                                                  bool joinedEnd = false,
+                                                  const SharedPitchLines* sharedLines = nullptr,
+                                                  const NativeSharedEnvelopes* sharedEnvelopes = nullptr)
 {
     backend::Mld5FileRenderRequest request;
     request.sourceFile = clip.sourceFile;
@@ -103,7 +130,8 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
     request.sourceDurationSeconds = clip.sourceDurationSeconds > 1.0e-9
         ? clip.sourceDurationSeconds : clip.durationSeconds;
     request.targetDurationSeconds = clip.durationSeconds;
-    request.preserveUneditedSource = std::all_of(clip.notes.begin(), clip.notes.end(), nativeSourcePitchIsKnown);
+    request.preserveUneditedSource = std::all_of(clip.notes.begin(), clip.notes.end(), [](const auto& note)
+    { return nativeSourcePitchIsKnown(note) || nativePendingPitchIsNeutral(note); });
     request.hifiganModelDirectory = hifiganModelDirectory;
     request.inference = inference;
     // The neural decoder fades each edge over 3 ms so that a clip boundary
@@ -141,6 +169,8 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
     }
     request.stretchAlgorithm = static_cast<int>(track.stretchAlgorithm);
     request.normalizeVolume = track.normalizeVolume;
+    request.nsfSmoothPitchTransitions = track.nsfSmoothPitchTransitions;
+    request.nsfNoiseProtection = track.nsfNoiseProtection;
     // Decoding a clip on its own can leave its level below the source's; the
     // phrase-at-a-time order does not have that problem, because the model sees
     // the whole phrase.  The floor was raised in the per-clip order to
@@ -158,6 +188,8 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
     request.sourceMidi.resize(static_cast<std::size_t>(frameCount), 0.0f);
     request.targetMidi.resize(static_cast<std::size_t>(frameCount), 0.0f);
     request.formantSemitones.resize(static_cast<std::size_t>(frameCount), 0.0f);
+    const auto ownEnvelopes = sharedEnvelopes ? NativeSharedEnvelopes{} : nativeSharedEnvelopes(track);
+    const auto& envelopes = sharedEnvelopes ? *sharedEnvelopes : ownEnvelopes;
     request.noteGain.resize(static_cast<std::size_t>(frameCount), 1.0f);
     request.tension.resize(static_cast<std::size_t>(frameCount), 0.0f);
     request.breath.resize(static_cast<std::size_t>(frameCount), 0.0f);
@@ -173,7 +205,9 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
             request.formantSemitones[static_cast<std::size_t>(frame)] = note.formantSemitones;
             const auto clampedLocal = juce::jlimit(0.0, note.durationSeconds, local);
             request.noteGain[static_cast<std::size_t>(frame)] = note.gain
-                * amplitudeGainAt(note.amplitudeEnvelope, clampedLocal, note.amplitudeEnvelopeBasePercent);
+                * (envelopes.contains(note.id) ? backend::envelopeGainFromDb(nativeEnvelopeDbAt(*envelopes.at(note.id).points, clip.startSeconds + time))
+                    : amplitudeGainAt(note.amplitudeEnvelope, clampedLocal, note.amplitudeEnvelopeBasePercent))
+                * backend::nativeEnvelopeGain(note.nativeEnvelope,clampedLocal,note.durationSeconds);
             request.tension[static_cast<std::size_t>(frame)] = note.tension;
             request.breath[static_cast<std::size_t>(frame)] = note.breath;
             // Keep adjacent robust notes as separate detector regions.  A
@@ -197,7 +231,7 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
 
     for (const auto& joinedNote : clip.notes)
     {
-        if (!joinedNote.connectedToPrevious) continue;
+        if (!joinedNote.connectedToPrevious || joinedNote.nativeIndependentPitch) continue;
         const NoteData* previousNote = nullptr;
         auto previousEnd = -std::numeric_limits<double>::infinity();
         const auto joinedStart = clip.startSeconds + joinedNote.startSeconds;
@@ -213,7 +247,7 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
                     previousNote = &candidate;
                 }
             }
-        if (previousNote != nullptr)
+        if (previousNote != nullptr && !previousNote->nativeIndependentPitch)
         {
             const auto previousCents = contourAt(*previousNote, previousNote->durationSeconds);
             const auto previousPitch = previousNote->midiNote + (previousCents
@@ -296,6 +330,8 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
             }
         }
     }
+    const auto localLines = sharedLines ? SharedPitchLines{} : sharedPitchLines(track);
+    applyNativeSharedPitch(request, clip, sharedLines ? *sharedLines : localLines);
     return request;
 }
 
@@ -333,12 +369,15 @@ backend::Mld5FileRenderRequest AudioEngine::mergedRequestFor(
     request.pitchBackend = backend::PitchRenderBackend::nsfHifigan;
     request.stretchAlgorithm = static_cast<int>(track.stretchAlgorithm);
     request.normalizeVolume = track.normalizeVolume;
+    request.nsfSmoothPitchTransitions = track.nsfSmoothPitchTransitions;
+    request.nsfNoiseProtection = track.nsfNoiseProtection;
     request.isGlideMerged = true;
     // The variable-hop paths read the two sides of a source discontinuity in
     // order, choosing the old source before a seam and the new one after it,
     // so their anchors must not be sorted together across the seam.
     const auto preserveSourceSeams = track.stretchAlgorithm == StretchAlgorithm::variableMelHop
-        || track.stretchAlgorithm == StretchAlgorithm::nsfShiftThenSplice;
+        || track.stretchAlgorithm == StretchAlgorithm::nsfShiftThenSplice
+        || track.stretchAlgorithm == StretchAlgorithm::hifiShifterMel;
 
     for (std::size_t index = 0; index < group.size(); ++index)
     {
@@ -445,6 +484,7 @@ backend::Mld5FileRenderRequest AudioEngine::mergedRequestFor(
     request.sourceMidi.assign(static_cast<std::size_t>(frameCount), 0.0f);
     request.targetMidi.assign(static_cast<std::size_t>(frameCount), 0.0f);
     request.formantSemitones.assign(static_cast<std::size_t>(frameCount), 0.0f);
+    const auto envelopes = nativeSharedEnvelopes(track);
     request.noteGain.assign(static_cast<std::size_t>(frameCount), 1.0f);
     request.tension.assign(static_cast<std::size_t>(frameCount), 0.0f);
     request.breath.assign(static_cast<std::size_t>(frameCount), 0.0f);
@@ -465,23 +505,17 @@ backend::Mld5FileRenderRequest AudioEngine::mergedRequestFor(
             request.formantSemitones[static_cast<std::size_t>(frame)] = note.formantSemitones;
             const auto clampedLocal = juce::jlimit(0.0, note.durationSeconds, noteLocal);
             request.noteGain[static_cast<std::size_t>(frame)] = note.gain
-                * amplitudeGainAt(note.amplitudeEnvelope, clampedLocal, note.amplitudeEnvelopeBasePercent);
+                * (envelopes.contains(note.id) ? backend::envelopeGainFromDb(nativeEnvelopeDbAt(*envelopes.at(note.id).points, clip.startSeconds + local))
+                    : amplitudeGainAt(note.amplitudeEnvelope, clampedLocal, note.amplitudeEnvelopeBasePercent))
+                * backend::nativeEnvelopeGain(note.nativeEnvelope,clampedLocal,note.durationSeconds);
             request.tension[static_cast<std::size_t>(frame)] = note.tension;
             request.breath[static_cast<std::size_t>(frame)] = note.breath;
             request.robustPitchCurve[static_cast<std::size_t>(frame)] =
                 note.robustPitchCurve ? static_cast<float>(index + 1) : 0.0f;
             const auto cents = contourAt(note, clampedLocal);
-            if (!cents)
-            {
-                // Unvoiced: carry the last voiced pitch forward so the model
-                // still has a carrier reference under the consonant audio.
-                if (lastSourceMidi > 0.0f)
-                {
-                    request.sourceMidi[static_cast<std::size_t>(frame)] = lastSourceMidi;
-                    request.targetMidi[static_cast<std::size_t>(frame)] = lastTargetMidi;
-                }
-                continue;
-            }
+            // A joined phrase must preserve the same UV mask as a single clip.
+            // Carrying the previous vowel F0 into a fricative makes it buzz.
+            if (!cents) break;
             const auto sourceCenter = note.sourceMidiCenter >= 0.0f
                 ? note.sourceMidiCenter : note.midiNote;
             lastSourceMidi = sourceCenter + cents->first / 100.0f;
@@ -498,6 +532,8 @@ backend::Mld5FileRenderRequest AudioEngine::mergedRequestFor(
     {
         const auto& previousClip = *group[index - 1];
         const auto& nextClip = *group[index];
+        if ((!previousClip.notes.empty() && previousClip.notes.back().nativeIndependentPitch)
+            || (!nextClip.notes.empty() && nextClip.notes.front().nativeIndependentPitch)) continue;
         auto previousPitch = previousClip.notes.empty()
             ? 0.0 : static_cast<double>(previousClip.notes.back().midiNote);
         if (!previousClip.notes.empty())
@@ -523,6 +559,9 @@ backend::Mld5FileRenderRequest AudioEngine::mergedRequestFor(
             target = static_cast<float>(previousPitch + (target - previousPitch) * smooth);
         }
     }
+    const auto lines = sharedPitchLines(track);
+    for (std::size_t index = 0; index < group.size(); ++index)
+        applyNativeSharedPitch(request, *group[index], lines, targetOffsets[index]);
     return request;
 }
 
@@ -568,6 +607,8 @@ void writeNoteRenderFields(juce::MemoryOutputStream& stream, const NoteData& not
     stream.writeDouble(note.vibratoPhasePercent);
     stream.writeDouble(note.vibratoOffsetPercent);
     stream.writeDouble(note.vibratoEndPercent);
+    stream.writeDouble(note.vibratoReferenceDurationSeconds);
+    stream.writeDouble(note.vibratoTimeOffsetSeconds);
     stream.writeBool(note.utauFlagSplit);
     stream.writeBool(note.utauFlagCurveEnabled);
     for (const auto& curve : note.utauFlagCurves)
@@ -586,6 +627,9 @@ void writeNoteRenderFields(juce::MemoryOutputStream& stream, const NoteData& not
     }
     stream.writeBool(note.utauSplice);
     stream.writeBool(note.utauAutoPitchTransition);
+    stream.writeBool(note.nativeIndependentPitch);
+    stream.writeBool(note.nativeUnpitched);
+    stream.writeBool(note.nativePitchHandlesPlaced);
     for (const auto& text : { note.utauRegionFlags1, note.utauRegionFlags2,
                               note.utauRegionFlags3, note.utauRegionFlags4 })
     {
@@ -617,7 +661,10 @@ void writeNoteRenderFields(juce::MemoryOutputStream& stream, const NoteData& not
     if (withAmplitudeEnvelope)
     {
         stream.writeFloat(note.amplitudeEnvelopeBasePercent);
+        stream.writeString(juce::JSON::toString(backend::nativeEnvelopeToVar(note.nativeEnvelope),true,17));
         stream.writeInt(note.utauTailFadeMode);
+        stream.writeString(backend::mixedEnvelopeText(note.utauTailFade));
+        stream.writeString(backend::mixedEnvelopeText(note.utauTailFade.head));
         if(note.utauTailFadeMode!=0)stream.writeString("oto-single-tail-v2");
         stream.writeDouble(note.utauTailFade.startFraction);
         stream.writeDouble(note.utauTailFade.endFraction);
@@ -646,6 +693,7 @@ void writeNoteRenderFields(juce::MemoryOutputStream& stream, const NoteData& not
             stream.writeDouble(point.timeSeconds);
             stream.writeFloat(point.gainDb);
             stream.writeBool(point.linearToNext);
+            stream.writeBool(point.nativeSeamAnchor);
         }
     }
     for (const auto& point : note.contour)
@@ -716,6 +764,8 @@ std::string voicebankRenderStamp(const TrackData& track)
                 && !name.equalsIgnoreCase("oto.jie.ini")
                 && !name.equalsIgnoreCase("oto4.ini")
                 && !name.equalsIgnoreCase("otomou.ini")
+                && !name.equalsIgnoreCase("presamp.ini")
+                && !name.equalsIgnoreCase("prefix.map")
                 && !file.hasFileExtension("yaml;json;onnx;emb;txt;wav;flac;aif;aiff");
         });
         otoFiles.sort();
@@ -731,6 +781,30 @@ std::string voicebankRenderStamp(const TrackData& track)
     return std::string(static_cast<const char*>(stream.getData()), stream.getDataSize());
 }
 
+void writeNativePitchContext(juce::MemoryOutputStream& stream, const ClipData& clip, const TrackData& track)
+{
+    if (!trackShowsAllNativeRegions(track)) return;
+    stream.writeString("native-shared-pitch-envelope-131");
+    const auto group = clip.nativePitchGroupId.isNotEmpty() ? clip.nativePitchGroupId : clip.id;
+    std::vector<NoteData> notes;
+    for (const auto& parent : track.clips)
+        for (const auto& part : expandedClipParts(parent))
+        {
+            const auto otherGroup = part.nativePitchGroupId.isNotEmpty() ? part.nativePitchGroupId
+                : parent.nativeAudioLinked ? parent.id : part.id;
+            if (otherGroup != group) continue;
+            for (auto note : part.notes)
+            {
+                note.startSeconds += part.startSeconds;
+                notes.push_back(std::move(note));
+            }
+        }
+    std::stable_sort(notes.begin(), notes.end(), [](const auto& a, const auto& b)
+    { return a.startSeconds == b.startSeconds ? a.id < b.id : a.startSeconds < b.startSeconds; });
+    stream.writeInt64(static_cast<juce::int64>(notes.size()));
+    for (const auto& note : notes) writeNoteRenderFields(stream, note);
+}
+
 std::string renderKey(const ClipData& clip, const TrackData& track,
                       const juce::File& hifiganModelDirectory,
                       const backend::OrtExecutionConfig& inference,
@@ -739,8 +813,9 @@ std::string renderKey(const ClipData& clip, const TrackData& track,
                       const juce::File& wavtool = {}, const std::string* voicebankStamp = nullptr)
 {
     juce::MemoryOutputStream stream;
+    writeNativePitchContext(stream, clip, track);
     if (!trackUsesVoicebankSynthesis(track) && !trackIsDiffSinger(track))
-        stream.writeInt(2026100601); // Native source-preservation render semantics.
+        stream.writeInt(2026100711); // Free-crop sample alignment and source-preservation semantics.
     if (trackIsDiffSinger(track)) stream.writeString(juce::JSON::toString(dsOptions));
     // The render order reaches the per-clip render through matchNsfSourceLevel,
     // so two orders are two different buffers and must not share a cache entry.
@@ -775,7 +850,11 @@ std::string renderKey(const ClipData& clip, const TrackData& track,
     stream.writeInt(static_cast<int>(track.pitchAlgorithm));
     stream.writeInt(static_cast<int>(track.stretchAlgorithm));
     stream.writeBool(track.normalizeVolume);
+    stream.writeBool(track.nsfSmoothPitchTransitions);
+    stream.writeBool(track.nsfNoiseProtection);
+    stream.writeBool(track.nativeNsfAudio);
     stream.writeInt(static_cast<int>(track.utauMode));
+    stream.writeBool(track.chineseCvvc);
     stream.writeInt(static_cast<int>(effectiveUtauOutputEngine(track, defaultEngine)));
     const auto selectedResampler = effectiveUtauResampler(track, utauResamplerFile);
     const auto selectedWavtool = effectiveUtauWavtool(track, wavtool);
@@ -850,6 +929,7 @@ backend::UtauRenderRequest makeUtauRequest(const ClipData& clip, const TrackData
     request.diffSingerDictionary = track.diffSingerDictionary;
     request.resamplerExecutable = resampler;
     request.fourRegion = utauModeUsesRegions(track.utauMode);
+    request.chineseCvvc = track.chineseCvvc && track.utauMode == UtauMode::classic && !trackIsDiffSinger(track);
     request.consonantClasses = track.utauMode == UtauMode::mou;
     request.targetDurationSeconds = clip.durationSeconds;
     request.bpm = project.bpm;
@@ -1168,7 +1248,7 @@ backend::UtauRenderRequest makeUtauRequest(const ClipData& clip, const TrackData
     for (const auto& note : clip.notes)
     {
         backend::UtauNoteRenderSpec renderedNote;
-        renderedNote.alias = note.label;
+        renderedNote.alias = note.nativeUnpitched ? "R" : note.label;
         renderedNote.diffSingerTiming = note.diffSingerTiming;
         renderedNote.diffSingerPronunciation = note.diffSingerPronunciation;
         renderedNote.diffSingerContext = clip.id;
@@ -1580,7 +1660,7 @@ std::vector<backend::UtauNoteRenderSpec> AudioEngine::diagnosticUtauRequestNotes
             if (clip.id == clipId)
             {
                 if (selection.empty()) return makeUtauRequest(clip, track, {}, project).notes;
-                if (trackIsDiffSinger(track))
+                if (trackIsDiffSinger(track) || (track.chineseCvvc && track.utauMode == UtauMode::classic))
                 {
                     auto context=clip;
                     for (auto& note:context.notes)
@@ -1646,12 +1726,15 @@ std::uint64_t AudioEngine::nativeClipWaveformHash(const ClipData& viewClip, cons
 {
     const auto clip = nativeAudioPreviewClip(viewClip);
     juce::MemoryOutputStream stream;
+    writeNativePitchContext(stream, clip, track);
     stream.writeString(track.id); stream.writeString(clip.sourceFile.getFullPathName());
     stream.writeDouble(clip.startSeconds); stream.writeDouble(clip.sourceOffsetSeconds);
     stream.writeDouble(clip.sourceDurationSeconds); stream.writeDouble(clip.durationSeconds);
     stream.writeInt(static_cast<int>(track.pitchAlgorithm));
     stream.writeInt(static_cast<int>(track.stretchAlgorithm));
     stream.writeInt(static_cast<int>(track.renderOrder)); stream.writeBool(track.normalizeVolume);
+    stream.writeBool(track.nsfSmoothPitchTransitions);
+    stream.writeBool(track.nsfNoiseProtection);
     stream.writeInt64(static_cast<juce::int64>(clip.sourceTimeMap.size()));
     for(const auto& point:clip.sourceTimeMap)
     {stream.writeDouble(point.targetSeconds);stream.writeDouble(point.sourceSeconds);}
@@ -1763,6 +1846,8 @@ std::vector<float> AudioEngine::diagnosticNativeTargetMidi(
                                            backend::OrtExecutionConfig{});
     return request.targetMidi;
 }
+backend::Mld5FileRenderRequest AudioEngine::diagnosticNativeRequest(const ClipData& clip,const TrackData& track)
+{return makeRenderRequest(clip,track,{},{});}
 
 void AudioEngine::syncProject(const ProjectData& project, bool diffSingerExport,
                               WavExportComponent component)
@@ -1930,8 +2015,7 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
         for (auto& track : contentProject->tracks)
         {
             // Voicebanks synthesize notes placed in the extended empty area.
-            const auto voicebank = !track.accompaniment && (track.pitchAlgorithm == PitchAlgorithm::utau
-                || (track.pitchAlgorithm == PitchAlgorithm::nsfHifigan && track.voicebankDirectory.isDirectory()));
+            const auto voicebank = trackUsesVoicebankSynthesis(track);
             if (voicebank) continue;
             std::erase_if(track.clips, [](const auto& clip) { return clip.audioDurationSeconds == 0.0; });
             for (auto& clip : track.clips)
@@ -2036,6 +2120,8 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
     for (const auto& track : project.tracks)
     {
         auto meter = std::make_shared<std::atomic<float>>(0.0f);
+        const auto nativePitchLines = trackShowsAllNativeRegions(track) ? sharedPitchLines(track) : SharedPitchLines{};
+        const auto nativeEnvelopes = nativeSharedEnvelopes(track);
         trackMeters[track.id.toStdString()] = meter;
         if (!trackIsAudible(track.muted, track.solo, anySolo, track.referenceOnly,
                             track.id == auditionTrackId))
@@ -2043,6 +2129,8 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
         std::vector<const ClipData*> orderedClips;
         orderedClips.reserve(track.clips.size());
         for (const auto& clip : track.clips) orderedClips.push_back(&clip);
+        // Empty tracks have no render requests or OTO dependencies to stamp.
+        if (orderedClips.empty()) continue;
         std::stable_sort(orderedClips.begin(), orderedClips.end(), [](const auto* left, const auto* right)
         {
             return left->startSeconds < right->startSeconds;
@@ -2142,7 +2230,7 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
                 else
                 {
                     nativeRequest = makeRenderRequest(clip, track, hifiganModelDirectory,
-                        inferenceConfiguration, joinedStart, joinedEnd);
+                        inferenceConfiguration, joinedStart, joinedEnd, &nativePitchLines, &nativeEnvelopes);
                     nativeRequest->exportComponent = renderComponent;
                     const auto sourceStart = juce::jlimit<juce::int64>(0, reader->lengthInSamples - 1,
                         static_cast<juce::int64>(std::llround(clip.sourceOffsetSeconds * reader->sampleRate)));
@@ -2238,7 +2326,8 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
             // a chance to render.  An empty selection therefore schedules no
             // new UTAU work; previously completed audio remains available via
             // fallbackRendered/playbackFallbackByClip.
-            const auto dsContext = trackIsDiffSinger(track) && hasUtauSelection
+            const auto dsContext = (trackIsDiffSinger(track)
+                || (track.chineseCvvc && track.utauMode == UtauMode::classic)) && hasUtauSelection
                 && std::any_of(clip.notes.begin(),clip.notes.end(),[this](const auto& note)
                     {return utauRenderNoteSelection.contains(note.id.toStdString());});
             if (dsContext)
@@ -2280,12 +2369,15 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
             // note that had already been played went on playing it.
             const auto anythingSounds = std::any_of(
                 renderClip.notes.begin(), renderClip.notes.end(),
-                [](const auto& note) { return !backend::isRestLyric(note.label); });
+                [this, dsContext](const auto& note) {
+                    return (!dsContext || utauRenderNoteSelection.contains(note.id.toStdString()))
+                        && !backend::isRestLyric(note.label);
+                });
             if (utauTrack && !anythingSounds)
                 loaded->fallbackRendered.reset();
             auto requestClip = renderClip;
             const auto renderTimelineOffset = hasUtauSelection
-                ? startRequestAtSelection(requestClip, trackIsDiffSinger(track)) : 0.0;
+                ? startRequestAtSelection(requestClip, trackIsDiffSinger(track) || (track.chineseCvvc && track.utauMode == UtauMode::classic)) : 0.0;
             // Every compose path must use a duration-preserving, formant-preserving render.
             // Until a selected external engine is present, the native mld5 renderer is the
             // deterministic model-free fallback rather than device-rate resampling, which
@@ -2548,7 +2640,7 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
                     {
                         auto request = nativeRequest ? std::move(*nativeRequest)
                             : makeRenderRequest(clip, track, hifiganModelDirectory,
-                                inferenceConfiguration, joinedStart, joinedEnd);
+                                inferenceConfiguration, joinedStart, joinedEnd, &nativePitchLines, &nativeEnvelopes);
                         request.exportComponent = renderComponent;
                         renderService.renderMld5File(std::move(request), publish, std::move(schedule));
                     }

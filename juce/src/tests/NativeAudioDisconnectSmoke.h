@@ -34,14 +34,25 @@ inline bool runNativeAudioDisconnectSmoke(const juce::File& folder)
         if(y.second.id!=id||!near(x.first.startSeconds+x.second.startSeconds,y.first.startSeconds+y.second.startSeconds)
             ||!near(x.second.durationSeconds,y.second.durationSeconds)||!near(x.second.midiNote,y.second.midiNote)
             ||x.second.contour.size()!=y.second.contour.size()||x.second.pitchControlPoints.size()!=y.second.pitchControlPoints.size()
-            ||x.second.amplitudeEnvelope.size()!=y.second.amplitudeEnvelope.size()||!near(x.second.gain,y.second.gain)
+            ||!near(x.second.gain,y.second.gain)
             ||!near(x.second.formantSemitones,y.second.formantSemitones)||!near(x.second.tension,y.second.tension))return false;
         for(double t=0;t<=x.second.durationSeconds;t+=.005)
             if(!near(x.first.sourceOffsetSeconds+nativeSourceTimeAt(nativeClipClock(x.first),x.second.startSeconds+t),
                 y.first.sourceOffsetSeconds+nativeSourceTimeAt(nativeClipClock(y.first),y.second.startSeconds+t)))return false;
-        for(std::size_t i=0;i<x.second.amplitudeEnvelope.size();++i)
-            if(!near(x.second.amplitudeEnvelope[i].timeSeconds,y.second.amplitudeEnvelope[i].timeSeconds)
-                ||!near(x.second.amplitudeEnvelope[i].gainDb,y.second.amplitudeEnvelope[i].gainDb))return false;
+        // Disconnect may materialize the shared group envelope into local
+        // endpoints. Compare the heard curve, not its previous storage layout.
+        const auto envelopeAt=[&](const ProjectData& d,const auto& placed,double t)
+        {
+            for(const auto& tr:d.tracks)
+            {
+                const auto groups=nativeSharedEnvelopes(tr);
+                if(const auto p=groups.find(id);p!=groups.end())
+                    return nativeEnvelopeDbAt(*p->second.points,placed.first.startSeconds+placed.second.startSeconds+t);
+            }
+            return nativeEnvelopeDbAt(scaledAmplitudeEnvelope(placed.second.amplitudeEnvelope,placed.second.amplitudeEnvelopeBasePercent),t);
+        };
+        for(double t=0;t<=x.second.durationSeconds;t+=.005)
+            if(!near(envelopeAt(a,x,t),envelopeAt(b,y,t)))return false;
         for(std::size_t i=0;i<x.second.contour.size();++i)
             if(!near(x.second.contour[i].timeSeconds,y.second.contour[i].timeSeconds)
                 ||!near(x.second.contour[i].relativeCents,y.second.contour[i].relativeCents))return false;

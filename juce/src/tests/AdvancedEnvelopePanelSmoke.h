@@ -26,7 +26,7 @@ inline bool MainComponent::diagnosticAdvancedEnvelopePanel(const juce::File& fol
     bezier.control1Time=.15;bezier.control2Time=.8;bezier.control1Progress=.7;bezier.control2Progress=.95;
     check("bezier_time_is_inverted",backend::tailFadeGain(2,.5,0,1,bezier)<.3);
     AdvancedEnvelopePanel customPanel({{"custom","Bezier",{0,1},{{0,0,true},{1,0,false}}, {}}},1,2,bezier,false,folder.getChildFile("presets-"+juce::Uuid().toString()+".json"));
-    check("shape_menu_has_only_line_and_curve",customPanel.diagnosticShapeCount()==2);
+    check("shape_menu_has_line_curve_and_mixed",customPanel.diagnosticShapeCount()==3);
     customPanel.setValues(2,settings);check("unified_curve_keeps_legacy_s_exact",customPanel.values()==settings&&customPanel.mode()==2);
     customPanel.diagnosticCurveControl(1,20);check("legacy_s_handles_become_editable_curve",customPanel.values().customCurve&&near(customPanel.values().control1Progress,.2)&&near(customPanel.values().curvePower,1));
     customPanel.diagnosticSelectShape(1);customPanel.diagnosticSelectShape(2);check("curve_menu_opens_handle_editor",customPanel.mode()==2&&customPanel.values().customCurve);
@@ -58,7 +58,7 @@ inline bool MainComponent::diagnosticAdvancedEnvelopePanel(const juce::File& fol
     const auto legacyFile=folder.getChildFile("legacy-presets-"+juce::Uuid().toString()+".json");
     check("legacy_s_preset_fixture",TailFadePresetStore(legacyFile).add(legacyPreset,libraryError));
     AdvancedEnvelopePanel legacyPanel({},1,1,{},false,legacyFile);legacyPanel.diagnosticPreset(100);
-    check("legacy_s_preset_maps_to_unified_curve",legacyPanel.diagnosticShapeCount()==2&&legacyPanel.mode()==2&&legacyPanel.values()==settings);
+    check("legacy_s_preset_maps_to_unified_curve",legacyPanel.diagnosticShapeCount()==3&&legacyPanel.mode()==2&&legacyPanel.values()==settings);
     check("library_second_writer_preserves_first_preset",TailFadePresetStore(libraryFile).add(savedPreset,libraryError)&&library.load(reopened,libraryError)&&reopened.size()==2);
     check("library_delete_preserves_other_preset",library.remove(savedPreset.id,libraryError)&&library.load(reopened,libraryError)&&reopened.size()==1);
     libraryFile.replaceWithText("broken json");const auto broken=libraryFile.loadFileAsString();savedPreset.name="new";
@@ -209,6 +209,128 @@ inline bool MainComponent::diagnosticAdvancedEnvelopePanel(const juce::File& fol
             return backend::envelopeGainFromDb(db);
         })));
     }
+
+    backend::TailFadeSettings mixedSettings;mixedSettings.mixed=true;
+    mixedSettings.knots={{.25,.8,true},{.75,.2,false}};
+    mixedSettings.head.mode=2;mixedSettings.head.mixed=true;
+    mixedSettings.head.knots={{.4,1.3,false},{.8,.7,true}};
+    check("mixed_settings_valid",mixedSettings.valid());
+    check("mixed_line_segment_exact",near(backend::tailFadeGain(2,.125,0,1,mixedSettings),.9));
+    check("mixed_curve_segment_exact",near(backend::tailFadeGain(2,.375,0,1,mixedSettings),.70625));
+    check("mixed_last_line_exact",near(backend::tailFadeGain(2,.875,0,1,mixedSettings),.1));
+    check("mixed_knot_continuity",near(backend::tailFadeGain(2,.25-1.e-7,0,1,mixedSettings),backend::tailFadeGain(2,.25+1.e-7,0,1,mixedSettings)));
+    check("mixed_scales_with_oto_span",near(backend::tailFadeGain(2,2.75,2,4,mixedSettings),.70625));
+    check("mixed_head_can_rise_and_fall",near(backend::headEnvelopeGain(.4,0,1,mixedSettings.head,[](double){return 1.f;}),1.3));
+    auto badMixed=mixedSettings;badMixed.knots[1].time=.1;check("mixed_unsorted_points_rejected",!badMixed.valid());
+    badMixed=mixedSettings;badMixed.knots[0].gain=std::numeric_limits<double>::quiet_NaN();check("mixed_nonfinite_points_rejected",!badMixed.valid());
+    const auto mixedLibrary=folder.getChildFile("mixed-library-"+juce::Uuid().toString()+".json");
+    AdvancedEnvelopePanel mixedPanel({{"mixed","Mixed",{.4,1.2},{{-.1,0,true},{1.2,0,true}}, {},backend::UtauTailFadeSpan{-.1,.3}}},1,2,mixedSettings,false,mixedLibrary);
+    check("mixed_panel_initial_state",mixedPanel.values()==mixedSettings&&mixedPanel.mode()==2);
+    mixedPanel.diagnosticAddKnot(.5,1.4);check("mixed_add_point",mixedPanel.values().knots.size()==3&&near(mixedPanel.values().knots[1].gain,1.4));
+    mixedPanel.diagnosticMoveKnot(2,.9,.6);check("mixed_drag_point_cannot_cross_neighbor",mixedPanel.values().knots[1].time<mixedPanel.values().knots[2].time&&mixedPanel.values().valid());
+    mixedPanel.diagnosticSegment(0,true);check("mixed_independent_segment_type",mixedPanel.values().firstSegmentCurved&&mixedPanel.values().knots.back().curvedToNext==false);
+    mixedPanel.diagnosticDeleteKnot(2);check("mixed_delete_interior_point",mixedPanel.values().knots.size()==2);
+    mixedPanel.diagnosticDeleteKnot(0);check("mixed_endpoints_cannot_be_deleted",mixedPanel.values().knots.size()==2);
+    const auto tailDraft=mixedPanel.values();mixedPanel.diagnosticSection(true);
+    check("mixed_switch_head_preserves_tail",mixedPanel.values()==tailDraft);
+    mixedPanel.diagnosticAddKnot(.6,.9);mixedPanel.diagnosticSegment(1,true);const auto mixedBoth=mixedPanel.values();
+    check("mixed_head_edits_independent",mixedBoth.knots==tailDraft.knots&&mixedBoth.head.knots.size()==3);
+    check("mixed_preset_save",mixedPanel.diagnosticSavePreset("Mixed head and tail"));
+    AdvancedEnvelopePanel mixedRecall({},1,0,{},false,mixedLibrary);mixedRecall.diagnosticPreset(100);
+    check("mixed_preset_roundtrip",mixedRecall.values()==mixedBoth&&mixedRecall.mode()==2);
+    mixedPanel.diagnosticSection(false);mixedPanel.setSize(740,660);check("mixed_controls_fit",mixedPanel.diagnosticControlsFit());
+    {auto out=folder.getChildFile("mixed-envelope-panel.png").createOutputStream();juce::PNGImageFormat png;check("mixed_snapshot",out&&png.writeImageToStream(mixedPanel.createComponentSnapshot(mixedPanel.getLocalBounds(),true,1.5f),*out));}
+    ProjectModel mixedModel;mixedModel.resetDocument(data);const auto mixedBefore=mixedModel.contentFingerprint();
+    check("mixed_apply_batch",mixedModel.setNotesTailFade({"n2","n4"},2,mixedBoth));
+    check("mixed_undo",mixedModel.undo()&&mixedModel.contentFingerprint()==mixedBefore);mixedModel.redo();
+    check("mixed_save",mixedModel.save(folder.getChildFile("mixed.hjpx"),error));ProjectModel mixedLoaded;
+    check("mixed_project_roundtrip",mixedLoaded.load(folder.getChildFile("mixed.hjpx"),error)&&mixedLoaded.snapshot().tracks[0].clips[0].notes[0].utauTailFade==mixedBoth);
+    edited=plain;edited.utauTailFade=mixedBoth;
+    check("mixed_invalidates_mix_not_raw_cache",AudioEngine::utauNoteRenderHash(plain)!=AudioEngine::utauNoteRenderHash(edited)&&AudioEngine::utauNoteAudioHash(plain)==AudioEngine::utauNoteAudioHash(edited));
+    auto changedSegment=edited;changedSegment.utauTailFade.firstSegmentCurved=!changedSegment.utauTailFade.firstSegmentCurved;
+    check("mixed_segment_change_invalidates_cache",AudioEngine::utauNoteRenderHash(edited)!=AudioEngine::utauNoteRenderHash(changedSegment));
+    auto tailOnly=mixedSettings;tailOnly.head.mode=0;
+    const auto mixedPicture=backend::tailFadePicture(std::vector<AmplitudeEnvelopePoint>{{0,0,true},{1,0,true}},2,0,1,tailOnly);
+    check("mixed_picture_matches_gain",near(backend::envelopeGainFromDb(PianoRollComponent::diagnosticAmplitudeDbAt(mixedPicture,.375)),.70625));
+    if(span)
+    {
+        request.notes[0].tailFadeMode=2;request.notes[0].tailFadeSettings=tailOnly;
+        bool callback=false,matched=true;
+        request.notePiece=[&](size_t,const juce::AudioBuffer<float>&,double,double,const std::function<float(double)>& gain,const std::function<float(double)>&){
+            callback=true;
+            for(const auto u:{.125,.25,.375,.75,.875})
+            {
+                const auto t=span->startSeconds+(span->endSeconds-span->startSeconds)*u;
+                const auto expected=backend::advancedEnvelopeGain(2,t,span->startSeconds,span->endSeconds,0,0,tailOnly,[](double at){return backend::envelopeGainFromDb(at<=.6?0.f:backend::envelopeDbBetween(0,-60,(float)((at-.6)/.6),false));});
+                matched&=near(gain(t),expected);
+            }
+        };
+        const auto rendered=backend::UtauRenderer::render(request);
+        check("mixed_actual_mixer_matches_preview",callback&&matched&&rendered.buffer.getNumSamples()>0);
+    }
+
+
+    // Each mixed segment owns its cubic handles; old S curves use the same defaults.
+    auto segmented=mixedSettings;segmented.firstSegmentCurved=true;
+    segmented.firstBezier={.2,.4,.8,.9};segmented.knots[0].bezier={.1,.6,.2,.9};
+    segmented.head.firstSegmentCurved=true;segmented.head.firstBezier={.15,.2,.7,.95};
+    segmented.head.knots[0].bezier={.2,.35,.75,.9};segmented.head.knots[0].curvedToNext=true;
+    check("segment_bezier_settings_valid",segmented.valid());
+    // Parametric t=.5 gives x=.2375, y=.6875 for this cubic.
+    check("segment_bezier_inverts_local_time",near(backend::tailFadeGain(2,.25+.5*.2375,0,1,segmented),.8-.6*.6875));
+    check("segment_bezier_preserves_neighbor_line",near(backend::tailFadeGain(2,.875,0,1,segmented),.1));
+    auto invalidBezier=segmented;invalidBezier.knots[0].bezier.control1Time=.9;
+    check("segment_bezier_reversed_handles_rejected",!invalidBezier.valid());
+    invalidBezier=segmented;invalidBezier.firstBezier.control1Progress=std::numeric_limits<double>::quiet_NaN();
+    check("segment_bezier_nonfinite_handles_rejected",!invalidBezier.valid());
+    auto oldMixed=backend::mixedEnvelopeToVar(mixedSettings);oldMixed.getDynamicObject()->removeProperty("firstBezier");
+    for(auto& p:*oldMixed.getDynamicObject()->getProperty("knots").getArray())p.getDynamicObject()->removeProperty("bezier");
+    backend::TailFadeSettings legacyMixed;
+    check("legacy_mixed_s_controls_default",backend::mixedEnvelopeFromVar(oldMixed,legacyMixed)&&legacyMixed.firstBezier==backend::EnvelopeBezier{}
+        &&near(backend::tailFadeGain(2,.375,0,1,legacyMixed),.70625));
+    const auto segmentLibrary=folder.getChildFile("segment-bezier-library-"+juce::Uuid().toString()+".json");
+    AdvancedEnvelopePanel segmentPanel({{"segment","Bezier segments",{.4,1.2},{{-.1,0,true},{1.2,0,true}}, {},backend::UtauTailFadeSpan{-.1,.3}}},1,2,segmented,false,segmentLibrary);
+    segmentPanel.diagnosticSegment(1,true);segmentPanel.diagnosticCurveControl(1,50);
+    check("segment_parameter_edits_only_selected_segment",near(segmentPanel.values().knots[0].bezier.control1Progress,.5)
+        &&segmentPanel.values().firstBezier==segmented.firstBezier&&segmentPanel.values().head==segmented.head);
+    const auto priorHandle=segmentPanel.values().knots[0].bezier;
+    segmentPanel.diagnosticDragCurveHandle(1,3,3);
+    check("segment_handle_drag_changes_time_and_progress",segmentPanel.values().knots[0].bezier.control1Time>priorHandle.control1Time
+        &&segmentPanel.values().knots[0].bezier.control1Progress>priorHandle.control1Progress);
+    const auto kept=segmentPanel.values();segmentPanel.diagnosticSegment(1,false);
+    check("segment_line_keeps_handles",segmentPanel.values().knots[0].bezier==kept.knots[0].bezier);
+    segmentPanel.diagnosticSegment(1,true);check("segment_curve_restores_handles",segmentPanel.values()==kept);
+    segmentPanel.diagnosticSection(true);segmentPanel.diagnosticSegment(0,true);segmentPanel.diagnosticCurveControl(0,10);
+    check("segment_head_edits_do_not_change_tail",segmentPanel.values().knots==kept.knots&&segmentPanel.values().firstBezier==kept.firstBezier
+        &&near(segmentPanel.values().head.firstBezier.control1Time,.1));
+    const auto allSegments=segmentPanel.values();
+    check("segment_bezier_preset_save",segmentPanel.diagnosticSavePreset("Independent Bezier segments"));
+    AdvancedEnvelopePanel segmentRecall({},1,0,{},false,segmentLibrary);segmentRecall.diagnosticPreset(100);
+    check("segment_bezier_preset_roundtrip",segmentRecall.values()==allSegments);
+    mixedModel.setNotesTailFade({"n2","n4"},2,allSegments);const auto beforeHandle=mixedModel.contentFingerprint();
+    auto updatedHandle=allSegments;updatedHandle.firstBezier.control1Progress=.3;mixedModel.setNotesTailFade({"n2"},2,updatedHandle);
+    check("segment_bezier_undo",mixedModel.undo()&&mixedModel.contentFingerprint()==beforeHandle);
+    check("segment_bezier_project_save",mixedModel.save(folder.getChildFile("segment-bezier.hjpx"),error));ProjectModel segmentLoaded;
+    check("segment_bezier_project_roundtrip",segmentLoaded.load(folder.getChildFile("segment-bezier.hjpx"),error)
+        &&segmentLoaded.snapshot().tracks[0].clips[0].notes[0].utauTailFade==allSegments);
+    edited.utauTailFade=allSegments;changedSegment=edited;changedSegment.utauTailFade.knots[0].bezier.control1Progress=.1;
+    check("segment_bezier_invalidates_mix_only",AudioEngine::utauNoteRenderHash(edited)!=AudioEngine::utauNoteRenderHash(changedSegment)
+        &&AudioEngine::utauNoteAudioHash(edited)==AudioEngine::utauNoteAudioHash(changedSegment));
+    segmentPanel.diagnosticSection(false);segmentPanel.diagnosticSegment(1,true);segmentPanel.setSize(740,660);
+    check("segment_bezier_minimum_layout_fits",segmentPanel.diagnosticControlsFit());
+    {auto out=folder.getChildFile("segment-bezier-panel.png").createOutputStream();juce::PNGImageFormat png;check("segment_bezier_snapshot",out&&png.writeImageToStream(segmentPanel.createComponentSnapshot(segmentPanel.getLocalBounds(),true,1.5f),*out));}
+    if(span)
+    {
+        request.notes[0].tailFadeMode=2;request.notes[0].tailFadeSettings=segmented;request.notes[0].tailFadeSettings.head.mode=0;
+        bool called=false,matched=true;
+        request.notePiece=[&](size_t,const juce::AudioBuffer<float>&,double,double,const std::function<float(double)>& gain,const std::function<float(double)>&){
+            called=true;const auto base=backend::envelopeGainFromDb(span->startSeconds<=.6?0.f:backend::envelopeDbBetween(0,-60,(float)((span->startSeconds-.6)/.6),false));
+            matched=near(gain(span->startSeconds+(span->endSeconds-span->startSeconds)*(.25+.5*.2375)),base*(.8-.6*.6875));
+        };
+        const auto rendered=backend::UtauRenderer::render(request);
+        check("segment_bezier_actual_mixer_matches_cubic",called&&matched&&rendered.buffer.getNumSamples()>0);
+    }
+
     return ok;
 }
 }

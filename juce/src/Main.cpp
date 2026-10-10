@@ -40,15 +40,28 @@
 #include "tests/ClipGainKnobSmoke.h"
 #include "tests/TimelineNotePreviewSmoke.h"
 #include "tests/NativeWaveformPreviewSmoke.h"
+#include "tests/NativeBatchFlattenSmoke.h"
+#include "tests/NativeLinkedPitchSmoke.h"
+#include "tests/NativeConsonantDisplaySmoke.h"
+#include "tests/NativePitchVisibilitySmoke.h"
+#include "tests/NativeUnpitchedRegionsSmoke.h"
+#include "tests/SourceBreathinessSmoke.h"
+#include "tests/NativeLinkedEnvelopeSmoke.h"
 #include "tests/NativeSourcePitchSmoke.h"
+#include "tests/NativeImportPerformanceSmoke.h"
 #include "tests/NativeSourcePitchRestoreSmoke.h"
 #include "tests/NativeNoteMoveSmoke.h"
 #include "tests/NativeNoteCopyPasteSmoke.h"
 #include "tests/NativeAudioDisconnectSmoke.h"
+#include "tests/NativeAudioTrimSmoke.h"
+#include "tests/NativeTrimExpandSmoke.h"
+#include "tests/NativeNoteJoinSmoke.h"
 #include "tests/NativeAudioLinkSmoke.h"
 #include "tests/NativeAudioOverlapSmoke.h"
 #include "tests/NativeAudioOverlapFocusSmoke.h"
 #include "tests/NativeShutdownSmoke.h"
+#include "tests/NativeIncrementalRenderSmoke.h"
+#include "tests/NativeNoiseOptionSmoke.h"
 #include "tests/NativeRenderedWaveformSmoke.h"
 #include "tests/TrackGainEnvelopeSmoke.h"
 #include "tests/EmptyTuningClipSmoke.h"
@@ -59,6 +72,7 @@
 #include "tests/CrossRegionEditingSmoke.h"
 #include "tests/AdvancedEnvelopeSmoke.h"
 #include "tests/AdvancedEnvelopePanelSmoke.h"
+#include "tests/NativeEnvelopeSmoke.h"
 #include "tests/OtoContinuitySmoke.h"
 #include "tests/ModelessOtoSmoke.h"
 #include "tests/IndependentZoomSmoke.h"
@@ -69,9 +83,11 @@
 #include "tests/OtoOverlapSmoke.h"
 #include "tests/MouToJieSmoke.h"
 #include "tests/NsfPickerSmoke.h"
+#include "tests/NativeVibratoSmoke.h"
 #include "tests/NsfRegionsSmoke.h"
 #include "tests/NsfProjectNoteSmoke.h"
 #include "tests/OutputEngineSmoke.h"
+#include "tests/ChineseCvvcSmoke.h"
 #include "tests/DiffSingerSmoke.h"
 #include "tests/DiffSingerPitchReferenceSmoke.h"
 #include "tests/DiffSingerPitchRestoreSmoke.h"
@@ -261,11 +277,52 @@ public:
             juce::MessageManager::callAsync([this] { quit(); });
             return;
         }
+        if (arguments.size() >= 2 && arguments[0] == "--smoke-chinese-cvvc")
+        {
+            MainComponent component;
+            const auto ok = component.diagnosticChineseCvvc(juce::File(arguments[1].unquoted()),
+                arguments.size() >= 3 ? juce::File(arguments[2].unquoted()) : juce::File{});
+            setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); }); return;
+        }
         if (arguments.size() >= 4 && arguments[0] == "--smoke-output-engine")
         {
             MainComponent component;
             const auto ok = component.diagnosticOutputEngine(juce::File(arguments[1].unquoted()),
                 juce::File(arguments[2].unquoted()), juce::File(arguments[3].unquoted()));
+            setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); });
+            return;
+        }
+        if (arguments.size() >= 2 && arguments[0] == "--smoke-native-vibrato")
+        {
+            const auto folder = juce::File(arguments[1].unquoted());
+            auto component = std::make_shared<MainComponent>();
+            component->diagnosticNativeVibrato(folder, [this, component](bool ok)
+            {
+                setApplicationReturnValue(ok ? 0 : 4);
+                juce::MessageManager::callAsync([this] { quit(); });
+            });
+            return;
+        }
+        if (arguments.size() >= 3 && arguments[0] == "--smoke-native-vibrato-render")
+        {
+            const auto ok = runNativeVibratoRenderSmoke(juce::File(arguments[1].unquoted()), juce::File(arguments[2].unquoted()));
+            setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); }); return;
+        }
+        if (arguments.size() >= 3 && arguments[0] == "--smoke-native-noise-option")
+        {
+            const auto ok = runNativeNoiseOptionSmoke(juce::File(arguments[1].unquoted()),
+                juce::File(arguments[2].unquoted()));
+            setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); });
+            return;
+        }
+        if (arguments.size() >= 3 && arguments[0] == "--smoke-native-incremental")
+        {
+            const auto ok = runNativeIncrementalRenderSmoke(juce::File(arguments[1].unquoted()),
+                juce::File(arguments[2].unquoted()));
             setApplicationReturnValue(ok ? 0 : 4);
             juce::MessageManager::callAsync([this] { quit(); });
             return;
@@ -278,9 +335,18 @@ public:
             juce::MessageManager::callAsync([this] { quit(); });
             return;
         }
-        if (arguments.size() >= 3 && arguments[0] == "--smoke-hifisampler")
+        if (arguments.size() >= 4 && arguments[0] == "--smoke-native-noise")
         {
-            const auto ok = hachi::backend::runHifisamplerSmoke(juce::File(arguments[1].unquoted()), juce::File(arguments[2].unquoted()));
+            const auto ok=hachi::backend::runNativeNoiseSmoke(juce::File(arguments[1].unquoted()),
+                juce::File(arguments[2].unquoted()),juce::File(arguments[3].unquoted()));
+            setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); }); return;
+        }
+        if (arguments.size() >= 3 && (arguments[0] == "--smoke-hifisampler" || arguments[0] == "--smoke-hifishifter-mel"))
+        {
+            const auto runner = arguments[0] == "--smoke-hifishifter-mel"
+                ? hachi::backend::runHiFiShifterMelSmoke : hachi::backend::runHifisamplerSmoke;
+            const auto ok = runner(juce::File(arguments[1].unquoted()), juce::File(arguments[2].unquoted()));
             setApplicationReturnValue(ok ? 0 : 4);
             juce::MessageManager::callAsync([this] { quit(); });
             return;
@@ -292,6 +358,12 @@ public:
             setApplicationReturnValue(ok ? 0 : 4);
             juce::MessageManager::callAsync([this] { quit(); });
             return;
+        }
+        if (arguments.size() >= 3 && arguments[0] == "--smoke-nsf-pitch-transitions")
+        {
+            const auto ok=backend::runNsfPitchTransitionsSmoke(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()));
+            setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); }); return;
         }
         if (!arguments.isEmpty() && arguments[0] == "--smoke-nsf-picker")
         {
@@ -330,6 +402,16 @@ public:
         {
             MainComponent component;const auto ok=component.diagnosticOtoContinuity(juce::File(arguments[1].unquoted()),arguments.size()>2?juce::File(arguments[2].unquoted()):juce::File{});
             std::cout<<"oto_continuity="<<ok<<std::endl;setApplicationReturnValue(ok?0:3);juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-envelope")
+        {
+            MainComponent component;const auto ok=component.diagnosticNativeEnvelope(juce::File(arguments[1].unquoted()));
+            setApplicationReturnValue(ok?0:4);juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-linked-envelope")
+        {
+            const auto ok=runNativeLinkedEnvelopeSmoke(juce::File(arguments[1].unquoted()));
+            setApplicationReturnValue(ok?0:4);juce::MessageManager::callAsync([this]{quit();});return;
         }
         if(arguments.size()>=2&&(arguments[0]=="--smoke-advanced-envelope"||arguments[0]=="--smoke-advanced-envelope-panel"))
         {
@@ -417,9 +499,60 @@ public:
             setApplicationReturnValue(ok ? 0 : 4);
             juce::MessageManager::callAsync([this] { quit(); }); return;
         }
+        if (arguments.size() >= 2 && arguments[0] == "--smoke-native-linked-pitch")
+        {
+            const auto ok = runNativeLinkedPitchSmoke(juce::File(arguments[1].unquoted()));
+            setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); });
+            return;
+        }
+        if (arguments.size() >= 2 && arguments[0] == "--smoke-source-breathiness")
+        {
+            const auto ok = runSourceBreathinessSmoke(juce::File(arguments[1].unquoted()),
+                arguments.size() >= 3 ? juce::File(arguments[2].unquoted()) : juce::File{});
+            setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); }); return;
+        }
+        if (arguments.size() >= 2 && arguments[0] == "--smoke-native-unpitched-regions")
+        {
+            const auto ok = runNativeUnpitchedRegionsSmoke(juce::File(arguments[1].unquoted()),
+                arguments.size() > 2 ? juce::File(arguments[2].unquoted()) : juce::File{},
+                arguments.size() > 3 ? juce::File(arguments[3].unquoted()) : juce::File{});
+            setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); }); return;
+        }
+        if (arguments.size() >= 2 && arguments[0] == "--smoke-native-consonant-display")
+        {
+            const auto ok = runNativeConsonantDisplaySmoke(juce::File(arguments[1].unquoted()),
+                arguments.size() > 2 ? juce::File(arguments[2].unquoted()) : juce::File{});
+            setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); }); return;
+        }
+        if (arguments.size() >= 2 && arguments[0] == "--smoke-native-pitch-visibility")
+        {
+            const auto ok = runNativePitchVisibilitySmoke(juce::File(arguments[1].unquoted()));
+            setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); }); return;
+        }
         if (arguments.size() >= 2 && arguments[0] == "--smoke-native-audio-link")
         {
             const auto ok=runNativeAudioLinkSmoke(juce::File(arguments[1].unquoted()));
+            setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); }); return;
+        }
+        if (arguments.size() >= 2 && arguments[0] == "--smoke-native-note-join")
+        {
+            const auto ok=runNativeNoteJoinSmoke(juce::File(arguments[1].unquoted()));
+            setApplicationReturnValue(ok?0:1);quit();return;
+        }
+        if (arguments.size() >= 2 && arguments[0] == "--smoke-native-trim-expand")
+        {
+            const auto ok=runNativeTrimExpandSmoke(juce::File(arguments[1].unquoted()));
+            setApplicationReturnValue(ok?0:1);quit();return;
+        }
+        if (arguments.size() >= 2 && arguments[0] == "--smoke-native-audio-trim")
+        {
+            const auto ok=runNativeAudioTrimSmoke(juce::File(arguments[1].unquoted()));
             setApplicationReturnValue(ok ? 0 : 4);
             juce::MessageManager::callAsync([this] { quit(); }); return;
         }
@@ -434,6 +567,13 @@ public:
             MainComponent component;
             const auto ok=component.diagnosticNativeNoteCopyPaste(juce::File(arguments[1].unquoted()));
             setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); }); return;
+        }
+        if (arguments.size() >= 3 && arguments[0] == "--smoke-native-import-performance")
+        {
+            const auto ok = hachi::runNativeImportPerformanceSmoke(juce::File(arguments[1].unquoted()),
+                juce::File(arguments[2].unquoted()));
+            setApplicationReturnValue(ok ? 0 : 3);
             juce::MessageManager::callAsync([this] { quit(); }); return;
         }
         if (arguments.size() >= 3 && arguments[0] == "--smoke-native-source-pitch")
@@ -4916,10 +5056,34 @@ public:
             const auto undone = noteNow();
             const auto undoesInOneStep = undone.pitchControlPoints.size() == 4;
 
-            const auto ok = inThePlainMenu && notInTheUtauMenu && plainStillShort
+            auto snapsAndFlattens = true, snapUndo = true, snapKeepsTimingAndSource = true;
+            for (const auto centre : { 60.31f, 60.75f, 60.5f })
+            {
+                project.setNotesMidi({noteId}, centre);
+                project.dispatchPendingMessages();roll.diagnosticRefresh();
+                const auto freeNote = noteNow();const auto fingerprint = project.contentFingerprint();
+                roll.setTool(PianoRollComponent::Tool::note);
+                const auto at = roll.diagnosticHitBounds(0).getCentre();
+                const juce::MouseEvent click(juce::Desktop::getInstance().getMainMouseSource(),at,
+                    juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier),1.0f,0,0,0,0,
+                    &roll,&roll,juce::Time::getCurrentTime(),at,juce::Time::getCurrentTime(),2,false);
+                roll.mouseDoubleClick(click);const auto snapped = noteNow();
+                snapsAndFlattens &= snapped.midiNote==std::round(centre)
+                    && snapped.pitchControlPoints.size()==2
+                    && std::all_of(snapped.pitchControlPoints.begin(),snapped.pitchControlPoints.end(),[&](const auto& p){return p.targetMidi==snapped.midiNote;})
+                    && std::all_of(snapped.contour.begin(),snapped.contour.end(),[](const auto& p){return p.hasManualTarget&&p.manualTargetCents==0;});
+                snapKeepsTimingAndSource &= snapped.startSeconds==freeNote.startSeconds
+                    && snapped.durationSeconds==freeNote.durationSeconds&&snapped.sourceMidiCenter==freeNote.sourceMidiCenter;
+                snapUndo &= project.undo()&&project.contentFingerprint()==fingerprint;
+            }
+            std::cout << "native_double_click_snaps_nearest_semitone=" << snapsAndFlattens << std::endl
+                      << "snap_and_flatten_undo_in_one_step=" << snapUndo << std::endl
+                      << "snap_preserves_timing_and_source_reference=" << snapKeepsTimingAndSource << std::endl;
+            const auto batchOk = runNativeBatchFlattenSmoke();
+            const auto ok = batchOk && inThePlainMenu && notInTheUtauMenu && plainStillShort
                 && utauStillWhole && startedBent && contourWasBent && twoAnchorsLeft
                 && bothOnTheNote && spansTheNote && contourIsFlat && noteKeptItsPitch
-                && undoesInOneStep;
+                && undoesInOneStep && snapsAndFlattens && snapUndo && snapKeepsTimingAndSource;
             std::cout << "in_the_plain_menu=" << (inThePlainMenu ? 1 : 0)
                       << "|not_in_the_utau_menu=" << (notInTheUtauMenu ? 1 : 0)
                       << "|plain_menu_still_short=" << (plainStillShort ? 1 : 0)
@@ -7794,9 +7958,10 @@ public:
             saved.setValue("ui.showUtauWaveforms", true);
             saved.setValue("ui.showPitchLine", false);
             saved.setValue("ui.showOriginalPitchLine", false);
+            saved.setValue("ui.consonantPitchDashed", true);
             const auto restored = MainComponent::viewOptionsFrom(saved);
             const auto readsOldSettings = !restored.noteRange && restored.envelope
-                && restored.utauWaveform && !restored.pitchLine && !restored.originalPitchLine;
+                && restored.utauWaveform && !restored.pitchLine && !restored.originalPitchLine && restored.consonantPitchDashed;
 
             // A fresh install: the box on, the envelope off, as before.
             juce::PropertySet fresh;
@@ -7806,7 +7971,7 @@ public:
             fresh.setValue("ui.nativeEnvelope", false);
             const auto defaults = MainComponent::viewOptionsFrom(fresh);
             const auto defaultsKept = nativeEnvelopeDefault && defaults.noteRange && !defaults.envelope
-                && !defaults.utauWaveform && defaults.pitchLine && defaults.originalPitchLine;
+                && !defaults.utauWaveform && defaults.pitchLine && defaults.originalPitchLine && !defaults.consonantPitchDashed;
 
             // Each item flips its own switch and leaves the other alone.
             const auto first = MainComponent::afterViewMenuChoice(defaults, 1);
@@ -7825,6 +7990,11 @@ public:
             const auto seventhIsOriginal = !seventh.originalPitchLine && seventh.pitchLine
                 && seventh.lyrics == defaults.lyrics && seventh.nativeWaveform == defaults.nativeWaveform
                 && MainComponent::viewMenuItemEnabled(7, false);
+            const auto eighth = MainComponent::afterViewMenuChoice(defaults, 8, false);
+            const auto eighthIsConsonant = eighth.consonantPitchDashed && eighth.pitchLine == defaults.pitchLine
+                && eighth.originalPitchLine == defaults.originalPitchLine && MainComponent::viewMenuItemEnabled(8, false)
+                && !MainComponent::viewMenuItemEnabled(8, true)
+                && !MainComponent::afterViewMenuChoice(defaults, 8, true).consonantPitchDashed;
 
             // Both modes now have waveforms: synthesized UTAU peaks or the
             // approximate native source warped by the render time map.
@@ -7859,11 +8029,11 @@ public:
                 && back.envelope == restored.envelope
                 && back.utauWaveform == restored.utauWaveform
                 && back.pitchLine == restored.pitchLine
-                && back.originalPitchLine == restored.originalPitchLine;
+                && back.originalPitchLine == restored.originalPitchLine && back.consonantPitchDashed == restored.consonantPitchDashed;
 
             const auto ok = readsOldSettings && defaultsKept && firstIsRange
                 && secondIsEnvelope && thirdIsWaveform && fourthIsPitchLine
-                && greyRuleHolds && nothingOnMiss && roundTrips && seventhIsOriginal;
+                && greyRuleHolds && nothingOnMiss && roundTrips && seventhIsOriginal && eighthIsConsonant;
             std::cout << "reads_old_settings=" << (readsOldSettings ? 1 : 0)
                       << "|defaults_kept=" << (defaultsKept ? 1 : 0)
                       << "|first_item_is_range=" << (firstIsRange ? 1 : 0)
@@ -7871,6 +8041,7 @@ public:
                       << "|third_item_is_waveform=" << (thirdIsWaveform ? 1 : 0)
                       << "|fourth_item_is_pitch_line=" << (fourthIsPitchLine ? 1 : 0)
                       << "|seventh_item_is_original_pitch=" << (seventhIsOriginal ? 1 : 0)
+                      << "|eighth_item_is_consonant_pitch=" << (eighthIsConsonant ? 1 : 0)
                       << "|waveform_greys_outside_utau=" << (greyRuleHolds ? 1 : 0)
                       << "|nothing_on_dismiss_or_stray_id=" << (nothingOnMiss ? 1 : 0)
                       << "|round_trips=" << (roundTrips ? 1 : 0)
@@ -16098,7 +16269,7 @@ public:
             };
             // Pitch picker ids: 1 mld5, 2 nsf-hifigan, 3 WORLD,
             //                   4 vslib, 5 mld3, 6 llsm2.
-            const auto neural = items(2) == std::vector<int> { 1, 2, 5 };
+            const auto neural = items(2) == std::vector<int> { 1, 2, 5, 6 };
             const auto signalsmith = items(4) == std::vector<int> { 1, 3, 4 };
             const auto ownStretchers = items(1) == std::vector<int>{1}
                 && items(3) == std::vector<int>{1}
@@ -16116,14 +16287,14 @@ public:
                 return std::find(list.begin(), list.end(), item) == list.end();
             };
             const auto keepsThemApart = lacks(neuralOrders, 3) && lacks(neuralOrders, 4)
-                && lacks(stretcherClocks, 2) && lacks(stretcherClocks, 5);
+                && lacks(stretcherClocks, 2) && lacks(stretcherClocks, 5) && lacks(stretcherClocks, 6);
             // Melodyne Hybrid is the shared default and heads every list that
             // exists, so a picker losing its selection can fall back to id 1.
             const auto sharedDefault = neuralOrders.front() == 1 && stretcherClocks.front() == 1;
 
             const auto ok = neural && signalsmith && ownStretchers && utau
                 && keepsThemApart && sharedDefault;
-            std::cout << "nsf_offers_its_two_orders=" << (neural ? 1 : 0)
+            std::cout << "nsf_offers_distinct_mel_stretches=" << (neural ? 1 : 0)
                       << "|vslib_offers_its_three_clocks=" << (signalsmith ? 1 : 0)
                       << "|other_backends_offer_native_stretch="
                       << (ownStretchers ? 1 : 0)

@@ -1,3 +1,4 @@
+#include "SourceVoicing.h"
 #include "FcpeAnalyzer.h"
 #include "AudioFileReader.h"
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -374,6 +375,10 @@ std::vector<FcpeFrame> FcpeAnalyzer::analyse(const juce::File& audioFile,
         auto [mel, frames] = buildMel(waveform, progress);
         auto result = run(modelFile, std::move(mel), frames,
                           execution, error, progress, activeInference);
+        const auto voicing = SourceVoicing::analyse(waveform, sampleRate);
+        for (auto& frame : result)
+            if (voicing.at(frame.timeSeconds) >= .999f)
+            { frame.voiced = false; frame.midi = 0; }
         if (result.empty() && error.isEmpty()) error = "FCPE produced no F0 frames";
         return result;
     }

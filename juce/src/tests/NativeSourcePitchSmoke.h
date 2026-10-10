@@ -54,7 +54,7 @@ inline bool MainComponent::diagnosticNativeSourcePitch(const juce::File& folder,
     check("analysis_survives_stretch_while_pending",fresh.setClipAudioAnalysis(freshId,analysis.notes,initial));
     const auto detected=fresh.snapshot().tracks[0].clips[0];
     check("new_audio_starts_at_measured_pitch",!detected.notes.empty()&&std::all_of(detected.notes.begin(),detected.notes.end(),
-        [&](const auto& n){return near(n.midiNote,n.sourceMidiCenter)&&n.contour.size()>10;}));
+        [&](const auto& n){return n.nativeUnpitched || (near(n.midiNote,n.sourceMidiCenter)&&n.contour.size()>10);}));
     check("new_audio_keeps_stretched_duration",near(detected.startSeconds,3)&&near(detected.durationSeconds,4));
     // Use exact source F0 to verify mapping independently of model accuracy.
     NoteData raw;raw.id="raw";raw.durationSeconds=1;raw.sourceMidiCenter=61.3f;raw.midiNote=61.3f;

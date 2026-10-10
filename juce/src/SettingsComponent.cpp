@@ -445,10 +445,11 @@ void SettingsComponent::refreshImportedStretchItems(int preferredId)
     {
         importedStretchAlgorithm.addItem(strings.text("algo.stretch.nsfVariableMel"), 2);
         importedStretchAlgorithm.addItem(strings.text("algo.stretch.nsfShiftThenSplice"), 5);
+        importedStretchAlgorithm.addItem(strings.text("algo.stretch.hifiShifterMel"), 6);
     }
     importedStretchAlgorithm.addItem(strings.text("algo.stretch.loop"), 3);
     importedStretchAlgorithm.addItem(strings.text("algo.stretch.soundTouch"), 4);
-    const auto canUsePreferred = (previous != 2 && previous != 5)
+    const auto canUsePreferred = (previous != 2 && previous != 5 && previous != 6)
         || importedAlgorithm.getSelectedId() == 2;
     importedStretchAlgorithm.setSelectedId(canUsePreferred && previous > 0 ? previous : 1,
                                              juce::dontSendNotification);

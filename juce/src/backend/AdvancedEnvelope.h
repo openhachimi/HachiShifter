@@ -16,6 +16,23 @@ template<class Settings> double tailFadeBezierProgress(double progress,const Set
     return cubic((lo+hi)*.5,s.control1Progress,s.control2Progress);
 }
 // Mode 1 is straight in amplitude; mode 2 supports legacy smoothstep and Bezier.
+template<class Settings> double mixedEnvelopeGain(double progress,const Settings& s)
+{
+    if(progress<=0)return s.startGain;if(progress>=1)return s.endGain;
+    double time=0,gain=s.startGain;bool curved=s.firstSegmentCurved;auto bezier=s.firstBezier;
+    for(size_t i=0;i<=s.knots.size();++i)
+    {
+        const auto nextTime=i<s.knots.size()?s.knots[i].time:1.0;
+        const auto nextGain=i<s.knots.size()?s.knots[i].gain:s.endGain;
+        if(progress<=nextTime)
+        {
+            auto u=(progress-time)/(nextTime-time);if(curved)u=tailFadeBezierProgress(u,bezier);
+            return gain+(nextGain-gain)*u;
+        }
+        time=nextTime;gain=nextGain;curved=s.knots[i].curvedToNext;bezier=s.knots[i].bezier;
+    }
+    return s.endGain;
+}
 inline float tailFadeGain(int mode,double seconds,double start,double end,const TailFadeSettings& settings = {})
 {
     if(mode<1||mode>2||end-start<=1.e-9||!settings.valid())return 1.0f;
@@ -24,6 +41,7 @@ inline float tailFadeGain(int mode,double seconds,double start,double end,const 
     if(seconds<=first)return static_cast<float>(settings.startGain);
     if(seconds>=last)return static_cast<float>(settings.endGain);
     const auto progress=(seconds-first)/(last-first);
+    if(mode==2&&settings.mixed)return static_cast<float>(mixedEnvelopeGain(progress,settings));
     const auto u=mode==2?std::pow(progress,settings.curvePower):progress;
     const auto shaped=mode==2?(settings.customCurve?tailFadeBezierProgress(progress,settings):u*u*(3.0-2.0*u)):u;
     return static_cast<float>(settings.startGain+(settings.endGain-settings.startGain)*shaped);
@@ -36,6 +54,7 @@ template<class GainAt> float headEnvelopeGain(double seconds,double start,double
     if(s.mode==0||end-start<=1.e-9||!s.valid())return baseGainAt(seconds);
     const auto first=start+(end-start)*s.startFraction,last=start+(end-start)*s.endFraction;
     const auto progress=std::clamp((seconds-first)/(last-first),0.0,1.0);
+    if(s.mode==2&&s.mixed)return baseGainAt(std::max(seconds,last))*static_cast<float>(mixedEnvelopeGain(progress,s));
     const auto u=s.mode==2?std::pow(progress,s.curvePower):progress;
     const auto shaped=s.mode==2?(s.customCurve?tailFadeBezierProgress(progress,s):u*u*(3-2*u)):u;
     return baseGainAt(std::max(seconds,last))*static_cast<float>(s.startGain+(s.endGain-s.startGain)*shaped);
@@ -74,6 +93,18 @@ template<class Point> std::vector<Point> tailFadePicture(const std::vector<Point
     }
     const auto headFirst=headStart+(headEnd-headStart)*settings.head.startFraction;
     const auto headLast=headStart+(headEnd-headStart)*settings.head.endFraction;
+    const auto mixedTimes=[&](const auto& s,double first,double last)
+    {
+        double previous=0;
+        for(size_t i=0;i<=s.knots.size();++i)
+        {
+            const auto next=i<s.knots.size()?s.knots[i].time:1.0;
+            for(int j=0;j<=32;++j)times.push_back(first+(last-first)*(previous+(next-previous)*j/32.0));
+            previous=next;
+        }
+    };
+    if(mode==2&&settings.mixed)mixedTimes(settings,start,end);
+    if(settings.head.mode==2&&settings.head.mixed)mixedTimes(settings.head,headFirst,headLast);
     if(settings.head.mode!=0&&headEnd-headStart>1.e-9)
         for(int i=0;i<=96;++i)times.push_back(headFirst+(headLast-headFirst)*i/96.0);
     std::sort(times.begin(),times.end());times.erase(std::unique(times.begin(),times.end(),[](double a,double b){return std::abs(a-b)<1.e-9;}),times.end());

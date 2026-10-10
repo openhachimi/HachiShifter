@@ -18,7 +18,8 @@ enum class NsfHifiganStretchOrder
 {
     fixedHop,
     spliceThenShift,
-    shiftThenSplice
+    shiftThenSplice,
+    hifiShifterMel
 };
 
 struct NsfHifiganTimeMapPoint
@@ -34,6 +35,11 @@ struct NsfHifiganRenderResult
     juce::File modelFile;
     juce::String activeInference { "cpu" };
     bool usedModel = false;
+    bool usedHarmonicNoise = false;
+    int protectedUnvoicedFrames = 0;
+    // Diagnostics for native incremental synthesis (not persisted in projects).
+    int inferredChunks = 0;
+    int reusedChunks = 0;
 };
 
 // Per-edge amplitude guard applied after a neural decode.  Each edge fade is an
@@ -69,7 +75,11 @@ public:
         NsfHifiganStretchOrder stretchOrder,
         bool normalizeVolume = false,
         const NsfHifiganEdgeGuard& edgeGuard = NsfHifiganEdgeGuard{},
-        const std::function<bool()>& cancelled = {});
+        const std::function<bool()>& cancelled = {},
+        bool protectNativeNoise = false,
+        bool smoothPitchTransitions = true,
+        // Native chunk reuse is independent of the optional H/N protection.
+        bool incrementalNativeRender = false);
 };
 
 // UTAU voicebank synthesis on the one NSF-HiFiGAN renderer (no separate
@@ -168,6 +178,11 @@ struct NsfUtauSynthResult
 // executable.  Empty buffer + warning when the model is unavailable.
 [[nodiscard]] UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
     const juce::File& modelDirectory, const OrtExecutionConfig& execution);
+// Controls only automatic decoder F0 edge conditioning, after curve sampling.
+void conditionNsfPitchTransitions(std::vector<float>& f0, bool enabled);
+[[nodiscard]] bool runNsfPitchTransitionsSmoke(const juce::File& folder, const juce::File& modelDirectory);
+[[nodiscard]] bool runNativeNoiseSmoke(const juce::File& folder, const juce::File& modelDirectory, const juce::File& recording);
+[[nodiscard]] bool runHiFiShifterMelSmoke(const juce::File& folder, const juce::File& modelDirectory);
 [[nodiscard]] bool runHifisamplerSmoke(const juce::File& folder, const juce::File& modelDirectory);
 
 }

@@ -36,6 +36,7 @@ struct SampleRegionSetting
     float confidence = 0.0f;
     std::vector<NativeSegment> segments;
     std::vector<AmplitudeEnvelopePoint> amplitudeEnvelope;
+    bool nativeUnpitched = false;
 };
 
 struct VoicebankOtoEntry

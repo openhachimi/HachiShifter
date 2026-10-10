@@ -53,6 +53,7 @@ inline std::vector<ClipData> expandedClipParts(const ClipData& parent, bool forV
             part.audioDurationSeconds = part.audioLength();
             part.audioStartSeconds += offset;
             for (auto& point : part.sourceTimeMap) point.targetSeconds += offset;
+            for (auto& point : part.nativeTrimClock) point.targetSeconds += offset;
             part.startSeconds = parent.startSeconds;
             part.durationSeconds = parent.durationSeconds;
         }
@@ -71,6 +72,7 @@ inline std::vector<ClipData> expandedClipParts(const ClipData& parent, bool forV
             part.audioStartSeconds-=earliest;part.startSeconds+=earliest;part.durationSeconds=latest-earliest;
             for(auto& note:part.notes)note.startSeconds-=earliest;
             for(auto& point:part.sourceTimeMap)point.targetSeconds-=earliest;
+            for(auto& point:part.nativeTrimClock)point.targetSeconds-=earliest;
             shiftClipGainEnvelopes(part,-earliest);
         }
     }
@@ -86,6 +88,12 @@ inline void expandProjectClipParts(ProjectData& data, bool forView = false)
         for (const auto& clip : track.clips)
         {
             auto parts = expandedClipParts(clip, forView);
+            // Only the read-only expanded project carries this metadata.
+            // Material assembled through expandedClipParts during real edits
+            // must not retain a stale group after disconnecting or copying.
+            if (!clip.parts.empty())
+                for (std::size_t i = 0; i < parts.size(); ++i)
+                    parts[i].nativePitchGroupId = clip.nativeAudioLinked ? clip.id : clip.id + ":" + clip.parts[i].id;
             expanded.insert(expanded.end(), std::make_move_iterator(parts.begin()), std::make_move_iterator(parts.end()));
         }
         track.clips = std::move(expanded);
@@ -126,6 +134,7 @@ inline std::vector<ClipData> slicedClipParts(const std::vector<ClipData>& parts,
         };
         const auto sourceA=sourceAt(cutA), sourceB=sourceAt(cutB);
         part.startSeconds=first-begin;part.durationSeconds=last-first;
+        for(auto& point:part.nativeTrimClock)point.targetSeconds+=original.startSeconds-first;
         shiftClipGainEnvelopes(part,original.startSeconds-first);anchorClipGainEnvelope(part);
         part.audioStartSeconds=std::min(part.durationSeconds,std::max(0.0,audioBegin-first));
         part.audioDurationSeconds=cutB-cutA;

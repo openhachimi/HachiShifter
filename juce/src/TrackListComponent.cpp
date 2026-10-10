@@ -24,11 +24,14 @@ juce::String algorithmLabel(const TrackData& track, const juce::String& outputNa
         ? juce::String("variable-mel-hop")
         : track.stretchAlgorithm == StretchAlgorithm::loop ? juce::String("loop")
         : track.stretchAlgorithm == StretchAlgorithm::soundTouch ? juce::String("soundtouch")
+        : track.stretchAlgorithm == StretchAlgorithm::hifiShifterMel
+            ? juce::String("hifishifter-mel")
         : track.stretchAlgorithm == StretchAlgorithm::nsfShiftThenSplice
             ? juce::String("nsf-shift-then-splice")
         : juce::String("melodyne-hybrid");
     if (trackUsesVoicebankSynthesis(track) && !trackIsDiffSinger(track))
-        return pitch + (outputName.isEmpty() ? juce::String{} : " / " + outputName);
+        return pitch + (track.chineseCvvc && track.utauMode == UtauMode::classic ? " · ZH CVVC" : "")
+            + (outputName.isEmpty() ? juce::String{} : " / " + outputName);
     return pitch + " / " + stretch;
 }
 }

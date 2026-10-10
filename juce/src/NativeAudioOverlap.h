@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeAudioLink.h"
+#include "NativeAudioTrim.h"
 namespace hachi
 {
 struct NativeAudioWindow { juce::String owner; double start=0,end=0; };
@@ -45,6 +46,15 @@ inline double constrainedNativeClipDelta(const TrackData& track,const std::vecto
 {
     if(track.allowNativeAudioOverlap||!trackShowsAllNativeRegions(track))return delta;
     auto candidate=track;for(auto& clip:candidate.clips)if(std::find(ids.begin(),ids.end(),clip.id)!=ids.end())clip.startSeconds+=delta;
+    return delta*nativeCollisionScale(nativeAudioWindows(track),nativeAudioWindows(candidate));
+}
+
+inline double constrainedNativeTrimDelta(const TrackData& track,const juce::String& id,double delta,bool left)
+{
+    if(track.allowNativeAudioOverlap || (left?delta>=0:delta<=0))return delta;
+    auto candidate=track;
+    for(auto& clip:candidate.clips)
+        if(auto plan=planNativeNoteTrim(clip,id,delta,left,false))clip=std::move(plan->clip);
     return delta*nativeCollisionScale(nativeAudioWindows(track),nativeAudioWindows(candidate));
 }
 inline void constrainNativeClipResize(const TrackData& track,const juce::String& id,double& start,double& duration)
@@ -107,6 +117,7 @@ inline std::optional<ClipData> cropNativeAudioHead(ClipData original,double abso
         const auto cut=std::max(0.0,begin-note.startSeconds);
         if(cut>0)
         {
+            note.nativeEnvelope=backend::slicedNativeEnvelope(note.nativeEnvelope,cut/note.durationSeconds,1);
             // Negative automation anchors retain the exact incoming Bezier and
             // gain interpolation at the crop. Dense source pitch starts at zero.
             const auto shift=[&](auto& points){for(auto& p:points)p.timeSeconds-=cut;};

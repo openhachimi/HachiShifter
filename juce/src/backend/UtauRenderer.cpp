@@ -1,5 +1,6 @@
 #include "LegacyTextCodec.h"
 #include "UtauRenderer.h"
+#include "ChineseCvvcPhonemizer.h"
 #include "PlaybackRenderPriority.h"
 #include "DiffSingerRenderer.h"
 #include "../SampleSettings.h"
@@ -852,7 +853,7 @@ const VoiceSample* resolveSampleByScan(
 // then the lyric as it is, then -- for a bank of one sample -- that sample,
 // and last a sample whose file is named like the lyric.
 const VoiceSample* resolveSample(const VoicebankIndex& voicebank,
-                                 const juce::String& requestedAlias, float midi)
+                                 const juce::String& requestedAlias, float midi, bool exactAlias = false)
 {
     const auto& samples = voicebank.samples;
     if (samples.empty()) return nullptr;
@@ -863,6 +864,7 @@ const VoiceSample* resolveSample(const VoicebankIndex& voicebank,
         const auto found = voicebank.byAlias.find(foldedKey(candidate));
         return found != voicebank.byAlias.end() ? &samples[found->second] : nullptr;
     };
+    if (exactAlias) return byAlias(alias);
     if (const auto found = voicebank.prefixMap.find(midiName(midi).toLowerCase());
         found != voicebank.prefixMap.end())
         if (const auto* sample = byAlias(found->second.first + alias + found->second.second))
@@ -1470,7 +1472,7 @@ std::vector<double> crossfadeTails(const UtauRenderRequest& request,
         const auto& note = request.notes[index];
         const auto& next = request.notes[order[position + 1]];
         if (isRestLyric(next.alias) || next.alias.trim().isEmpty()) continue;
-        const auto* resolved = resolveSample(voicebank, next.alias, next.midiNote);
+        const auto* resolved = resolveSample(voicebank, next.alias, next.midiNote, next.aliasIsResolved);
         if (resolved == nullptr) continue;
         // The next note's own oto, when it has one, is where its lead-in and
         // overlap come from.
@@ -2176,7 +2178,7 @@ UtauRenderer::ResolvedSample UtauRenderer::resolveVoiceSample(
     int consonantVelocity, bool fourRegion, bool consonantClasses, double stpSeconds,
     bool preutteranceOverrideEnabled, double preutteranceSecondsOverride,
     bool overlapOverrideEnabled, double overlapSecondsOverride,
-    const UtauOtoOverride* noteOto)
+    const UtauOtoOverride* noteOto, bool aliasIsResolved)
 {
     ResolvedSample resolved;
     if (!voicebankDirectory.isDirectory() || alias.trim().isEmpty()
@@ -2185,7 +2187,7 @@ UtauRenderer::ResolvedSample UtauRenderer::resolveVoiceSample(
     const auto voicebank = loadVoicebankIndex(voicebankDirectory, fourRegion,
                                               consonantClasses);
     const auto* found = ::hachi::backend::resolveSample(
-        *voicebank, alias, midiNote);
+        *voicebank, alias, midiNote, aliasIsResolved);
     if (found == nullptr) return resolved;
     // STP moves the whole entry inside the recording, exactly as the render
     // path does, so the region read here matches what would be sung.
@@ -2243,8 +2245,30 @@ bool UtauRenderer::supportsComponentExport(const juce::File& engine,
         && static_cast<int>(kernelValue + 0.5) == 2;
 }
 
+std::optional<UtauSampleTiming> UtauRenderer::mappedAliasTiming(
+    const juce::File& directory, const juce::String& alias, float midiNote)
+{
+    if (alias.trim().isEmpty()) return std::nullopt;
+    const auto bank = loadVoicebankIndex(directory, false, false);
+    juce::StringArray candidates;
+    if (const auto it = bank->prefixMap.find(midiName(midiNote).toLowerCase()); it != bank->prefixMap.end())
+        candidates.add(it->second.first + alias.trim() + it->second.second);
+    candidates.add(alias.trim());
+    for (const auto& candidate : candidates)
+        if (const auto it = bank->byAlias.find(foldedKey(candidate)); it != bank->byAlias.end())
+        {
+            const auto& sample = bank->samples[it->second];
+            return UtauSampleTiming { sample.preutterance, sample.consonant, sample.overlap,
+                sample.hasRegions, sample.regionSeconds, sample.mouClasses,
+                std::max(0.0, sample.end - sample.offset), sample.alias };
+        }
+    return std::nullopt;
+}
+
 UtauRenderResult UtauRenderer::render(const UtauRenderRequest& request)
 {
+    if (request.chineseCvvc && !request.fourRegion && !DiffSingerRenderer::isVoicebank(request.voicebankDirectory))
+        return renderChineseCvvc(request, [](const auto& expanded) { return UtauRenderer::render(expanded); });
     if (request.exportComponent != WavExportComponent::full)
     {
         UtauRenderResult failure;
@@ -2361,7 +2385,7 @@ UtauRenderResult UtauRenderer::render(const UtauRenderRequest& request)
                 }
             }
             else if (const auto* found = resolveSample(
-                         *voicebank, note.alias, note.midiNote))
+                         *voicebank, note.alias, note.midiNote, note.aliasIsResolved))
             {
                 destination.found = true;
                 // The note's own STP first, and then nothing below knows the
@@ -2418,6 +2442,13 @@ UtauRenderResult UtauRenderer::render(const UtauRenderRequest& request)
                 destination.timing=UtauSampleTiming{naturalPreutterance,
                     sample.consonant*consonantVelocityScale(headConsonantVelocity(sample,note.consonantVelocity)),
                     destination.overlap,sample.hasRegions,sample.regionSeconds,sample.mouClasses};
+                if (note.preserveEnvelopeTiming && note.gain <= 0)
+                {
+                    // Retain the neighbour's OTO seam without synthesising unselected context.
+                    destination.audio.setSize(1, 1);
+                    destination.audio.clear();
+                    continue;
+                }
                 const auto cacheKey = renderedNoteKey(request, sample, note,
                     destination.preutterance, finalOutputSeconds,
                     naturalPreutterance, naturalOutputSeconds);
@@ -2517,7 +2548,7 @@ UtauRenderResult UtauRenderer::render(const UtauRenderRequest& request)
             ++missingCount;
             continue;
         }
-        if (rendered.rest) continue;
+        if (rendered.rest || (note.preserveEnvelopeTiming && note.gain <= 0)) continue;
         if (rendered.missing) ++missingCount;
         if (rendered.piano) ++pianoCount;
         else if (rendered.external) ++externalCount;
@@ -2573,7 +2604,7 @@ UtauRenderResult UtauRenderer::render(const UtauRenderRequest& request)
                 }
             }
         }
-        const auto envelope = fitAmplitudeEnvelope(note.amplitudeEnvelope,
+        const auto envelope = note.preserveEnvelopeTiming ? note.amplitudeEnvelope : fitAmplitudeEnvelope(note.amplitudeEnvelope,
             rendered.preutterance, note.durationSeconds + crossfadeTailSeconds[index]);
         auto gain = noteMixGain(rendered.audio.getNumSamples(), start,
                                       rendered.preutterance, envelope,

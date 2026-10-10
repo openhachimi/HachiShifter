@@ -34,7 +34,10 @@ bool canPreserveNativeSource(const Mld5FileRenderRequest& request,
             [](float sourcePitch, float targetPitch)
             { return std::isfinite(sourcePitch) && std::isfinite(targetPitch)
                 && std::abs(sourcePitch - targetPitch) <= 1.0e-4f; });
-    const auto timeUnchanged = sourceSamples == targetSamples
+    // Independently rounded source offset and duration can differ by one
+    // sample at EOF after a free crop. That is not a time-stretch edit.
+    const auto timeUnchanged = std::abs(sourceSamples - targetSamples) <= 1
+        && std::abs(request.sourceDurationSeconds - request.targetDurationSeconds) <= .5 / sampleRate
         && std::all_of(request.timeMap.begin(), request.timeMap.end(), [&](const auto& point)
             { return std::isfinite(point.sourceSeconds) && std::isfinite(point.targetSeconds)
                 && std::abs(point.sourceSeconds - point.targetSeconds) <= .5 / sampleRate; });
@@ -746,7 +749,7 @@ public:
         const auto sourceStart = juce::jlimit<juce::int64>(0, reader->lengthInSamples,
             static_cast<juce::int64>(std::llround(request.sourceOffsetSeconds * reader->sampleRate)));
         const auto requestedSourceSamples = static_cast<juce::int64>(std::llround(
-            std::max(0.001, request.sourceDurationSeconds) * reader->sampleRate));
+            std::max(0.0, request.sourceDurationSeconds) * reader->sampleRate));
         const auto sourceSamples64 = std::max<juce::int64>(1,
             std::min(requestedSourceSamples, reader->lengthInSamples - sourceStart));
         const auto sourceSamples = static_cast<int>(std::min<juce::int64>(sourceSamples64,
@@ -758,12 +761,41 @@ public:
         if (shouldExit()) return jobHasFinished;
 
         const auto targetSamples = std::max(1, static_cast<int>(std::llround(
-            std::max(0.001, request.targetDurationSeconds) * reader->sampleRate)));
+            std::max(0.0, request.targetDurationSeconds) * reader->sampleRate)));
         const auto neutral = [](const auto& values, float expected)
         {return std::all_of(values.begin(),values.end(),[&](float value)
             {return std::isfinite(value)&&std::abs(value-expected)<=1.0e-4f;});};
         if (canPreserveNativeSource(request, reader->sampleRate, sourceSamples, targetSamples))
         {
+            // Keep fractional source offset aligned with the timeline mixer.
+            // Rounding only the source side otherwise shifts a free crop by
+            // up to half a sample even when its time map is the identity.
+            const auto exactStart = std::max(0.0, request.sourceOffsetSeconds * reader->sampleRate);
+            const auto floorStart = static_cast<juce::int64>(std::floor(exactStart));
+            const auto fraction = static_cast<float>(exactStart - std::floor(exactStart));
+            if (fraction > 1.e-7f)
+            {
+                juce::AudioBuffer<float> aligned(channels, targetSamples + 1);
+                aligned.clear(); reader->read(&aligned,0,targetSamples+1,floorStart,true,channels>1);
+                const auto available = static_cast<int>(std::max<juce::int64>(1,
+                    std::min<juce::int64>(targetSamples+1,reader->lengthInSamples-floorStart)));
+                source.setSize(channels,targetSamples);
+                for(int ch=0;ch<channels;++ch)for(int i=0;i<targetSamples;++i)
+                {
+                    const auto a=aligned.getSample(ch,std::min(i,available-1));
+                    const auto b=aligned.getSample(ch,std::min(i+1,available-1));
+                    source.setSample(ch,i,a+(b-a)*fraction);
+                }
+            }
+            if (source.getNumSamples() != targetSamples)
+            {
+                const auto last = source.getNumSamples() - 1;
+                std::vector<float> edge(static_cast<std::size_t>(channels));
+                for (int ch=0;ch<channels;++ch) edge[static_cast<std::size_t>(ch)]=source.getSample(ch,last);
+                source.setSize(channels,targetSamples,true,true);
+                for(int ch=0;ch<channels;++ch)for(int i=last+1;i<targetSamples;++i)
+                    source.setSample(ch,i,edge[static_cast<std::size_t>(ch)]);
+            }
             // Detection and display do not edit audio. Gain/breath edits alone
             // can be applied to PCM without rebuilding its spectrum or phase.
             if (!neutral(request.noteGain,1) || !neutral(request.breath,0))
@@ -897,7 +929,9 @@ public:
             // splice-first (variableMelHop) joins then shifts the formants,
             // shift-first (nsfShiftThenSplice) applies the formant curve to
             // every source-time segment before the join (Melodyne5's order).
-            const auto stretchOrder = request.stretchAlgorithm == 4
+            const auto stretchOrder = request.stretchAlgorithm == 5
+                ? NsfHifiganStretchOrder::hifiShifterMel
+                : request.stretchAlgorithm == 4
                 ? NsfHifiganStretchOrder::shiftThenSplice
                 : request.stretchAlgorithm == 1
                     ? NsfHifiganStretchOrder::spliceThenShift
@@ -917,13 +951,15 @@ public:
                 targetSamples, request.framePeriodMs, request.targetMidi,
                 request.formantSemitones, neuralTimeMap, request.hifiganModelDirectory,
                 request.inference, stretchOrder, request.normalizeVolume, edgeGuard,
-                [this] { return shouldExit(); });
+                [this] { return shouldExit(); }, request.nsfNoiseProtection, request.nsfSmoothPitchTransitions, true);
             if (shouldExit()) return jobHasFinished;
             if (neural.usedModel && neural.buffer.getNumSamples() == targetSamples)
             {
                 rendered = std::move(neural.buffer);
                 usedNsfModel = true;
                 nsfInference = neural.activeInference;
+                if (request.nsfNoiseProtection)
+                    nsfInference += neural.usedHarmonicNoise ? "+hnsep" : "+source-uv";
                 if (request.matchNsfSourceLevel
                     && (request.stretchAlgorithm == 1 || request.stretchAlgorithm == 4))
                     raiseActiveRmsFloor(rendered, source);
@@ -980,7 +1016,8 @@ public:
             : juce::String("vslib");
         if (usedNsfModel && nsfInference.isNotEmpty()) backend << "[" << nsfInference << "]";
         if (request.normalizeVolume) backend << "+normalized";
-        backend += request.stretchAlgorithm == 1 ? "+variable-mel-hop-splice-first"
+        backend += request.stretchAlgorithm == 5 ? "+hifishifter-mel"
+            : request.stretchAlgorithm == 1 ? "+variable-mel-hop-splice-first"
             : request.stretchAlgorithm == 4 ? "+nsf-shift-then-splice"
             : request.stretchAlgorithm == 2 ? "+loop"
             : request.stretchAlgorithm == 3 ? "+soundtouch"

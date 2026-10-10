@@ -261,6 +261,7 @@ juce::String stretchAlgorithmText(StretchAlgorithm value)
     if (value == StretchAlgorithm::loop) return "loop";
     if (value == StretchAlgorithm::soundTouch) return "soundtouch";
     if (value == StretchAlgorithm::nsfShiftThenSplice) return "nsf-shift-then-splice";
+    if (value == StretchAlgorithm::hifiShifterMel) return "hifishifter-mel";
     return "melodyne-hybrid";
 }
 
@@ -530,6 +531,10 @@ juce::var McpServer::diagnosticTools()
                   .description = "Where it sits, -1 left to 1 right" },
                 { .name = "smooth_overlaps", .type = "boolean",
                   .description = "Crossfade where notes overlap" },
+                { .name = "nsf_smooth_pitch_transitions", .type = "boolean",
+                  .description = "Native NSF automatic pitch-jump smoothing; false retains authored discontinuities" },
+                { .name = "nsf_noise_protection", .type = "boolean",
+                  .description = "Native NSF harmonic/noise separation, source-noise time mapping and clear unvoiced PCM restoration; on by default" },
                 { .name = "normalize_volume", .type = "boolean",
                   .description = "Even out the level across the track" },
                 { .name = "pitch_algorithm", .type = "string",
@@ -545,7 +550,7 @@ juce::var McpServer::diagnosticTools()
                 { .name = "stretch_algorithm", .type = "string",
                   .description = "What changes a recording's length",
                   .choices = { "melodyne-hybrid", "variable-mel-hop", "loop", "soundtouch",
-                               "nsf-shift-then-splice" } },
+                               "nsf-shift-then-splice", "hifishifter-mel" } },
                 { .name = "render_order", .type = "string",
                   .description = "Whether notes are joined before or after they are processed",
                   .choices = { "process-then-splice", "stretch-splice-then-pitch" } },
@@ -1166,6 +1171,10 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
         if (args.hasProperty("pan")) project.setTrackPan(id, static_cast<float>(number(args, "pan")));
         if (args.hasProperty("smooth_overlaps"))
             project.setTrackSmoothOverlaps(id, static_cast<bool>(args["smooth_overlaps"]));
+        if (args.hasProperty("nsf_smooth_pitch_transitions"))
+            project.setTrackNsfSmoothPitchTransitions(id, static_cast<bool>(args["nsf_smooth_pitch_transitions"]));
+        if (args.hasProperty("nsf_noise_protection"))
+            project.setTrackNsfNoiseProtection(id, static_cast<bool>(args["nsf_noise_protection"]));
         if (args.hasProperty("normalize_volume"))
             project.setTrackNormalizeVolume(id, static_cast<bool>(args["normalize_volume"]));
         if (args.hasProperty("pitch_algorithm"))
@@ -1202,6 +1211,7 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
                 value == "variable-mel-hop" ? StretchAlgorithm::variableMelHop
                 : value == "loop" ? StretchAlgorithm::loop
                 : value == "soundtouch" ? StretchAlgorithm::soundTouch
+                : value == "hifishifter-mel" ? StretchAlgorithm::hifiShifterMel
                 : value == "nsf-shift-then-splice" ? StretchAlgorithm::nsfShiftThenSplice
                 : StretchAlgorithm::melodyneHybrid);
         }
@@ -1766,6 +1776,7 @@ juce::var McpServer::noteJson(const NoteData& note, bool includeCurves)
         set(noteValue, "diffsinger_pitch_reference", pitchPoints(note.diffSingerPitchReference));
         set(noteValue, "diffsinger_pitch_offset", pitchPoints(note.diffSingerPitchOffset));
     }
+    set(noteValue, "native_unpitched", note.nativeUnpitched);
     set(noteValue, "native_role", nativeSegmentRoleName(note.nativeRole));
     set(noteValue, "native_provenance", note.nativeProvenance);
     set(noteValue, "native_confidence", note.nativeConfidence);
@@ -1922,6 +1933,8 @@ juce::var McpServer::projectJson() const
         set(trackValue, "pan", track.pan);
         set(trackValue, "smooth_overlaps", track.smoothOverlaps);
         set(trackValue, "normalize_volume", track.normalizeVolume);
+        set(trackValue, "nsf_smooth_pitch_transitions", track.nsfSmoothPitchTransitions);
+        set(trackValue, "nsf_noise_protection", track.nsfNoiseProtection);
         set(trackValue, "pitch_algorithm",
             track.accompaniment ? juce::String("none") : track.pitchAlgorithm == PitchAlgorithm::utau
                 ? utauModeKey(track.utauMode)

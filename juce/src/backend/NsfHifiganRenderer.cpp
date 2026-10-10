@@ -1,4 +1,8 @@
+#include "FcpeAnalyzer.h"
+#include "SourceVoicing.h"
 #include "NsfHifiganRenderer.h"
+#include "NsfRenderChunkCache.h"
+#include "ChineseCvvcPhonemizer.h"
 #include "AmplitudeEnvelopeCurve.h"
 #include "AdvancedEnvelope.h"
 #include "HifisamplerFlags.h"
@@ -25,6 +29,45 @@
 
 namespace hachi::backend
 {
+void conditionNsfPitchTransitions(std::vector<float>& f0, bool enabled)
+{
+    if (!enabled) return;
+    // A hard voiced->unvoiced f0 step (e.g. 240 Hz -> 0 in one frame) makes
+    // the NSF source filter switch its excitation abruptly and pops at the
+    // vowel/consonant boundary.  Taper the frame that touches the edge so
+    // the drop/rise is a short glide instead of an impulse.
+    for (std::size_t frame = 1; frame + 1 < f0.size(); ++frame)
+    {
+        if (f0[frame] > 0.0f && f0[frame + 1] <= 0.0f && f0[frame - 1] > 0.0f)
+            f0[frame] *= 0.55f;
+        else if (f0[frame] <= 0.0f && f0[frame + 1] > 0.0f && f0[frame - 1] <= 0.0f)
+            f0[frame] = f0[frame + 1] * 0.55f;
+    }
+    // A hard voiced->voiced f0 step (e.g. a Melodyne hard-disconnect split:
+    // AudioEngine only glides connected notes) jumps the NSF excitation by
+    // a musical interval in one hop, which the decoder turns into a click.
+    // Glide the single transition frame to the geometric midpoint so the
+    // interval becomes a ~2 frame portamento without smearing a real
+    // glissando (neighbours are read from a snapshot to avoid cascading).
+    const auto f0Snapshot = f0;
+    for (std::size_t frame = 1; frame + 1 < f0.size(); ++frame)
+    {
+        const auto a = f0Snapshot[frame - 1];
+        const auto b = f0Snapshot[frame];
+        const auto c = f0Snapshot[frame + 1];
+        if (!(a > 0.0f && b > 0.0f && c > 0.0f)) continue;
+        const auto step = std::abs(12.0 * std::log2(c / a));
+        if (step <= 1.5) continue;
+        // A real glissando has the middle frame mid-slope (b roughly the
+        // geometric mean of a and c), so it is flat against neither
+        // neighbour.  Only a hard step sits flat against one side.
+        const auto leftGap = std::abs(12.0 * std::log2(b / a));
+        const auto rightGap = std::abs(12.0 * std::log2(c / b));
+        if (leftGap < 0.5 || rightGap < 0.5)
+            f0[frame] = std::sqrt(a * c);
+    }
+}
+
 #if defined(HACHI_HAS_ONNX_ANALYSIS) && HACHI_HAS_ONNX_ANALYSIS
 namespace
 {
@@ -532,6 +575,39 @@ MelData spliceMelToTimeMap(const MelData& source, int melBands,
     return result;
 }
 
+// HiFiShifter main 6432687: round(T_in / playback_rate), then align the
+// first/last Mel frames and linearly interpolate. Ordinary two-anchor clips
+// exactly follow that stretch rule. Interior anchors extend it to this editor's
+// nonuniform note timing; duplicate-time anchors retain source discontinuities.
+MelData stretchHiFiShifterMel(const MelData& source, int bands,
+                             double sourceSeconds, double targetSeconds,
+                             const std::vector<NsfHifiganTimeMapPoint>& timeMap)
+{
+    if (source.frames == 0 || sourceSeconds <= 0 || targetSeconds <= 0) return {};
+    const auto frames = std::max<std::size_t>(1, static_cast<std::size_t>(
+        std::llround(static_cast<double>(source.frames) * targetSeconds / sourceSeconds)));
+    if (source.frames <= 1 || frames <= 1 || timeMap.size() < 2)
+        return interpolateMelTime(source, bands, frames);
+    return spliceMelToTimeMap(source, bands, frames,
+        targetSeconds / static_cast<double>(frames - 1),
+        sourceSeconds / static_cast<double>(source.frames - 1), timeMap);
+}
+
+// Match upstream's two-hop tail ramp before padding/truncating to the exact
+// timeline duration; frame-count rounding can leave more than one hop at high
+// stretch ratios. Do not treat that expected shortfall as an inference failure.
+void alignHiFiShifterTail(std::vector<float>& output, std::size_t target, std::size_t ramp)
+{
+    if (output.size() == target) return;
+    const auto end = std::min(output.size(), target);
+    const auto start = end > ramp ? end - ramp : 0;
+    const auto count = end - start;
+    if (count >= 2)
+        for (auto i = start; i < end; ++i)
+            output[i] *= static_cast<float>(end - i) / static_cast<float>(count);
+    output.resize(target, 0.0f);
+}
+
 void normalizeMelToReference(MelData& mel, const MelData& reference, int melBands)
 {
     if (mel.frames == 0 || mel.frames != reference.frames || melBands <= 0) return;
@@ -824,6 +900,40 @@ void shiftMelFormants(MelData& mel, const Config& config,
     }
 }
 
+void applyNeuralEdgeGuard(float* samples, int count, double sampleRate,
+                          double guardStartSeconds, double guardEndSeconds)
+{
+    if (samples == nullptr || count <= 0 || sampleRate <= 0.0) return;
+    // Clip boundaries are not guaranteed to coincide with a decoder source
+    // phase.  An equal-power guard suppresses that isolated discontinuity
+    // without smearing attacks or creating an audible long crossfade.  Each
+    // edge can be disabled: connected phrase seams are decoded continuously in
+    // the stretch-splice-then-pitch order, and per-element seams are covered by
+    // a longer mixer crossfade, so a baked-in 3 ms dip there only adds noise.
+    const auto fadeIn = guardStartSeconds > 0.0
+        ? std::min(count / 2, std::max(1,
+            static_cast<int>(std::llround(sampleRate * guardStartSeconds)))) : 0;
+    const auto fadeOut = guardEndSeconds > 0.0
+        ? std::min(count / 2, std::max(1,
+            static_cast<int>(std::llround(sampleRate * guardEndSeconds)))) : 0;
+    for (int index = 0; index < fadeIn; ++index)
+    {
+        const auto phase = (static_cast<double>(index) + 1.0)
+            / (static_cast<double>(fadeIn) + 1.0);
+        const auto gainIn = static_cast<float>(std::sin(
+            juce::MathConstants<double>::halfPi * phase));
+        samples[index] *= gainIn;
+    }
+    for (int index = 0; index < fadeOut; ++index)
+    {
+        const auto phase = (static_cast<double>(index) + 1.0)
+            / (static_cast<double>(fadeOut) + 1.0);
+        const auto gainOut = static_cast<float>(std::sin(
+            juce::MathConstants<double>::halfPi * phase));
+        samples[count - 1 - index] *= gainOut;
+    }
+}
+
 void conditionNeuralBoundary(float* samples, int count, double sampleRate,
                              double guardStartSeconds, double guardEndSeconds)
 {
@@ -864,34 +974,7 @@ void conditionNeuralBoundary(float* samples, int count, double sampleRate,
         if (deviation > std::max(0.16f, 2.5f * localRms) && surroundingSmooth)
             samples[index] = localMean;
     }
-    // Clip boundaries are not guaranteed to coincide with a decoder source
-    // phase.  An equal-power guard suppresses that isolated discontinuity
-    // without smearing attacks or creating an audible long crossfade.  Each
-    // edge can be disabled: connected phrase seams are decoded continuously in
-    // the stretch-splice-then-pitch order, and per-element seams are covered by
-    // a longer mixer crossfade, so a baked-in 3 ms dip there only adds noise.
-    const auto fadeIn = guardStartSeconds > 0.0
-        ? std::min(count / 2, std::max(1,
-            static_cast<int>(std::llround(sampleRate * guardStartSeconds)))) : 0;
-    const auto fadeOut = guardEndSeconds > 0.0
-        ? std::min(count / 2, std::max(1,
-            static_cast<int>(std::llround(sampleRate * guardEndSeconds)))) : 0;
-    for (int index = 0; index < fadeIn; ++index)
-    {
-        const auto phase = (static_cast<double>(index) + 1.0)
-            / (static_cast<double>(fadeIn) + 1.0);
-        const auto gainIn = static_cast<float>(std::sin(
-            juce::MathConstants<double>::halfPi * phase));
-        samples[index] *= gainIn;
-    }
-    for (int index = 0; index < fadeOut; ++index)
-    {
-        const auto phase = (static_cast<double>(index) + 1.0)
-            / (static_cast<double>(fadeOut) + 1.0);
-        const auto gainOut = static_cast<float>(std::sin(
-            juce::MathConstants<double>::halfPi * phase));
-        samples[count - 1 - index] *= gainOut;
-    }
+    applyNeuralEdgeGuard(samples,count,sampleRate,guardStartSeconds,guardEndSeconds);
 }
 
 #if JUCE_WINDOWS
@@ -912,6 +995,7 @@ struct SessionEntry
 {
     std::shared_ptr<Ort::Session> model;
     std::shared_ptr<std::mutex> runMutex;
+    std::shared_ptr<NsfRenderChunkCache> nativeChunks = std::make_shared<NsfRenderChunkCache>();
     juce::String activeInference;
 };
 
@@ -953,7 +1037,8 @@ SessionEntry session(const juce::File& model, const OrtExecutionConfig& executio
 
 std::vector<float> infer(Ort::Session& model, const Config& config,
                          const MelData& mel, const std::vector<float>& f0,
-                         std::mutex* runMutex)
+                         std::mutex* runMutex, NsfRenderChunkCache* nativeChunks = nullptr,
+                         NsfHifiganRenderResult* diagnostics = nullptr)
 {
     Ort::AllocatorWithDefaultOptions allocator;
     if (model.GetInputCount() != 2 || model.GetOutputCount() < 1
@@ -986,10 +1071,12 @@ std::vector<float> infer(Ort::Session& model, const Config& config,
     const char* inputNames[] { melName.get(), f0Name.get() };
     const char* outputNames[] { outputName.get() };
     const auto memory = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-    constexpr std::size_t coreFrames = 4'096;
+    // Native edits typically affect seconds, not a 47-second tensor. Keep a
+    // stable grid with the existing context/crossfade; UTAU keeps its old path.
+    const std::size_t coreFrames = nativeChunks != nullptr ? 512 : 4'096;
     constexpr std::size_t contextFrames = 32;
     constexpr std::size_t overlapFrames = 16;
-    constexpr std::size_t stepFrames = coreFrames - overlapFrames;
+    const auto stepFrames = coreFrames - overlapFrames;
     std::vector<float> output(mel.frames * static_cast<std::size_t>(config.hop));
     std::vector<float> weight(output.size());
     for (std::size_t coreStart = 0; coreStart < mel.frames; coreStart += stepFrames)
@@ -1014,37 +1101,61 @@ std::vector<float> infer(Ort::Session& model, const Config& config,
         }
         std::vector<float> f0Chunk(f0.begin() + static_cast<std::ptrdiff_t>(inputStart),
                                    f0.begin() + static_cast<std::ptrdiff_t>(inputEnd));
-        const std::array<int64_t, 3> melShape {
-            1, framesFirst ? static_cast<int64_t>(inputFrames) : config.melBands,
-            framesFirst ? config.melBands : static_cast<int64_t>(inputFrames)
-        };
-        const std::array<int64_t, 2> f0Shape { 1, static_cast<int64_t>(inputFrames) };
-        auto melTensor = Ort::Value::CreateTensor<float>(memory, melChunk.data(), melChunk.size(),
-                                                          melShape.data(), melShape.size());
-        auto f0Tensor = Ort::Value::CreateTensor<float>(memory, f0Chunk.data(), f0Chunk.size(),
-                                                         f0Shape.data(), f0Shape.size());
-        std::array<Ort::Value, 2> inputs { std::move(melTensor), std::move(f0Tensor) };
-        std::unique_lock<std::mutex> runLock;
-        if (runMutex != nullptr) runLock = cancellableNsfLock(*runMutex);
-        CancellableNsfRun run;
-        auto rendered = model.Run(run.options, inputNames, inputs.data(),
-                                  inputs.size(), outputNames, 1);
-        checkNsfCancellation();
-        if (rendered.empty()) return {};
-        const auto info = rendered[0].GetTensorTypeAndShapeInfo();
-        const auto count = info.GetElementCount();
-        const auto* values = rendered[0].GetTensorData<float>();
         const auto crop = (coreStart - inputStart) * static_cast<std::size_t>(config.hop);
         const auto wanted = (coreEnd - coreStart) * static_cast<std::size_t>(config.hop);
-        const auto available = count > crop ? std::min(wanted, count - crop) : 0;
-        // A short tensor would otherwise leave a zero-filled hole while still
-        // claiming that the neural backend succeeded.  Treat an incompatible
-        // model/output shape as a render failure so the established fallback
-        // remains audible for the complete clip.
-        if (available != wanted) return {};
+        std::string chunkKey;
+        NsfRenderChunkCache::Samples decoded;
+        if (nativeChunks != nullptr)
+        {
+            chunkKey = (juce::String(config.hop) + ":" + juce::String(config.melBands)
+                + ":" + juce::String(framesFirst ? 1 : 0) + ":" + juce::String(inputFrames)
+                + ":" + juce::String(crop) + ":" + juce::String(wanted) + ":"
+                + juce::SHA256(melChunk.data(), melChunk.size() * sizeof(float)).toHexString()
+                + ":" + juce::SHA256(f0Chunk.data(), f0Chunk.size() * sizeof(float)).toHexString()).toStdString();
+            decoded = nativeChunks->get(chunkKey);
+        }
+        if (decoded)
+        {
+            if (diagnostics != nullptr) ++diagnostics->reusedChunks;
+        }
+        else
+        {
+            const std::array<int64_t, 3> melShape {
+                1, framesFirst ? static_cast<int64_t>(inputFrames) : config.melBands,
+                framesFirst ? config.melBands : static_cast<int64_t>(inputFrames)
+            };
+            const std::array<int64_t, 2> f0Shape { 1, static_cast<int64_t>(inputFrames) };
+            auto melTensor = Ort::Value::CreateTensor<float>(memory, melChunk.data(), melChunk.size(),
+                                                              melShape.data(), melShape.size());
+            auto f0Tensor = Ort::Value::CreateTensor<float>(memory, f0Chunk.data(), f0Chunk.size(),
+                                                             f0Shape.data(), f0Shape.size());
+            std::array<Ort::Value, 2> inputs { std::move(melTensor), std::move(f0Tensor) };
+            std::unique_lock<std::mutex> runLock;
+            if (runMutex != nullptr) runLock = cancellableNsfLock(*runMutex);
+            CancellableNsfRun run;
+            auto rendered = model.Run(run.options, inputNames, inputs.data(),
+                                      inputs.size(), outputNames, 1);
+            checkNsfCancellation();
+            if (rendered.empty()) return {};
+            const auto info = rendered[0].GetTensorTypeAndShapeInfo();
+            if (info.GetElementType() != ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) return {};
+            const auto count = info.GetElementCount();
+            const auto* values = rendered[0].GetTensorData<float>();
+            const auto available = count > crop ? std::min(wanted, count - crop) : 0;
+            // A short tensor would otherwise leave a zero-filled hole while still
+            // claiming that the neural backend succeeded.  Treat an incompatible
+            // model/output shape as a render failure so the established fallback
+            // remains audible for the complete clip.
+            if (available != wanted) return {};
+            decoded = std::make_shared<const std::vector<float>>(values + crop, values + crop + wanted);
+            checkNsfCancellation();
+            if (nativeChunks != nullptr) nativeChunks->put(chunkKey, decoded);
+            if (diagnostics != nullptr) ++diagnostics->inferredChunks;
+        }
+        checkNsfCancellation();
         const auto overlapSamples = overlapFrames * static_cast<std::size_t>(config.hop);
         const auto outputOffset = coreStart * static_cast<std::size_t>(config.hop);
-        for (std::size_t sample = 0; sample < available; ++sample)
+        for (std::size_t sample = 0; sample < wanted; ++sample)
         {
             auto blend = 1.0f;
             if (coreStart > 0 && sample < overlapSamples)
@@ -1054,15 +1165,15 @@ std::vector<float> infer(Ort::Session& model, const Config& config,
                 blend *= static_cast<float>(std::sin(
                     juce::MathConstants<double>::halfPi * phase));
             }
-            if (coreEnd < mel.frames && available - sample <= overlapSamples)
+            if (coreEnd < mel.frames && wanted - sample <= overlapSamples)
             {
-                const auto phase = (static_cast<double>(available - sample) - 0.5)
+                const auto phase = (static_cast<double>(wanted - sample) - 0.5)
                     / static_cast<double>(overlapSamples);
                 blend *= static_cast<float>(std::sin(
                     juce::MathConstants<double>::halfPi * phase));
             }
             const auto destination = outputOffset + sample;
-            output[destination] += values[crop + sample] * blend;
+            output[destination] += (*decoded)[sample] * blend;
             weight[destination] += blend;
         }
         if (coreEnd == mel.frames) break;
@@ -1102,7 +1213,8 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
     const juce::File& configuredModelDirectory,
     const OrtExecutionConfig& execution, NsfHifiganStretchOrder stretchOrder,
     bool normalizeVolume, const NsfHifiganEdgeGuard& edgeGuard,
-    const std::function<bool()>& cancelled)
+    const std::function<bool()>& cancelled, bool protectNativeNoise, bool smoothPitchTransitions,
+    bool incrementalNativeRender)
 {
     NsfHifiganRenderResult result;
 #if defined(HACHI_HAS_ONNX_ANALYSIS) && HACHI_HAS_ONNX_ANALYSIS
@@ -1138,15 +1250,43 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
         // The public NSF model is mono.  Use a correlation-aware fold-down so
         // phase-widened stereo material keeps its vocal-tract envelope.
         auto mono = stableMonoInput(source);
-        const auto modelInput = resample(mono.data(), sourceSamples,
+        auto modelInput = resample(mono.data(), sourceSamples,
             static_cast<int>(std::llround(sampleRate)), config->sampleRate);
+        const auto voicing = protectNativeNoise
+            ? SourceVoicing::analyse(modelInput, config->sampleRate, checkNsfCancellation) : SourceVoicing{};
+        std::vector<float> sourceNoise;
+        if (protectNativeNoise && config->sampleRate == 44100 && hifiHnsepFile(*files).existsAsFile())
+        {
+            auto separated = hifiSeparate(modelInput, *files, execution, false);
+            sourceNoise.resize(modelInput.size());
+            for (std::size_t i=0; i<modelInput.size(); ++i)
+                sourceNoise[i] = modelInput[i] - separated.harmonic[i];
+            modelInput = std::move(separated.harmonic);
+            result.usedHarmonicNoise = true;
+        }
+        // Keep noise on the original source clock, including free trim and
+        // unequal per-note stretch. Duplicate-time anchors are source jumps.
+        const auto sourceAt = [&](double seconds) {
+            if (timeMap.size() < 2)
+                return seconds * sourceSamples / targetSamples;
+            auto right = std::upper_bound(timeMap.begin(),timeMap.end(),seconds,
+                [](double t,const NsfHifiganTimeMapPoint& p) { return t < p.targetSeconds; });
+            if (right == timeMap.begin()) return right->sourceSeconds;
+            if (right == timeMap.end()) return timeMap.back().sourceSeconds;
+            const auto& left = *(right-1);
+            const auto span = right->targetSeconds-left.targetSeconds;
+            const auto phase = span>1.e-12 ? juce::jlimit(0.0,1.0,(seconds-left.targetSeconds)/span) : 0.0;
+            return left.sourceSeconds+(right->sourceSeconds-left.sourceSeconds)*phase;
+        };
         const auto targetModelSamples = std::max<std::size_t>(1,
             static_cast<std::size_t>(std::llround(static_cast<double>(targetSamples)
                 * config->sampleRate / sampleRate)));
         const auto targetFrames = std::max<std::size_t>(1,
             (targetModelSamples + static_cast<std::size_t>(config->hop) - 1)
                 / static_cast<std::size_t>(config->hop));
-        const auto variableHop = stretchOrder != NsfHifiganStretchOrder::fixedHop;
+        const auto hifiShifter = stretchOrder == NsfHifiganStretchOrder::hifiShifterMel;
+        const auto variableHop = stretchOrder == NsfHifiganStretchOrder::spliceThenShift
+            || stretchOrder == NsfHifiganStretchOrder::shiftThenSplice;
         auto referenceMel = normalizeVolume
             ? spliceMelToTimeMap(buildMelWithHop(modelInput, *config, config->hop),
                 config->melBands, targetFrames,
@@ -1154,7 +1294,11 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
                 static_cast<double>(config->hop) / config->sampleRate, timeMap,
                 variableHop ? 0.5 : 0.0, variableHop ? 0.5 : 0.0)
             : MelData{};
-        auto mel = stretchOrder == NsfHifiganStretchOrder::spliceThenShift
+        auto mel = hifiShifter
+            ? stretchHiFiShifterMel(buildMelWithHop(modelInput, *config, config->hop),
+                config->melBands, static_cast<double>(sourceSamples) / sampleRate,
+                static_cast<double>(targetSamples) / sampleRate, timeMap)
+            : stretchOrder == NsfHifiganStretchOrder::spliceThenShift
             ? buildVariableHopSplicedMel(modelInput, *config, targetFrames, timeMap)
             : stretchOrder == NsfHifiganStretchOrder::shiftThenSplice
                 ? buildVariableHopSplicedMel(modelInput, *config, targetFrames, timeMap,
@@ -1169,6 +1313,8 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
             result.buffer.setSize(0, 0);
             return result;
         }
+        if (hifiShifter && referenceMel.frames != 0)
+            referenceMel = mel;
         // Splice-first and fixed-hop orders shift the whole joined Mel once,
         // after the segments are blended; the shift-first order already applied
         // the formant curve inside buildVariableHopSplicedMel per segment.
@@ -1189,44 +1335,23 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
             f0[frame] = midiToHz(curveAt(targetMidi,
                 seconds * 1000.0 / framePeriod));
         }
-        // A hard voiced->unvoiced f0 step (e.g. 240 Hz -> 0 in one frame) makes
-        // the NSF source filter switch its excitation abruptly and pops at the
-        // vowel/consonant boundary.  Taper the frame that touches the edge so
-        // the drop/rise is a short glide instead of an impulse.
-        for (std::size_t frame = 1; frame + 1 < f0.size(); ++frame)
-        {
-            if (f0[frame] > 0.0f && f0[frame + 1] <= 0.0f && f0[frame - 1] > 0.0f)
-                f0[frame] *= 0.55f;
-            else if (f0[frame] <= 0.0f && f0[frame + 1] > 0.0f && f0[frame - 1] <= 0.0f)
-                f0[frame] = f0[frame + 1] * 0.55f;
-        }
-        // A hard voiced->voiced f0 step (e.g. a Melodyne hard-disconnect split:
-        // AudioEngine only glides connected notes) jumps the NSF excitation by
-        // a musical interval in one hop, which the decoder turns into a click.
-        // Glide the single transition frame to the geometric midpoint so the
-        // interval becomes a ~2 frame portamento without smearing a real
-        // glissando (neighbours are read from a snapshot to avoid cascading).
-        const auto f0Snapshot = f0;
-        for (std::size_t frame = 1; frame + 1 < f0.size(); ++frame)
-        {
-            const auto a = f0Snapshot[frame - 1];
-            const auto b = f0Snapshot[frame];
-            const auto c = f0Snapshot[frame + 1];
-            if (!(a > 0.0f && b > 0.0f && c > 0.0f)) continue;
-            const auto step = std::abs(12.0 * std::log2(c / a));
-            if (step <= 1.5) continue;
-            // A real glissando has the middle frame mid-slope (b roughly the
-            // geometric mean of a and c), so it is flat against neither
-            // neighbour.  Only a hard step sits flat against one side.
-            const auto leftGap = std::abs(12.0 * std::log2(b / a));
-            const auto rightGap = std::abs(12.0 * std::log2(c / b));
-            if (leftGap < 0.5 || rightGap < 0.5)
-                f0[frame] = std::sqrt(a * c);
-        }
+        const auto requestedF0 = f0;
+        conditionNsfPitchTransitions(f0, smoothPitchTransitions);
+        if (protectNativeNoise)
+            for (std::size_t frame=0;frame<f0.size();++frame)
+                if (requestedF0[frame] <= 0 || voicing.at(sourceAt(frame*hopSeconds)) >= .999f)
+                {
+                    f0[frame]=0; // Never invent a periodic source for sh/s/f/h.
+                    ++result.protectedUnvoicedFrames;
+                }
         constexpr std::size_t edgeContextFrames = 16;
-        addModelEdgeContext(mel, f0, config->melBands, edgeContextFrames, edgeGuard);
+        auto contextGuard=edgeGuard;
+        if (!smoothPitchTransitions)
+            contextGuard.neighborStartF0=contextGuard.neighborEndF0=0;
+        addModelEdgeContext(mel, f0, config->melBands, edgeContextFrames, contextGuard);
         auto modelOutput = infer(*ortSession.model, *config, mel, f0,
-                                 ortSession.runMutex.get());
+                                 ortSession.runMutex.get(),
+                                 (protectNativeNoise || incrementalNativeRender) ? ortSession.nativeChunks.get() : nullptr, &result);
         if (modelOutput.empty())
         {
             result.error = "NSF-HiFiGAN ONNX returned empty audio";
@@ -1234,7 +1359,8 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
             return result;
         }
         const auto contextSamples = edgeContextFrames * static_cast<std::size_t>(config->hop);
-        const auto unpaddedSamples = targetFrames * static_cast<std::size_t>(config->hop);
+        const auto unpaddedSamples = (mel.frames - 2 * edgeContextFrames)
+            * static_cast<std::size_t>(config->hop);
         if (modelOutput.size() < contextSamples + unpaddedSamples)
         {
             result.error = "NSF-HiFiGAN ONNX returned short context audio";
@@ -1244,11 +1370,14 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
         std::vector<float> croppedModelOutput(unpaddedSamples);
         std::copy_n(modelOutput.begin() + static_cast<std::ptrdiff_t>(contextSamples),
                     unpaddedSamples, croppedModelOutput.begin());
-        const auto output = resample(croppedModelOutput.data(),
+        auto output = resample(croppedModelOutput.data(),
                                       static_cast<int>(croppedModelOutput.size()),
                                       config->sampleRate,
                                       static_cast<int>(std::llround(sampleRate)));
         const auto wanted = static_cast<std::size_t>(targetSamples);
+        if (hifiShifter)
+            alignHiFiShifterTail(output, wanted, 2 * static_cast<std::size_t>(std::ceil(
+                static_cast<double>(config->hop) * sampleRate / config->sampleRate)));
         const auto maximumNaturalShortfall = static_cast<std::size_t>(std::ceil(
             static_cast<double>(config->hop) * sampleRate / config->sampleRate)) + 2;
         if (output.size() + maximumNaturalShortfall < wanted)
@@ -1257,6 +1386,12 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
             result.buffer.setSize(0, 0);
             return result;
         }
+        const auto sampleAt = [](const float* values, std::size_t count, double pos) {
+            if (count==0) return 0.f;
+            pos=juce::jlimit(0.0,double(count-1),pos);
+            const auto i=std::size_t(pos), j=std::min(i+1,count-1);
+            return values[i]+(values[j]-values[i])*float(pos-i);
+        };
         for (int channel = 0; channel < channels; ++channel)
         {
             auto* destination = result.buffer.getWritePointer(channel);
@@ -1265,8 +1400,31 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
             if (copied < wanted)
                 std::fill(destination + static_cast<std::ptrdiff_t>(copied),
                           destination + static_cast<std::ptrdiff_t>(wanted), 0.0f);
-            conditionNeuralBoundary(destination, targetSamples, sampleRate,
-                edgeGuard.startSeconds, edgeGuard.endSeconds);
+            // DC/decoder impulse repair belongs to synthesized harmonics.
+            // Applying it after the mix would also filter natural frication.
+            if (protectNativeNoise)
+                conditionNeuralBoundary(destination,targetSamples,sampleRate,0,0);
+            if (protectNativeNoise)
+                for (int sample=0;sample<targetSamples;++sample)
+                {
+                    if ((sample & 1023)==0) checkNsfCancellation();
+                    const auto sourceSeconds=sourceAt(double(sample)/sampleRate);
+                    if (!sourceNoise.empty())
+                        destination[sample]+=sampleAt(sourceNoise.data(),sourceNoise.size(),sourceSeconds*config->sampleRate);
+                    // For confidently unvoiced material, retain the original
+                    // consonant itself (not its neural reconstruction), with
+                    // a 10 ms mask transition into the pitched harmonic path.
+                    const auto dry=voicing.at(sourceSeconds);
+                    if(dry>0)
+                        destination[sample] = destination[sample]*(1-dry)
+                            + sampleAt(source.getReadPointer(channel),std::size_t(sourceSamples),sourceSeconds*sampleRate)*dry;
+                }
+            if (protectNativeNoise)
+                applyNeuralEdgeGuard(destination,targetSamples,sampleRate,
+                    edgeGuard.startSeconds,edgeGuard.endSeconds);
+            else
+                conditionNeuralBoundary(destination, targetSamples, sampleRate,
+                    edgeGuard.startSeconds, edgeGuard.endSeconds);
         }
         checkNsfCancellation();
         result.usedModel = true;
@@ -1283,7 +1441,8 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
 #else
     juce::ignoreUnused(source, sampleRate, targetSamples, framePeriodMs, targetMidi,
                        formantSemitones, timeMap, configuredModelDirectory, execution,
-                       stretchOrder, normalizeVolume, edgeGuard, cancelled);
+                       stretchOrder, normalizeVolume, edgeGuard, cancelled, protectNativeNoise, smoothPitchTransitions,
+                       incrementalNativeRender);
     result.error = "NSF-HiFiGAN ONNX runtime is not included";
 #endif
     if (!result.usedModel) result.buffer.setSize(0, 0);
@@ -1621,6 +1780,8 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
                                      const juce::File& modelDirectory,
                                      const OrtExecutionConfig& execution)
 {
+    if (request.chineseCvvc && !request.fourRegion)
+        return renderChineseCvvc(request, [&](const auto& expanded) { return renderNsfUtauPhrase(expanded, modelDirectory, execution); });
     UtauRenderResult result;
     result.backend = "hifisampler-native-voicebank";
     if (!NsfHifiganRenderer::modelAvailable(modelDirectory))
@@ -1639,6 +1800,7 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
     double phraseRate = 0.0;
     std::vector<NsfUtauMixNote> mixNotes;
     mixNotes.reserve(request.notes.size());
+    std::vector<std::size_t> silentContext;
     std::vector<UtauRenderer::ResolvedSample> samples;
     samples.reserve(request.notes.size());
     for (const auto& note : request.notes)
@@ -1648,7 +1810,7 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
             request.voicebankDirectory, note.alias, note.midiNote,
             note.consonantVelocity, request.fourRegion, request.consonantClasses,
             note.stpSeconds, note.preutteranceOverrideEnabled, note.preutteranceSeconds,
-            note.overlapOverrideEnabled, note.overlapSeconds, &note.oto));
+            note.overlapOverrideEnabled, note.overlapSeconds, &note.oto, note.aliasIsResolved));
     }
     for (std::size_t noteIndex = 0; noteIndex < request.notes.size(); ++noteIndex)
     {
@@ -1661,6 +1823,13 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
         }
         const auto& resolved = samples[noteIndex];
         if (!resolved.found) { ++missing; continue; }
+        if (note.preserveEnvelopeTiming && note.gain <= 0)
+        {
+            silentContext.push_back(mixNotes.size());
+            mixNotes.push_back({ {}, note.startSeconds - std::min(std::max(0.0, resolved.preutteranceSeconds),
+                std::max(0.0, note.startSeconds)), resolved.overlapSeconds, false });
+            continue;
+        }
 
         NsfUtauSampleTiming timing;
         timing.offsetSeconds = resolved.offsetSeconds;
@@ -1714,7 +1883,7 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
         // Resizing leaves the editing envelope's release at its original time.
         // Fit it to the actual OTO/neighbor overlap span before applying gain,
         // exactly as the traditional UTAU mixer does (including notePiece).
-        const auto fittedEnvelope = UtauRenderer::fitAmplitudeEnvelope(note.amplitudeEnvelope,
+        const auto fittedEnvelope = note.preserveEnvelopeTiming ? note.amplitudeEnvelope : UtauRenderer::fitAmplitudeEnvelope(note.amplitudeEnvelope,
             -plan.soundStartOffsetSeconds, plan.soundStartOffsetSeconds + plan.outputSeconds);
         const auto baseGainAt = [&fittedEnvelope](double time) {
             const auto& points = fittedEnvelope;
@@ -1775,6 +1944,14 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
     }
 
     if (phraseRate <= 0.0) phraseRate = 44100.0;
+    for (const auto index : silentContext)
+    {
+        // A zero-valued crossfade still attenuates the selected preceding note.
+        // No model inference, and no song-length silent sample allocations.
+        auto& context = mixNotes[index];
+        context.audio.setSize(1, std::max(1, static_cast<int>(std::ceil(std::max(0.0, context.overlapSeconds) * phraseRate))));
+        context.audio.clear();
+    }
     result.sampleRate = phraseRate;
     result.buffer = mixNsfUtauNotes(mixNotes,
         std::max(0.001, request.targetDurationSeconds), phraseRate, 2, request.cancelled);
@@ -1786,5 +1963,8 @@ UtauRenderResult renderNsfUtauPhrase(const UtauRenderRequest& request,
     return result;
 }
 #include "HifisamplerSmoke.inc"
+#include "HiFiShifterMelSmoke.inc"
+#include "NativeNoiseSmoke.inc"
+#include "NsfPitchTransitionsSmoke.inc"
 
 }
