@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "tag": "build-resources-20261023",
+  "url": "https://github.com/openhachimi/HachiShifter/releases/download/build-resources-20261023/HachiShifter-model-resources-20261023.zip",
+  "bytes": 653491929,
+  "sha256": "6307dd7489d8df0d0884dc55c5db0430c21123964336efce66037c4b2e86516a",
+  "manifestSha256": "f93de5622cbd2a3c9e6f283e7542b454fd3dee07f97b6ffc41b7989afa8278ef",
+  "authorization": "Repository owner explicitly authorized distribution of the provided models.",
+  "sourceBaseline": "r/HachiShifter-0.2.6-dev/source",
+  "annotationFeatureInSourceBaseline": false
+}

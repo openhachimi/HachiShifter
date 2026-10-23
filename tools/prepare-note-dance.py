@@ -4,7 +4,7 @@ import shutil
 from PIL import Image
 
 root = Path(__file__).resolve().parents[1]
-assets = root / 'juce/resources/note-dance'
+assets = root / 'resources/note-dance'
 assets.mkdir(parents=True, exist_ok=True)
 sources = [('F1', '1789609568206.gif'), ('Eight', '1789609570935.gif'),
            ('F2', '1789609573303.gif'), ('Q', '1789609575392.gif')]

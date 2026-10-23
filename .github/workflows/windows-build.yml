@@ -1,158 +1,108 @@
 name: Windows build
-
 on:
   push:
-    branches:
-      - new
-      - next
+    branches: [dev]
   workflow_dispatch:
-
+permissions:
+  contents: read
+concurrency:
+  group: windows-dev-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
-  build-windows:
-    name: Windows x64 (model-free)
-    runs-on: windows-latest
-
+  windows-x64:
+    name: Windows x64 app and model bundle
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
     env:
-      FETCH_CACHE: ${{ github.workspace }}\.cache\hachishifter-fetch
-
+      FETCH_CACHE: ${{ github.workspace }}\.cache\fetch
+      CMAKE_BUILD_PARALLEL_LEVEL: 2
+      PIP_DISABLE_PIP_VERSION_CHECK: 1
     steps:
-      - name: Check out
-        uses: actions/checkout@v4
-
-      - name: Cache FetchContent dependencies
+      - uses: actions/checkout@v4
+      - name: Initialize Visual Studio x64 SDK
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Python for packaging the existing bridge
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.9'
+          cache: pip
+          cache-dependency-path: engines/diffsinger/requirements.txt
+      - name: Cache pinned dependency downloads
         uses: actions/cache@v4
         with:
           path: ${{ env.FETCH_CACHE }}
-          key: hachi-fetch-windows-${{ hashFiles('juce/CMakeLists.txt') }}
-          restore-keys: |
-            hachi-fetch-windows-
-
-      - name: Configure
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Configure CMake
+          key: windows-2022-x64-dependencies-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}
+          restore-keys: windows-2022-x64-dependencies-
+      - name: Check native tools
         run: |
-          cmake -S juce -B build-windows `
-            -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_EXE_LINKER_FLAGS=/MAP `
-            -DFETCHCONTENT_BASE_DIR="$env:FETCH_CACHE"
-
-      - name: Build
-        run: cmake --build build-windows --target HachiShifterNext -- -j32
-
-      - name: Package
-        shell: pwsh
+          $llvm = 'C:\Program Files\LLVM\bin'
+          if (Test-Path -LiteralPath $llvm) { $llvm | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append; $env:PATH = "$llvm;$env:PATH" }
+          clang-cl --version
+          cmake --version
+          ninja --version
+          if ($LASTEXITCODE) { throw 'Native build tools unavailable' }
+      - name: Build from flattened repository root
+        id: build
+        run: '& ./tools/build-windows-cloud.ps1 -BuildDirectory build-windows -FetchDirectory $env:FETCH_CACHE -Jobs 2'
+      - name: Package app without model weights
+        id: app
+        run: '& ./tools/package-windows-cloud.ps1 -ReleaseDirectory "${{ steps.build.outputs.releaseDir }}"'
+      - name: Verify packaged executable and menu policy
         run: |
-          $ErrorActionPreference = "Stop"
-
-          $binary = Get-ChildItem -Path build-windows -Recurse -Filter "*.exe" |
-            Where-Object { $_.FullName -match "_artefacts" -and $_.Name -like "HachiShifter*.exe" } |
-            Select-Object -First 1
-          if (-not $binary) { throw "No HachiShifter executable was produced" }
-
-          $stage = "HachiShifterNext-windows-x64"
-          New-Item -ItemType Directory -Force -Path "$stage/models" | Out-Null
-          Copy-Item $binary.FullName "$stage/HachiShifterNext.exe"
-
-          # The ONNX runtime and DirectML libraries are copied beside the
-          # executable by the CMake POST_BUILD step.  A package missing them
-          # cannot run the neural backends at all, so treat them as required.
-          $runtimeDir = $binary.DirectoryName
-          foreach ($dll in @("onnxruntime.dll", "onnxruntime_providers_shared.dll", "DirectML.dll")) {
-            $source = Join-Path $runtimeDir $dll
-            if (-not (Test-Path $source)) { throw "Missing runtime library: $dll" }
-            Copy-Item $source "$stage/$dll"
+          $env:HACHI_TEST_SETTINGS_DIR = "$env:RUNNER_TEMP\hachi-ci-settings"
+          $exe = '${{ steps.app.outputs.stage }}\HachiShifter Next.exe'
+          foreach ($case in @('smoke-track-types','smoke-engine-view-capabilities')) {
+            $out = Join-Path $env:RUNNER_TEMP $case
+            New-Item -ItemType Directory -Force $out | Out-Null
+            $process = Start-Process -FilePath $exe -ArgumentList @("--$case", $out) -PassThru -RedirectStandardOutput "$out\stdout.txt" -RedirectStandardError "$out\stderr.txt"
+            if (-not $process.WaitForExit(180000)) { $process.Kill(); throw "$case timed out" }
+            if ($process.ExitCode) { Get-Content "$out\stderr.txt"; throw "$case failed: $($process.ExitCode)" }
+            Get-Content "$out\stdout.txt"
           }
-
-          Copy-Item LICENSE "$stage/LICENSE"
-
-          # Preserve the DiffSinger bridge, pronunciation data and backend
-          # notices installed by CMake; neural model weights remain external.
-          $engines = Join-Path $runtimeDir "engines"
-          if (-not (Test-Path $engines -PathType Container)) {
-            throw "Missing engine resources: $engines"
-          }
-          Copy-Item $engines "$stage/engines" -Recurse
-          New-Item -ItemType Directory -Force -Path "$stage/licenses/hifisampler" | Out-Null
-          Copy-Item third_party/hifisampler/LICENSE, third_party/hifisampler/NOTICE.txt "$stage/licenses/hifisampler/"
-          New-Item -ItemType Directory -Force -Path "$stage/licenses/openutau" | Out-Null
-          Copy-Item third_party/openutau/LICENSE.txt, third_party/openutau/NOTICE.md "$stage/licenses/openutau/"
-
-          # Bundle the redistributable CRT required by both the application
-          # and ONNX Runtime on machines without Visual Studio installed.
-          $crt = Get-ChildItem "$env:VCToolsRedistDir/x64" -Directory -Filter "Microsoft.VC*.CRT" |
-            Select-Object -First 1
-          if (-not $crt) { throw "MSVC redistributable CRT directory not found" }
-          Copy-Item "$($crt.FullName)/*.dll" $stage
-
-          # Models stay out of the package, exactly as the GitLab job requires.
-          if ((Get-ChildItem "$stage/models" -Recurse -File).Count -ne 0) {
-            throw "The package must not ship model files"
-          }
-
-          Compress-Archive -Path "$stage/*" -DestinationPath "$stage-no-model.zip" -Force
-          (Get-FileHash "$stage-no-model.zip" -Algorithm SHA256).Hash |
-            Out-File "$stage-no-model.zip.sha256" -Encoding ascii
-
-      - name: Upload package
+      - name: Upload app-only package
         uses: actions/upload-artifact@v4
         with:
-          name: HachiShifterNext-windows-x64-no-model-${{ github.sha }}
+          name: HachiShifterNext-windows-x64-app
           path: |
-            HachiShifterNext-windows-x64-no-model.zip
-            HachiShifterNext-windows-x64-no-model.zip.sha256
+            dist/HachiShifterNext-windows-x64-app.zip
+            dist/HachiShifterNext-windows-x64-app.zip.sha256
+          if-no-files-found: error
           retention-days: 30
-
-      - name: Verify GUI startup and responsiveness
-        shell: pwsh
+          compression-level: 0
+      - name: Fetch checksum-pinned owner-approved models
         run: |
-          $exe = (Resolve-Path "HachiShifterNext-windows-x64/HachiShifterNext.exe").Path
-          $app = Start-Process $exe -WindowStyle Hidden -PassThru -RedirectStandardError gui-startup.log
-          try {
-            $ready = $false
-            for ($i = 0; $i -lt 30; $i++) {
-              Start-Sleep -Seconds 1
-              $app.Refresh()
-              if ($app.HasExited) { throw "GUI exited during startup: $($app.ExitCode)" }
-              if ($app.MainWindowHandle -ne 0 -and $app.Responding) { $ready = $true; break }
-            }
-            if (-not $ready) { throw "GUI did not create a responsive window" }
-            Start-Sleep -Seconds 5
-            $app.Refresh()
-            if ($app.HasExited -or -not $app.Responding) { throw "GUI stopped responding" }
-            Get-Content gui-startup.log
-          } finally {
-            if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
-          }
-
-      - name: Upload GUI startup log
+          $resource = Get-Content -LiteralPath .github/model-resources.json -Raw | ConvertFrom-Json
+          if ($resource.sha256 -notmatch '^[0-9a-fA-F]{64}$') { throw 'Model archive must have a pinned SHA256' }
+          $archive = "$env:RUNNER_TEMP\hachi-model-resources.zip"
+          Invoke-WebRequest -Uri $resource.url -OutFile $archive
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $resource.sha256.ToLowerInvariant()) { throw 'Model archive checksum mismatch' }
+          "MODEL_ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MODEL_ARCHIVE_SHA256=$($resource.sha256)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Package app with verified model resources
+        run: '& ./tools/package-windows-cloud.ps1 -ReleaseDirectory "${{ steps.build.outputs.releaseDir }}" -WithModels -ModelArchive $env:MODEL_ARCHIVE -ModelArchiveSha256 $env:MODEL_ARCHIVE_SHA256'
+      - name: Upload app and models package
+        uses: actions/upload-artifact@v4
+        with:
+          name: HachiShifterNext-windows-x64-with-models
+          path: |
+            dist/HachiShifterNext-windows-x64-with-models.zip
+            dist/HachiShifterNext-windows-x64-with-models.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gui-startup-log
-          path: gui-startup.log
-
-      - name: Upload startup symbols
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-link-map
-          path: build-windows/**/*.map
-
-      - name: Verify local tempo editing modes
-        shell: pwsh
-        run: |
-          $env:HACHI_TEST_SETTINGS_DIR = "$env:RUNNER_TEMP/hachi-tempo-settings"
-          $exe = "HachiShifterNext-windows-x64/HachiShifterNext.exe"
-          & $exe --smoke-tempo-change | Out-Host
-          if ($LASTEXITCODE -ne 0) { throw "Tempo editing smoke failed: $LASTEXITCODE" }
-
-      - name: Probe Melodyne provider
-        # Informational only: the runner has no Melodyne installation, so this
-        # reports "not detected" rather than proving the VST3 host path.
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $exe = "HachiShifterNext-windows-x64/HachiShifterNext.exe"
-          & $exe --smoke-melodyne-provider
-          Write-Host "provider probe exit code: $LASTEXITCODE"
+          name: windows-build-diagnostics
+          path: |
+            build-windows/*.map
+            ${{ runner.temp }}/smoke-track-types/
+            ${{ runner.temp }}/smoke-engine-view-capabilities/
+          if-no-files-found: ignore
+          retention-days: 14

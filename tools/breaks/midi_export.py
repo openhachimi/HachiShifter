@@ -10,7 +10,7 @@ import io
 import pathlib
 import sys
 
-SRC = pathlib.Path("C:/hachi-src/juce/src")
+SRC = pathlib.Path(__file__).resolve().parents[2] / "src"
 M = "ProjectModel.cpp"
 
 CASES = {

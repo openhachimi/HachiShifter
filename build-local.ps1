@@ -3,7 +3,7 @@ param(
     [string]$Config = 'RelWithDebInfo',
     [string]$SourceLink = '',
     [string]$DependencyRoot = '',
-    [int]$Jobs = 4,
+    [int]$Jobs = 2,
     [switch]$Reconfigure
 )
 $ErrorActionPreference = 'Stop'
@@ -16,22 +16,22 @@ if (-not $SourceLink -and (Test-Path -LiteralPath $Cache)) {
     $CacheSource = Get-Content -LiteralPath $Cache |
         Where-Object { $_.StartsWith('CMAKE_HOME_DIRECTORY:INTERNAL=') } |
         Select-Object -First 1
-    if ($CacheSource) { $SourceLink = Split-Path ($CacheSource -split '=', 2)[1] }
+    if ($CacheSource) { $SourceLink = ($CacheSource -split '=', 2)[1] }
 }
 if (-not $SourceLink) { $SourceLink = $PSScriptRoot }
 if ($SourceLink -match '[^\x00-\x7F]') {
     throw 'Pass -SourceLink with an ASCII junction pointing to THIS repository (see docs/local-integration-20260924.md).'
 }
-if (-not (Test-Path -LiteralPath (Join-Path $SourceLink 'juce\CMakeLists.txt'))) {
+if (-not (Test-Path -LiteralPath (Join-Path $SourceLink 'CMakeLists.txt'))) {
     throw "Source link is missing: $SourceLink"
 }
 # Avoid accidentally building the old checkout through its existing junction.
-$ThisSource = Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'juce\CMakeLists.txt')
-$LinkedSource = Get-FileHash -LiteralPath (Join-Path $SourceLink 'juce\CMakeLists.txt')
+$ThisSource = Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'CMakeLists.txt')
+$LinkedSource = Get-FileHash -LiteralPath (Join-Path $SourceLink 'CMakeLists.txt')
 if ($ThisSource.Hash -ne $LinkedSource.Hash) { throw 'SourceLink points to another source tree.' }
 $Build = Join-Path $SourceLink 'build-integrated'
 if ($Reconfigure -or -not (Test-Path -LiteralPath $Cache)) {
-    $ConfigureArgs = @('-S', (Join-Path $SourceLink 'juce'), '-B', $Build,
+    $ConfigureArgs = @('-S', $SourceLink, '-B', $Build,
         '-G', 'Visual Studio 17 2022', '-A', 'x64', '-DHACHI_ENABLE_ONNX_ANALYSIS=ON')
     $PrivateJuce = Join-Path $SourceLink '.deps\juce-src'
     if (Test-Path -LiteralPath $PrivateJuce) {

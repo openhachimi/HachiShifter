@@ -19,7 +19,7 @@ out.mkdir(exist_ok=True)
 env = dict(os.environ)
 settings_run = out / 'settings-runs' / str(time.time_ns())
 env['PYTHONIOENCODING'] = 'utf-8'
-source = (root / 'juce/src/Main.cpp').read_text(encoding='utf-8')
+source = (root / 'src/Main.cpp').read_text(encoding='utf-8')
 cases = sys.argv[1:] or list(dict.fromkeys(re.findall(
     r'if \((?:arguments.size\(\) >= 1|!arguments.isEmpty\(\)) && arguments\[0\] == "(--smoke-[^"]+)"\)', source)))
 results = []

@@ -1,4 +1,4 @@
-"""Builds juce/src/PinyinTable.inc: one pinyin syllable for every Chinese
+"""Builds src/PinyinTable.inc: one pinyin syllable for every Chinese
 character the editor knows.
 
 The readings are CC-CEDICT's, as carried by csharp-pinyin, which OpenUtau
@@ -23,7 +23,7 @@ import sys
 import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "..", "juce", "src", "PinyinTable.inc")
+OUT = os.path.join(HERE, "..", "src", "PinyinTable.inc")
 DLL = sys.argv[1] if len(sys.argv) > 1 else "F:/OpenUtau/Pinyin.dll"
 
 

@@ -9,7 +9,7 @@ import io
 import pathlib
 import sys
 
-SRC = pathlib.Path("C:/hachi-src/juce/src")
+SRC = pathlib.Path(__file__).resolve().parents[2] / "src"
 R = "backend/UtauRenderer.cpp"
 E = "AudioEngine.cpp"
 P = "PianoRollComponent.cpp"

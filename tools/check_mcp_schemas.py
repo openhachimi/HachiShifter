@@ -19,7 +19,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 EXE = ROOT / "build-win" / "HachiShifterNext_artefacts" / "RelWithDebInfo" / "HachiShifter Next.exe"
-SOURCE = ROOT / "juce" / "src" / "backend" / "McpServer.cpp"
+SOURCE = ROOT / "src" / "backend" / "McpServer.cpp"
 
 # The five every tool that analyses audio takes, through analysisConfig(args).
 ANALYSIS = ["game_model_dir", "fcpe_model", "game_model", "inference", "device_index"]

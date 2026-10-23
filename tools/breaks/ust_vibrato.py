@@ -6,7 +6,7 @@ the fault in place was not watching that thing at all.
 """
 import io, pathlib, sys
 
-SRC = pathlib.Path("C:/hachi-src/juce/src")
+SRC = pathlib.Path(__file__).resolve().parents[2] / "src"
 U = "backend/UstImporter.cpp"
 M = "ProjectModel.cpp"
 

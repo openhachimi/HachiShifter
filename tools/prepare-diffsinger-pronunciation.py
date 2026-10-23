@@ -7,7 +7,7 @@ import zipfile
 
 root = Path(__file__).resolve().parents[1]
 wheels = root / 'integration-tests/diffsinger-update009/wheels'
-target = root / 'juce/engines/diffsinger'
+target = root / 'engines/diffsinger'
 assets = target / 'pronunciation-data'
 assets.mkdir(exist_ok=True)
 records = []
