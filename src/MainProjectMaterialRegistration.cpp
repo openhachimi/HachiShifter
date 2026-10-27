@@ -50,6 +50,7 @@ std::vector<ProjectMaterialRegistration::Locator> unregisteredProjectOwners(cons
 void MainComponent::cancelProjectMaterialRegistration()
 {
     auto operation=std::exchange(projectRegistrationOperation,{});
+    if(registrationInfoBar.isVisible()){registrationInfoBar.setVisible(false);resized();}
     if(operation){operation->cancel=true;if(operation->prompt&&operation->prompt->isCurrentlyModal())operation->prompt->exitModalState(0);}
     projectRegistrationChooser.reset();
     // IO phases NEVER wait for a UI callback. Joining cannot form a GUI cycle.
@@ -57,18 +58,21 @@ void MainComponent::cancelProjectMaterialRegistration()
     if(operation&&operation->lease){juce::String error;operation->lease->rollback(error);}
 }
 
-void MainComponent::offerMaterialFolderForImport(const ProjectData& imported)
+void MainComponent::offerMaterialFolderForImport(const ProjectData& imported,bool explicitRequest)
 {
-    if(closingUI||!preferences)return;cancelProjectMaterialRegistration();
+    if(closingUI||!preferences)return;cancelProjectMaterialRegistration();registrationInfoBar.setVisible(false);
+    // "Never for this project" only silences the automatic offer on open.
+    const auto projectKey="ui.skipRegistration."+juce::String::toHexString(currentProjectFile.getFullPathName().toLowerCase().hashCode64());
+    if(!explicitRequest&&currentProjectFile!=juce::File{}&&preferences->getBoolValue(projectKey,false))return;
     juce::ignoreUnused(imported); // current live snapshot is the one adoption will guard
     auto operation=std::make_shared<ProjectRegistrationOperation>();operation->snapshot=project.snapshot();operation->revision=project.revisionNumber();
     operation->fingerprint=ProjectModel::registrationMusicSourceFingerprint(operation->snapshot);projectRegistrationOperation=operation;
     projectRegistrationTrace="offer_start revision="+juce::String(static_cast<juce::int64>(operation->revision))+" tracks="+juce::String(static_cast<int>(operation->snapshot.tracks.size()));
     juce::Component::SafePointer<MainComponent> safe(this);
-    operation->worker=std::thread([safe,operation]
+    operation->worker=std::thread([safe,operation,explicitRequest,projectKey]
     {
         operation->owners=unregisteredProjectOwners(operation->snapshot,operation->cancel);
-        juce::MessageManager::callAsync([safe,operation]
+        juce::MessageManager::callAsync([safe,operation,explicitRequest,projectKey]
         {
             if(!safe||safe->closingUI||operation->cancel||safe->projectRegistrationOperation!=operation)return;
             if(operation->worker.joinable())operation->worker.join();
@@ -77,6 +81,25 @@ void MainComponent::offerMaterialFolderForImport(const ProjectData& imported)
             juce::Logger::writeToLog(safe->projectRegistrationTrace);
             if(operation->owners.empty()){safe->projectRegistrationOperation.reset();return;}
             if(safe->project.revisionNumber()!=operation->revision){safe->cancelProjectMaterialRegistration();return;}
+            if(!explicitRequest)
+            {
+                // Automatic offer: a dismissible strip that never blocks editing.
+                // Choosing Register re-validates the SAME operation's revision.
+                auto* self=safe.getComponent();
+                self->registrationInfoText.setText(self->strings.text("Unregistered source recordings were found in this project. Register copies as project materials?")
+                    +"  ("+juce::String(static_cast<int>(operation->owners.size()))+")",juce::dontSendNotification);
+                self->registrationInfoRegister.onClick=[safe,operation]{if(!safe)return;safe->registrationInfoBar.setVisible(false);safe->resized();
+                    // Edits made while the strip was shown make the probe stale:
+                    // re-probe the live project explicitly instead of failing.
+                    if(safe->projectRegistrationOperation==operation&&safe->project.revisionNumber()==operation->revision)
+                        safe->chooseProjectMaterialRegistrationDestination(operation);
+                    else safe->offerMaterialFolderForImport(safe->project.snapshot(),true);};
+                self->registrationInfoLater.onClick=[safe]{if(!safe)return;safe->registrationInfoBar.setVisible(false);safe->cancelProjectMaterialRegistration();safe->resized();};
+                self->registrationInfoNever.onClick=[safe,projectKey]{if(!safe)return;if(safe->preferences)safe->preferences->setValue(projectKey,true);
+                    safe->registrationInfoBar.setVisible(false);safe->cancelProjectMaterialRegistration();safe->resized();};
+                self->registrationInfoBar.setVisible(true);self->resized();
+                return;
+            }
             auto* dialog=new juce::AlertWindow(safe->strings.text("Register project source materials"),
                 safe->strings.text("Optionally copy the existing unregistered recordings into a NEW material folder and keep each carried clip/part annotation as an independent variant named '-'. This does not recover words or syllables. Original C/P, source clocks, pitch, envelopes and local edits remain exact. Skip keeps the loaded project unchanged; project files are saved only when you choose Save."),
                 juce::MessageBoxIconType::QuestionIcon,safe.getComponent());
@@ -183,6 +206,8 @@ bool MainComponent::registerRetainedMaterialRoot(const juce::File& root,juce::St
     if(!assetManager){error=strings.text("Material manager is unavailable");return false;}
     if(!assetManager->registerMaterialRoot(root,error))return false;
     auto roots=SampleSettings::materialRoots();roots.addIfNotAlreadyThere(root.getFullPathName());SampleSettings::setMaterialRoots(roots);
+    // Views only: adoption above already rebound the project from the plan.
+    materialSourcesChanged({root.getFullPathName()},false);
     return true;
 }
 void MainComponent::retryProjectMaterialRootRegistration()

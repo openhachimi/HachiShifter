@@ -1,5 +1,21 @@
 # HachiShifter 代码功能总览与维护指南
 
+**更新204／滚动发布：** 用户2026-10-27授权当前公开版本改为 **dev** 并同步GitHub `dev`。CMake／Windows保持合法内部数值tuple0.0.0，程序、MCP及EXE的版本文字为dev；WCSNDM0.0803不变。旧0.25记录仅为历史。GitHub使用扁平根CMake/src/engines/resources、保留既有Windows云构建和分离模型资源包，不发布用户工程、缓存或模型权重Git blob；EXE与外部lang必须同包。
+
+**更新203：** 普通先行P读取真实Melodyne `anchorPoint`同步锚，不等于齿音或稳定F0起点；经原timeMap投影源秒，显式零／缺锚不猜。默认NSF-HiFiGAN＋处理顺序先拼接后合成，拉伸算法及显式用户设置不改。实际用户G盘运行目录必须与lang目录成套更新，已冷测试验证新选项五语无缺键。新旧专项与架构见 [命令索引](AI_SOURCE_INDEX.md) 和 [更新记录](updates.md)。
+
+**更新200／外部翻译唯一来源：** 所有应用译文使用程序旁 `lang/translations.tsv`；规范源文件为 `resources/lang/translations.tsv`（1491条五语言，7455格），无 C++ 内置语言回退。新增 UI 必须接已有 I18n，保持键／aliases 与占位符，模型数据与用户文字不翻译。旧源码中译文字面量只可作稳定查词键，不能当回退值。维护、故障处理及专项见 [翻译文件说明](translation-file.md)。此前198/199界面和单一F0功能保留，完整音频哈希不变。
+
+**更新197：** 衔接音使用独立中间源分界，不是 C/V/P；OTTO 编辑器只显示中间分界和左右 fade／overlap。Melodyne 导入默认开启保守的短完全切割能量谷识别，纯身份登记不改变导入 render request。原生换素材保留 GAME／FCPE 源走势并移到目标中心；MIDI 无歌词为 `-`。详见 [197说明](native-transition-197.md)。
+
+**更新196（显示／设置修复）：** 普通原生音符的发音只画一次，上方标签锚定先行支持起点。设置保留未改动的当前主题，并即时刷新自身页／标签页和文字缓存；样式切换不把浅色重置成黑色。只做显示专项，不改变音频／切割或重复 NN 验收，见 [更新记录](updates.md)。
+
+**当前更新195：** 登记切点≠P：连续源边界经真实时钟投影，波形支持独立于乐谱矩形。先行黄／实际蓝紫／登记衔接音全绿无先行；界面设置 mld／rep，两主题选中只增亮自身。参见 [195行为与针对性证据](native-material-appearance-195.md)。194单击选素材／双击先行对齐／按住移动约定保持。
+
+**操作约定更新194：** 已选音符再次短单击进入素材选择（多选保留），快速双击只沿用先行对齐，按住／拖动只移动。延迟单击经系统双击窗口区分，并有取消／修订／选中身份保护。仅操作专项 `--smoke-native-note-clicks`，不重复音频验收；见 [更新记录194](updates.md)。
+
+**当前本地待验收更新193（0.25／WCSNDM 0.0803）：** 原生 UST／USTX 多音符发音序列选择、单一原子素材替换、完整辅音先行时钟、Melodyne 新材料 C=P、实际重叠强制连接及共同滑音。确切行为、复用权威、真实测试和历史失败边界见 [本轮说明](native-score-replacement-193.md) 与 [命令索引](AI_SOURCE_INDEX.md)。未获用户验收，不上传 GitHub，不修改 r 配布。
+
 **Active implementation (2026-10-20):** Native annotations are moving from per-audio HJM CSV writes to compact folder-level `otto.ini`. Read [implementation status](native-material-implementation.md) and [format specification](otto-format.md) before changing material loading, source-update or asset insertion paths. Version stays 0.25. Legacy sections below describe historical behavior and are not authority for new annotation writes. The complete approved consolidation is not finished yet.
 
 更新 185：素材管理器增加声音文件名搜索框、清空按钮和无结果提示。搜索跨全部已注册及工程音源文件夹，包含未展开的子目录；文件名包含匹配忽略英文大小写，支持中文。结果平铺显示“文件名（音源／素材文件夹名字）”，同名录音保留各自来源；清空搜索恢复原展开状态。`AssetManagerComponent::ensureSearchFiles` 在单工作线程枚举尚未加载的文件列表，后续输入只筛选缓存，不解码音频或建立 OTO 索引。结果回主线程按仍存在的文件夹归并，使用最新搜索词，项目移除的音源不会重新出现。点击、Enter、右键、双击和拖拽继续使用原文件与所属音源 OTO 设置。新增 `--smoke-asset-search`，回归树视图、OTO 裁剪拆分、普通音频加载和大型音源注册；结果与界面截图见 `test-output/update185/`。
@@ -109,8 +125,8 @@
 | 位置 | 当前用途 |
 | --- | --- |
 | 本仓库根目录 | `E:/和声合成新UI/HachiShifter-integrated`，当前维护的整合版源码 |
-| `juce/src/` | 自有 C++ 编辑器、工程模型、音频引擎、后端适配和原生测试 |
-| `juce/engines/diffsinger/` | DiffSinger 的 Python 推理桥、后台运行时、发音和参数处理 |
+| `src/` | 自有 C++ 编辑器、工程模型、音频引擎、后端适配和原生测试 |
+| `engines/diffsinger/` | DiffSinger 的 Python 推理桥、后台运行时、发音和参数处理 |
 | `juce/tests/` | Python 集成、音频、MCP 和真实模型测试 |
 | `tools/` | 回归、模型准备、打包和开发辅助脚本；部分是历史快照脚本 |
 | `tools/hamood_audio/` | 和声分析工作进程、伴奏分析、KARA2 与具体歌曲验证脚本 |
@@ -169,7 +185,7 @@ MCP live -> LiveMcpBridge -> MainComponentMcp -> 当前窗口真实工程
 
 ## 工程数据与时间坐标
 
-核心类型定义在 [ProjectModel.h](../juce/src/ProjectModel.h)，主要实现位于 [ProjectModel.cpp](../juce/src/ProjectModel.cpp)。
+核心类型定义在 [ProjectModel.h](../src/ProjectModel.h)，主要实现位于 [ProjectModel.cpp](../src/ProjectModel.cpp)。
 
 | 类型或字段 | 职责与容易混淆的地方 |
 | --- | --- |
@@ -187,7 +203,7 @@ MCP live -> LiveMcpBridge -> MainComponentMcp -> 当前窗口真实工程
 | `nativeSourceStartSeconds` / `nativeSourceEndSeconds` | 音符对应的真实源区间，分离和裁剪后要重新绑定 |
 | `nativeConnections`、连接标记、`nativeAudioLinked` | 显式音符连接、兼容标记与多素材组合关系，不能只清除一个标记就假定完全独立 |
 
-时间轴音符位置通常是 `clip.startSeconds + note.startSeconds`。音高点、音符包络等一般使用音符内秒数；子区域和 `forView` 展开有专门转换。先检查 [ClipParts.h](../juce/src/ClipParts.h) 的 `expandedClipParts` / `expandProjectClipParts`，不要给已展开的坐标重复加父层偏移或重复乘父层增益。
+时间轴音符位置通常是 `clip.startSeconds + note.startSeconds`。音高点、音符包络等一般使用音符内秒数；子区域和 `forView` 展开有专门转换。先检查 [ClipParts.h](../src/ClipParts.h) 的 `expandedClipParts` / `expandProjectClipParts`，不要给已展开的坐标重复加父层偏移或重复乘父层增益。
 
 `ProjectModel` 管理操作原子性、修订号与撤销历史；`ProjectFileIO.h` 负责保存时的临时文件、写后读回、完整性验证、文件替换与备份保护；`ProjectRecovery.h` 负责异步自动恢复快照和进程间租约。`.hjpx` 是 JUCE ValueTree 二进制工程，不是可以随意文本替换的 JSON。`.hjm` 是素材注释侧文件，读写与素材设置相关逻辑还要查 `SampleSettings` 和模型导入路径。
 
@@ -410,7 +426,7 @@ MCP 参数以当前 `tools/list`、`McpServer` 的 schema 和 Live handler 为�
 
 ## 验证入口和已有证据
 
-测试有三层：`Main.cpp` 内联 CLI 分支、`juce/src/tests/*Smoke.h` 原生验证、`juce/tests/*.py` / `tools/` 集成验证。逐项命令见 [索引](AI_SOURCE_INDEX.md)。执行前读命令分支，某些测试还需要模型、音源、输入 WAV 或探针 EXE，不是所有命令都只有输出目录一个参数。
+测试有三层：`Main.cpp` 内联 CLI 分支、`src/tests/*Smoke.h` 原生验证、`juce/tests/*.py` / `tools/` 集成验证。逐项命令见 [索引](AI_SOURCE_INDEX.md)。执行前读命令分支，某些测试还需要模型、音源、输入 WAV 或探针 EXE，不是所有命令都只有输出目录一个参数。
 
 | 修改范围 | 优先查看的验证 |
 | --- | --- |

@@ -3,13 +3,20 @@
 #include "NativePitchIdentity.h"
 #include "NativeSharedEnvelope.h"
 #include "AudioEngine.h"
+#include "NativeSourceEdgePlan.h"
+#include "NativeOverlapConnection.h"
+#include "NativeVirtualRenderPlan.h"
+#include "NativeVirtualWaveformContext.h"
 #include "ClipParts.h"
 #include "TrackGainEnvelope.h"
 #include "StartupLog.h"
 #include "backend/MelodyneProvider.h"
 #include "backend/DiffSingerRenderer.h"
 #include "backend/HifisamplerFlags.h"
+#include "I18n.h"
+#include <juce_cryptography/juce_cryptography.h>
 #include <algorithm>
+#include <map>
 #include <cmath>
 #include <limits>
 #include <unordered_map>
@@ -110,8 +117,8 @@ void applyNativeSharedPitch(backend::Mld5FileRenderRequest& request, const ClipD
             if (member->connectionPitchOnly && std::none_of(member->connectionPitchWindows.begin(),member->connectionPitchWindows.end(),
                 [&](const auto& window){return absoluteTime>=window.getStart()-1.0e-9&&absoluteTime<=window.getEnd()+1.0e-9;})) continue;
             request.targetMidi[frame] = member->line->midiAt(clip.startSeconds + local)
-                + static_cast<float>(vibratoCentsAt(note,
-                    juce::jlimit(0.0, note.durationSeconds, local - note.startSeconds)) / 100.0);
+                + (member->virtualSinglePitch ? 0.f : static_cast<float>(vibratoCentsAt(note,
+                    juce::jlimit(0.0, note.durationSeconds, local - note.startSeconds)) / 100.0));
             break;
         }
     }
@@ -127,6 +134,13 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
                                                   const SharedPitchLines* sharedLines = nullptr,
                                                   const NativeSharedEnvelopes* sharedEnvelopes = nullptr)
 {
+    const auto tracePath=juce::SystemStats::getEnvironmentVariable("HACHI_NATIVE_REQUEST_TRACE",{});
+    const auto traceStart=tracePath.isNotEmpty()?juce::Time::getMillisecondCounterHiRes():0.;
+    const auto trace=[&](const char* stage)
+    {
+        if(tracePath.isNotEmpty())juce::File(tracePath).appendText(juce::String(stage)+" | clip="+clip.id+" file="+clip.sourceFile.getFileName()+" target="+juce::String(clip.durationSeconds,6)+" notes="+juce::String(int(clip.notes.size()))+" elapsed_ms="+juce::String(juce::Time::getMillisecondCounterHiRes()-traceStart,3)+"\n");
+    };
+    trace("begin");
     backend::Mld5FileRenderRequest request;
     request.sourceFile = clip.sourceFile;
     request.sourceOffsetSeconds = clip.sourceOffsetSeconds;
@@ -192,7 +206,9 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
     request.sourceMidi.resize(static_cast<std::size_t>(frameCount), 0.0f);
     request.targetMidi.resize(static_cast<std::size_t>(frameCount), 0.0f);
     request.formantSemitones.resize(static_cast<std::size_t>(frameCount), 0.0f);
+    trace("source-clock-ready");
     const auto ownEnvelopes = sharedEnvelopes ? NativeSharedEnvelopes{} : nativeSharedEnvelopes(track);
+    trace("shared-envelopes-ready");
     const auto& envelopes = sharedEnvelopes ? *sharedEnvelopes : ownEnvelopes;
     request.noteGain.resize(static_cast<std::size_t>(frameCount), 1.0f);
     request.tension.resize(static_cast<std::size_t>(frameCount), 0.0f);
@@ -233,6 +249,7 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
         }
     }
 
+    trace("frame-controls-ready");
     for (const auto& joinedNote : clip.notes)
     {
         if (!joinedNote.connectedToPrevious || joinedNote.nativeIndependentPitch) continue;
@@ -334,8 +351,11 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
             }
         }
     }
+    trace("adjacent-controls-ready");
     const auto localLines = sharedLines ? SharedPitchLines{} : sharedPitchLines(track);
+    trace("shared-lines-ready");
     applyNativeSharedPitch(request, clip, sharedLines ? *sharedLines : localLines);
+    trace("done");
     return request;
 }
 
@@ -598,11 +618,12 @@ namespace
 // under a drawn waveform is still the note that produced it -- one list, so
 // the two can never disagree about what counts as an edit.
 void writeNoteRenderFields(juce::MemoryOutputStream& stream, const NoteData& note,
-                           bool withAmplitudeEnvelope = true)
+                           bool withAmplitudeEnvelope = true,double startOriginSeconds=0)
 {
     // Optional semantic intent: legacy false writes NO new bytes, preserving
     // accepted project/cache keys exactly. True changes the playable domain.
     if(note.pitchSupportAuthored)stream.writeString("pitch-support-authored-v1");
+    if(note.nativeScoreMaterialAligned)stream.writeString("native-score-material-aligned-v1");
     const auto label = note.label.toUTF8();
     stream.write(label.getAddress(), label.sizeInBytes());
     const auto flags = note.utauFlags.toUTF8();
@@ -671,7 +692,7 @@ void writeNoteRenderFields(juce::MemoryOutputStream& stream, const NoteData& not
     stream.writeDouble(note.utauJieSplit1);
     stream.writeDouble(note.utauJieSplit2);
     stream.writeDouble(note.utauJieSplit3);
-    stream.writeDouble(note.startSeconds);
+    stream.writeDouble(startOriginSeconds==0?note.startSeconds:note.startSeconds+startOriginSeconds);
     stream.writeDouble(note.durationSeconds);
     stream.writeFloat(note.midiNote);
     stream.writeFloat(note.sourceMidiCenter);
@@ -1984,7 +2005,8 @@ void AudioEngine::refreshUtauWaveformSnapshot()
     utauWaveformSnapshot = std::move(collected);
 }
 
-std::uint64_t AudioEngine::nativeClipWaveformHash(const ClipData& viewClip, const TrackData& track)
+std::uint64_t AudioEngine::nativeClipWaveformHash(const ClipData& viewClip, const TrackData& track,
+    const std::vector<NativeVirtualGroup>* virtualGroups)
 {
     const auto clip = nativeAudioPreviewClip(viewClip);
     juce::MemoryOutputStream stream;
@@ -2002,6 +2024,56 @@ std::uint64_t AudioEngine::nativeClipWaveformHash(const ClipData& viewClip, cons
     {stream.writeDouble(point.targetSeconds);stream.writeDouble(point.sourceSeconds);}
     stream.writeInt64(static_cast<juce::int64>(clip.notes.size()));
     for(const auto& note:clip.notes) writeNoteRenderFields(stream,note);
+    // Only groups that actually own one of this clip's notes affect its audio.
+    if(virtualGroups!=nullptr)
+        for(const auto& group:*virtualGroups)
+        {
+            if(group.trackId!=track.id)continue;
+            const auto owns=std::any_of(clip.notes.begin(),clip.notes.end(),[&](const auto& note)
+            {return std::find(group.orderedNoteIds.begin(),group.orderedNoteIds.end(),note.id)!=group.orderedNoteIds.end();});
+            // A disabled group contributes nothing to the audio, so it must
+            // leave the original waveform identity byte-for-byte untouched.
+            if(!owns||!group.enabled)continue;
+            stream.writeString("native-source-assembly-v1");
+            // Assembly bakes author amplitude BEFORE the one neural decode.
+            // Stamp all selected physical owners, including inherited envelopes.
+            for(const auto& id:group.orderedNoteIds)
+                for(const auto& parent:track.clips)for(const auto& note:parent.notes)if(note.id==id)
+                {
+                    const ClipData* owner=parent.parts.empty()?&parent:nullptr;
+                    for(const auto& part:parent.parts)if(part.id==note.clipPartId)owner=&part;
+                    if(!owner)continue;
+                    stream.writeFloat(owner->gain);stream.writeDouble(owner->fadeInSeconds);stream.writeDouble(owner->fadeOutSeconds);
+                    stream.writeDouble(owner->crossfadeInSeconds);stream.writeDouble(owner->crossfadeOutSeconds);
+                    juce::ValueTree gain("AssemblyAuthorGain");writeClipGainEnvelope(gain,*owner);gain.writeToStream(stream);
+                }
+            writeNativeVirtualWaveformPeers(stream,track,group,[](auto& output,const auto& note,double origin){writeNoteRenderFields(output,note,true,origin);});
+            stream.writeString(group.id);
+            stream.writeBool(group.automaticPitch);stream.writeDouble(group.pitchDurationSeconds);
+            if(group.sharedPitch)stream.writeString("shared-virtual-pitch-v1");
+            if(group.pitchCurveEncoding!=1)stream.writeInt(group.pitchCurveEncoding);
+            for(const auto& id:group.orderedNoteIds)stream.writeString(id);
+            stream.writeDouble(group.pitchFromOffsetSeconds);stream.writeDouble(group.pitchToOffsetSeconds);
+            if(!group.handoverWindows.empty())
+            {
+                stream.writeString("virtual-handover-windows-v1");stream.writeInt64(static_cast<juce::int64>(group.handoverWindows.size()));
+                for(const auto& window:group.handoverWindows)
+                {stream.writeString(window.leftNoteId);stream.writeString(window.rightNoteId);stream.writeDouble(window.fromOffsetSeconds);stream.writeDouble(window.toOffsetSeconds);}
+            }
+            for(const auto& hop:group.hopPitchCurves)
+            {
+                stream.writeString(hop.leftNoteId);stream.writeString(hop.rightNoteId);stream.writeInt(hop.pitchCurveEncoding);
+                stream.writeDouble(hop.pitchFromOffsetSeconds);stream.writeDouble(hop.pitchToOffsetSeconds);
+                for(const auto& point:hop.pitchCurve){stream.writeDouble(point.timeSeconds);stream.writeFloat(point.targetMidi);stream.writeInt(int(point.shape));stream.writeFloat(point.bezierX1);stream.writeFloat(point.bezierY1);stream.writeFloat(point.bezierX2);stream.writeFloat(point.bezierY2);stream.writeBool(point.highPrecisionBezier);}
+            }
+            for(const auto& point:group.pitchCurve)
+            {
+                stream.writeDouble(point.timeSeconds);stream.writeFloat(point.targetMidi);
+                stream.writeInt(static_cast<int>(point.shape));
+                stream.writeDouble(point.bezierX1);stream.writeDouble(point.bezierY1);
+                stream.writeDouble(point.bezierX2);stream.writeDouble(point.bezierY2);stream.writeBool(point.highPrecisionBezier);
+            }
+        }
     std::uint64_t hash=1469598103934665603ull;
     const auto* bytes=static_cast<const unsigned char*>(stream.getData());
     for(std::size_t i=0;i<stream.getDataSize();++i){hash^=bytes[i];hash*=1099511628211ull;}
@@ -2028,9 +2100,65 @@ void AudioEngine::refreshNativeWaveforms()
             const auto& entry=loaded->rendered;
             if(loaded->nativeWaveformHash==0||!entry||!entry->ready.load(std::memory_order_acquire)
                 ||!entry->nativePeaks)continue;
-            collected->push_back({loaded->nativeWaveformHash,entry->nativePeaks});
+            if(loaded->virtualBindings.empty()){collected->push_back({loaded->nativeWaveformHash,entry->nativePeaks});continue;}
+            // Read the same assembly output the mixer/export consumes. Never
+            // advertise the now-suppressed per-source render as the group sound.
+            bool assembledReady=true;
+            for(const auto& binding:loaded->virtualBindings)
+            {
+                const auto id="__virtual-source-assembly/"+binding.plan->members.front().noteId;
+                const auto output=std::find_if(loadedClips.begin(),loadedClips.end(),[&](const auto& value){return value->clip.id==id;});
+                if(output==loadedClips.end()||!(*output)->rendered||!(*output)->rendered->ready.load(std::memory_order_acquire)){assembledReady=false;break;}
+            }
+            if(!assembledReady)continue;
+            if(loaded->contributionPeaksEntry!=entry.get())
+            {
+                loaded->contributionPeaks.reset();
+                if(const auto cached=contributionPeakCache.find(loaded->nativeWaveformHash);cached!=contributionPeakCache.end()&&cached->second.entry.lock()==entry)
+                    loaded->contributionPeaks=cached->second.peaks.lock();
+                if(!loaded->contributionPeaks)
+                {
+                const auto origin=loaded->clip.startSeconds+entry->timelineOffsetSeconds;
+                const auto originSamples=origin*entry->sampleRate;
+                const bool onGrid=std::isfinite(originSamples)&&std::abs(originSamples-std::round(originSamples))<1.e-7;
+                auto composite=entry->buffer;
+                for(int sample=0;sample<composite.getNumSamples();++sample)
+                {
+                    const auto absolute=onGrid?(std::round(originSamples)+sample)/entry->sampleRate:origin+sample/entry->sampleRate;
+                    const auto local=absolute-loaded->clip.startSeconds;
+                    const auto* binding=virtualBindingAt(*loaded,local,absolute);if(!binding)continue;
+                    const auto id="__virtual-source-assembly/"+binding->plan->members.front().noteId;
+                    const auto output=std::find_if(loadedClips.begin(),loadedClips.end(),[&](const auto& value){return value->clip.id==id;});
+                    const auto& assembled=*(*output)->rendered;
+                    const auto position=(absolute-(*output)->clip.startSeconds)*assembled.sampleRate;
+                    float partition=0,total=0;
+                    for(std::size_t i=0;i<binding->plan->members.size();++i)
+                    {
+                        const auto weight=float(nativeVirtualMemberContribution(*binding->plan,i,absolute));total+=weight;
+                        if(i==binding->member)partition=weight;
+                    }
+                    partition=total>1.e-9f?partition/total:0.f; // display-only shares sum to one
+                    for(int ch=0;ch<composite.getNumChannels();++ch)
+                    {
+                        float value=0;
+                        if(position>=0&&position<assembled.buffer.getNumSamples())
+                        {
+                            const auto a=int(position),b=std::min(a+1,assembled.buffer.getNumSamples()-1);
+                            const auto c=std::min(ch,assembled.buffer.getNumChannels()-1);
+                            value=std::lerp(assembled.buffer.getSample(c,a),assembled.buffer.getSample(c,b),float(position-a));
+                        }
+                        composite.setSample(ch,sample,value*partition);
+                    }
+                }
+                loaded->contributionPeaks=measureNativeRenderedPeaks(composite,entry->sampleRate);
+                contributionPeakCache[loaded->nativeWaveformHash]={entry,loaded->contributionPeaks};
+                }
+                loaded->contributionPeaksEntry=entry.get();
+            }
+            collected->push_back({loaded->nativeWaveformHash,loaded->contributionPeaks});
         }
     }
+    std::erase_if(contributionPeakCache,[](const auto& item){return item.second.entry.expired()||item.second.peaks.expired();});
     const juce::ScopedLock guard(nativeWaveformLock);nativeWaveformSnapshot=std::move(collected);
 }
 
@@ -2104,6 +2232,21 @@ std::vector<float> AudioEngine::diagnosticNativeTargetMidi(
     if (clipIndex < 0 || clipIndex >= static_cast<int>(track.clips.size()))
         return {};
     const auto& clip = track.clips[static_cast<std::size_t>(clipIndex)];
+    if(std::any_of(project.nativeVirtualGroups.begin(),project.nativeVirtualGroups.end(),[](const auto& group){return group.enabled;}))
+    {
+        ProjectData projected;std::vector<NativeVirtualRenderGroup> groups;juce::String error;
+        if(!prepareNativeVirtualRender(project,projected,groups,error))return {};
+        const auto& renderTrack=projected.tracks[static_cast<std::size_t>(trackIndex)];
+        const auto& renderClip=renderTrack.clips[static_cast<std::size_t>(clipIndex)];
+        auto lines=sharedPitchLines(renderTrack,projected.nativeConnections);
+        lines=overlayResolvedConnectionPitchCurves(renderTrack,std::move(lines),nativeVirtualResolvedPitchCurves(groups,renderTrack.id));
+        std::vector<ResolvedConnectionPitchCurve> continuity;
+        for(const auto& group:groups)if(group.trackId==renderTrack.id)
+        {auto curves=nativeVirtualContinuityCurves(renderTrack,group.id,group.plan,lines);continuity.insert(continuity.end(),curves.begin(),curves.end());}
+        if(!continuity.empty())lines=overlayResolvedConnectionPitchCurves(renderTrack,std::move(lines),continuity);
+        for(const auto& group:groups)if(group.trackId==renderTrack.id)bindNativeVirtualSinglePitch(lines,renderTrack,group.id,group.plan);
+        return makeRenderRequest(renderClip,renderTrack,{}, {},false,false,&lines).targetMidi;
+    }
     const auto lines = sharedPitchLines(track, project.nativeConnections);
     const auto request = makeRenderRequest(clip, track, juce::File{},
                                            backend::OrtExecutionConfig{}, false, false, &lines);
@@ -2267,8 +2410,62 @@ void AudioEngine::setInferenceConfiguration(backend::InferenceBackend inference,
     renderCache.clear();
 }
 
-void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diffSingerExport)
+void AudioEngine::rebuildLoadedClips(const ProjectData& originalProject, bool diffSingerExport)
 {
+    const auto tracePath=juce::SystemStats::getEnvironmentVariable("HACHI_NATIVE_REQUEST_TRACE",{});
+    const auto traceStart=tracePath.isNotEmpty()?juce::Time::getMillisecondCounterHiRes():0.;
+    const auto trace=[&](const juce::String& stage){if(tracePath.isNotEmpty())juce::File(tracePath).appendText("engine: "+stage+" elapsed_ms="+juce::String(juce::Time::getMillisecondCounterHiRes()-traceStart,3)+"\n");};
+    trace("rebuild begin");
+    nativeSourceEdgeError.clear();
+    nativeScorePrerollStartSeconds.store(0.0);
+    // UI and render must identify the AUTHORING waveform, not the ephemeral
+    // projection which suppresses internal connected/fade flags. Expand only
+    // affected tracks through the existing part authority, never the project.
+    std::map<juce::String,std::uint64_t> authorWaveformHashes;
+    for(const auto& track:originalProject.tracks)
+    {
+        const auto owns=[&](const ClipData& clip)
+        {
+            for(const auto& group:originalProject.nativeVirtualGroups)if(group.enabled&&group.trackId==track.id)
+                for(const auto& note:clip.notes)if(std::find(group.orderedNoteIds.begin(),group.orderedNoteIds.end(),note.id)!=group.orderedNoteIds.end())return true;
+            return false;
+        };
+        if(std::none_of(track.clips.begin(),track.clips.end(),owns))continue;
+        ProjectData oneTrack;oneTrack.tracks.push_back(track);expandProjectClipParts(oneTrack);
+        const auto& author=oneTrack.tracks.front();
+        for(const auto& clip:author.clips)if(owns(clip))
+        {
+            const auto hash=nativeClipWaveformHash(clip,author,&originalProject.nativeVirtualGroups);
+            for(const auto& note:clip.notes)authorWaveformHashes.emplace(note.id,hash);
+        }
+    }
+    trace("author waveform hashes ready");
+    std::optional<ProjectData> virtualProjection;
+    std::vector<NativeVirtualRenderGroup> virtualGroups;
+    if(std::any_of(originalProject.nativeVirtualGroups.begin(),originalProject.nativeVirtualGroups.end(),[](const auto& group){return group.enabled;}))
+    {
+        virtualProjection.emplace();juce::String error;juce::StringArray unavailable;
+        if(!prepareNativeVirtualRender(originalProject,*virtualProjection,virtualGroups,error,&unavailable))
+        {
+            // An unresolved route must never erase unrelated song audio. Keep
+            // the authoring snapshot and expose the error; export remains
+            // blocked by the existing render-warning gate until it is fixed.
+            nativeSourceEdgeError="Invalid virtual connection: "+error;
+            virtualProjection.reset();virtualGroups.clear();
+        }
+        else if(!unavailable.isEmpty())nativeSourceEdgeError=unavailable.joinIntoString("; ");
+    }
+    trace("virtual render projection ready");
+    const auto& sourceProject=virtualProjection?*virtualProjection:originalProject;
+    std::map<juce::String,NativeVirtualBinding> virtualBindings;
+    for(auto& group:virtualGroups)
+    {
+        // Loaded bindings outlive this rebuild. Keep the validated planning
+        // value available below too: moving it here erased every member before
+        // the common target F0 could be prepared (diagnostics did not move it).
+        const auto plan=std::make_shared<const NativeVirtualConnectionPlan>(group.plan);
+        for(std::size_t i=0;i<plan->members.size();++i)virtualBindings.emplace(plan->members[i].noteId,NativeVirtualBinding{plan,i});
+    }
     std::optional<ProjectData> contentProject;
     for (const auto& track : sourceProject.tracks)
         if (std::any_of(track.clips.begin(), track.clips.end(), [](const auto& clip)
@@ -2383,7 +2580,6 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
     for (const auto& track : project.tracks)
     {
         auto meter = std::make_shared<std::atomic<float>>(0.0f);
-        const auto nativePitchLines = trackShowsAllNativeRegions(track) ? sharedPitchLines(track, project.nativeConnections) : SharedPitchLines{};
         const auto nativeEnvelopes = nativeSharedEnvelopes(track);
         trackMeters[track.id.toStdString()] = meter;
         if (!trackIsAudible(track.muted, track.solo, anySolo, track.referenceOnly,
@@ -2398,6 +2594,100 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
         {
             return left->startSeconds < right->startSeconds;
         });
+        std::map<juce::String,std::vector<NativeSourceEdgeSpan>> sourceEdgeSpans;
+        const auto original=std::find_if(sourceProject.tracks.begin(),sourceProject.tracks.end(),[&](const auto& candidate){return candidate.id==track.id;});
+        std::vector<ResolvedNativeOverlapBoundary> overlapBoundaries;
+        std::set<juce::String> explicitAssemblyClips;
+        bool assemblyValid=true;
+        if(original!=sourceProject.tracks.end())for(const auto& edge:sourceProject.nativeConnections)
+        {
+            if(edge.type!="native-overlap")continue;
+            const bool ownsLeft=std::any_of(original->clips.begin(),original->clips.end(),[&](const auto& clip)
+            {return std::any_of(clip.notes.begin(),clip.notes.end(),[&](const auto& note){return note.id==edge.leftNoteId;});});
+            if(!ownsLeft)continue;
+            ResolvedNativeOverlapBoundary boundary;juce::String issue;
+            if(!resolveNativeOverlapBoundary(*original,edge,boundary,issue))
+            {nativeSourceEdgeError+="Invalid native overlap assembly ["+track.id+"]: "+issue+"; ";assemblyValid=false;break;}
+            explicitAssemblyClips.insert(boundary.parentClipId+":"+boundary.leftOwnerId);
+            explicitAssemblyClips.insert(boundary.parentClipId+":"+boundary.rightOwnerId);
+            overlapBoundaries.push_back(std::move(boundary));
+        }
+        if(!assemblyValid)continue;
+        // Native-overlap edges require the true compound/source proof, which
+        // rendering's expanded child track intentionally no longer contains.
+        // Keep the legacy path exact unless an explicit physical assembly exists.
+        const auto& pitchAuthority=overlapBoundaries.empty()?track:*original;
+        trace("track "+track.id+" shared pitch BEGIN");
+        auto nativePitchLines=trackShowsAllNativeRegions(track)?sharedPitchLines(pitchAuthority,project.nativeConnections):SharedPitchLines{};
+        trace("track "+track.id+" shared pitch END");
+        auto virtualPitchCurves=nativeVirtualResolvedPitchCurves(virtualGroups,track.id);
+        if(!virtualPitchCurves.empty())nativePitchLines=overlayResolvedConnectionPitchCurves(pitchAuthority,std::move(nativePitchLines),virtualPitchCurves);
+        {
+            // One target line per virtual group across member overlaps (same
+            // overlay; included in the per-clip cache suffix below).
+            std::vector<ResolvedConnectionPitchCurve> continuity;
+            for(const auto& group:virtualGroups)if(group.trackId==track.id)
+            {auto curves=nativeVirtualContinuityCurves(pitchAuthority,group.id,group.plan,nativePitchLines);continuity.insert(continuity.end(),curves.begin(),curves.end());}
+            if(!continuity.empty())
+            {
+                nativePitchLines=overlayResolvedConnectionPitchCurves(pitchAuthority,std::move(nativePitchLines),continuity);
+                virtualPitchCurves.insert(virtualPitchCurves.end(),continuity.begin(),continuity.end());
+            }
+            for(const auto& group:virtualGroups)if(group.trackId==track.id)bindNativeVirtualSinglePitch(nativePitchLines,pitchAuthority,group.id,group.plan);
+        }
+        const bool hasSourceEdges=trackShowsAllNativeRegions(track)&&std::any_of(orderedClips.begin(),orderedClips.end(),[](const auto* clip)
+        {return !clip->muted&&std::any_of(clip->notes.begin(),clip->notes.end(),[](const auto& note){return note.nativePronunciationEdges.has_value();});});
+        if(hasSourceEdges)
+        {
+            std::vector<juce::String> actualIds;
+            for(const auto* clip:orderedClips)if(!clip->muted&&clip->sourceFile.existsAsFile())for(const auto& note:clip->notes)
+                if(note.nativeScoreMaterialAligned||(note.startSeconds<clip->durationSeconds&&note.startSeconds+note.durationSeconds>0))actualIds.push_back(note.id);
+            NativeSourceEdgePlan plan;juce::String error;
+            bool valid=original!=sourceProject.tracks.end()&&!actualIds.empty()&&resolveNativeSourceEdgePlan(*original,actualIds,plan,error);
+            std::set<std::size_t> suppressedEntries,suppressedExits;
+            if(valid)for(const auto& boundary:overlapBoundaries)
+            {
+                const auto a=std::find_if(plan.members.begin(),plan.members.end(),[&](const auto& member){return member.noteId==boundary.leftNoteId;});
+                const auto b=std::find_if(plan.members.begin(),plan.members.end(),[&](const auto& member){return member.noteId==boundary.rightNoteId;});
+                if(a!=plan.members.end())suppressedExits.insert(a->component);
+                if(b!=plan.members.end())suppressedEntries.insert(b->component);
+            }
+            if(valid)for(const auto& member:plan.members)
+            {
+                const auto owner=std::find_if(orderedClips.begin(),orderedClips.end(),[&](const auto* clip){return clip->id==member.expandedClipId;});
+                if(owner==orderedClips.end()||(*owner)->sourceFile!=member.sourceFile){valid=false;error="Source-edge expanded owner changed";break;}
+                const auto& clip=**owner;
+                const auto note=std::find_if(clip.notes.begin(),clip.notes.end(),[&](const auto& value){return value.id==member.noteId&&value.materialAudioId==member.audioId&&value.materialRegionId==member.regionId;});
+                if(note==clip.notes.end()){valid=false;error="Source-edge note binding changed";break;}
+                NativeSourceEdgeSpan span;span.begin=member.supportFromTargetSeconds-clip.startSeconds;span.end=member.supportToTargetSeconds-clip.startSeconds;
+                span.entryWindowActive=member.entryWindowActive&&!suppressedEntries.count(member.component);
+                span.exitWindowActive=member.exitWindowActive&&!suppressedExits.count(member.component);
+                span.entryFrom=member.entryFromTargetSeconds-clip.startSeconds;span.entryTo=member.entryToTargetSeconds-clip.startSeconds;
+                span.exitFrom=member.exitFromTargetSeconds-clip.startSeconds;span.exitTo=member.exitToTargetSeconds-clip.startSeconds;
+                span.termination=member.terminationTargetSeconds-clip.startSeconds;
+                // Activated component windows can cross retained source slices.
+                // Their anchors remain on the common component clock, including
+                // negative local time in a later child. Only this member's real
+                // coverage must lie within the expanded owner.
+                if(span.begin< -1.e-7||span.end>clip.durationSeconds+1.e-7
+                    ||(span.entryWindowActive&&(!std::isfinite(span.entryFrom)||!std::isfinite(span.entryTo)||span.entryTo<=span.entryFrom))
+                    ||(span.exitWindowActive&&(!std::isfinite(span.exitFrom)||!std::isfinite(span.exitTo)||!std::isfinite(span.termination)||span.exitTo<=span.exitFrom)))
+                {valid=false;error="Invalid source-edge component window binding";break;}
+                sourceEdgeSpans[clip.id].push_back(span);
+            }
+            if(valid)for(auto& [id,spans]:sourceEdgeSpans)
+            {
+                std::sort(spans.begin(),spans.end(),[](const auto& a,const auto& b){return a.begin<b.begin;});
+                for(std::size_t i=1;i<spans.size();++i)if(spans[i].begin<spans[i-1].end-1.e-7)
+                {valid=false;error="Overlapping source-edge ownership in one physical clip";break;}
+            }
+            if(!valid)
+            {
+                if(nativeSourceEdgeError.isNotEmpty())nativeSourceEdgeError+="; ";
+                nativeSourceEdgeError+="Native source edges ["+track.id+"]: "+error;
+                continue; // explicit invalid opt-in never silently renders with legacy guessed edges
+            }
+        }
         const auto bankPath = trackUsesVoicebankSynthesis(track)
             ? track.voicebankDirectory.getFullPathName().toStdString() : std::string{};
         auto [updateStamp, firstTrack] = updateBankStamps.try_emplace(bankPath);
@@ -2432,6 +2722,10 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
         if (mergedMode)
             for (auto& chain : glideChains(orderedClips))
             {
+                // Explicit virtual assembly always owns its support, regardless
+                // of the legacy per-clip/merged rendering preference.
+                if(std::any_of(chain.begin(),chain.end(),[&](const auto* clip)
+                    {return std::any_of(clip->notes.begin(),clip->notes.end(),[&](const auto& n){return virtualBindings.count(n.id)!=0;});}))continue;
                 PendingGroup group;
                 for (const auto* member : chain)
                 {
@@ -2469,10 +2763,36 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
             }
             auto loaded = std::make_unique<LoadedClip>();
             loaded->clip = clip;
+            for(const auto& note:clip.notes)if(const auto binding=virtualBindings.find(note.id);binding!=virtualBindings.end())
+            {loaded->virtualBindings.push_back(binding->second);}
+            bool virtualOnly=false;
+            if(!loaded->virtualBindings.empty())
+            {
+                const auto commonPlan=loaded->virtualBindings.front().plan;
+                std::vector<std::pair<double,double>> supports;
+                bool oneGroup=true;
+                for(const auto& binding:loaded->virtualBindings)
+                {oneGroup&=binding.plan==commonPlan;const auto& m=binding.plan->members[binding.member];supports.push_back({m.from,m.to});}
+                std::sort(supports.begin(),supports.end());double covered=clip.startSeconds;
+                for(const auto& span:supports){if(span.first>covered+1.e-9)break;covered=std::max(covered,span.second);}
+                virtualOnly=oneGroup&&covered>=clip.startSeconds+clip.durationSeconds-1.e-9;
+            }
+            loaded->nativeScoreMaterial=std::any_of(clip.notes.begin(),clip.notes.end(),[](const auto& note){return note.nativeScoreMaterialAligned;});
+            if(loaded->nativeScoreMaterial&&clip.startSeconds<0)
+                nativeScorePrerollStartSeconds.store(std::min(nativeScorePrerollStartSeconds.load(),clip.startSeconds));
+            if(const auto found=sourceEdgeSpans.find(clip.id);found!=sourceEdgeSpans.end())loaded->sourceEdges=found->second;
+            const bool profiledStart=sourceEdgeAt(*loaded,0.0)!=nullptr;
+            const bool profiledEnd=sourceEdgeAt(*loaded,std::max(0.0,clip.durationSeconds-1.e-9))!=nullptr;
+
             loaded->trackId = track.id.toStdString();
             if(track.compose && !track.accompaniment && !trackUsesVoicebankSynthesis(track))
-                loaded->nativeWaveformHash = nativeClipWaveformHash(clip,track);
-            loaded->smoothOverlaps = track.smoothOverlaps;
+            {
+                loaded->nativeWaveformHash = nativeClipWaveformHash(clip,track,&project.nativeVirtualGroups);
+                for(const auto& note:clip.notes)if(const auto author=authorWaveformHashes.find(note.id);author!=authorWaveformHashes.end())
+                {loaded->nativeWaveformHash=author->second;break;}
+            }
+            const bool explicitAssembly=explicitAssemblyClips.count(clip.id)!=0;
+            loaded->smoothOverlaps = track.smoothOverlaps&&!explicitAssembly;
             const auto joinedStart = clipIndex > 0
                 && clipsJoinAt(clip, *orderedClips[clipIndex - 1], false);
             const auto joinedEnd = clipIndex + 1 < orderedClips.size()
@@ -2480,11 +2800,12 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
             std::optional<backend::Mld5FileRenderRequest> nativeRequest;
             std::optional<std::string> nativeCacheKey;
             auto preservesSource = false;
-            if (reader && trackShowsAllNativeRegions(track) && !inGlideGroup[clipIndex])
+            if (reader && trackShowsAllNativeRegions(track) && !inGlideGroup[clipIndex] && !virtualOnly)
             {
                 if (!clip.notes.empty())
-                    nativeCacheKey = renderKey(clip, track, hifiganModelDirectory, inferenceConfiguration,
+                    nativeCacheKey = renderKey(clip, pitchAuthority, hifiganModelDirectory, inferenceConfiguration,
                         utauResamplerFile, dsOptions, defaultUtauOutputEngine, utauWavtoolFile, &bankStamp, &project.nativeConnections)
+                        + nativeVirtualPitchCacheSuffix(virtualPitchCurves,clip)
                         + (renderComponent == WavExportComponent::full ? std::string{}
                             : "|export-component=" + std::to_string(static_cast<int>(renderComponent)));
                 const auto cached = nativeCacheKey ? renderCache.find(*nativeCacheKey) : renderCache.end();
@@ -2513,20 +2834,23 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
             if (!preservesSource)
             {
                 const auto compactDeclick = std::min(0.0025, loaded->clip.durationSeconds * 0.5);
-                loaded->clip.fadeInSeconds = std::max(loaded->clip.fadeInSeconds, compactDeclick);
-                loaded->clip.fadeOutSeconds = std::max(loaded->clip.fadeOutSeconds, compactDeclick);
+                if(!profiledStart&&!(explicitAssembly&&clip.crossfadeInSeconds>1.e-6))loaded->clip.fadeInSeconds = std::max(loaded->clip.fadeInSeconds, compactDeclick);
+                if(!profiledEnd&&!(explicitAssembly&&clip.crossfadeOutSeconds>1.e-6))loaded->clip.fadeOutSeconds = std::max(loaded->clip.fadeOutSeconds, compactDeclick);
             }
             // A seam inside a decoded phrase was never cut, so there is nothing
             // there to fade across; the mixer must lay these buffers down flat.
             if (inGlideGroup[clipIndex])
             {
                 loaded->smoothOverlaps = false;
-                loaded->clip.fadeInSeconds = 0.0;
-                loaded->clip.fadeOutSeconds = 0.0;
-                loaded->clip.crossfadeInSeconds = 0.0;
-                loaded->clip.crossfadeOutSeconds = 0.0;
+                if(loaded->sourceEdges.empty()&&!explicitAssemblyClips.count(clip.id)) // explicit assembly preserves its real crossfade and author fades
+                {
+                    loaded->clip.fadeInSeconds = 0.0;
+                    loaded->clip.fadeOutSeconds = 0.0;
+                    loaded->clip.crossfadeInSeconds = 0.0;
+                    loaded->clip.crossfadeOutSeconds = 0.0;
+                }
             }
-            if (track.smoothOverlaps && !inGlideGroup[clipIndex] && clipIndex > 0)
+            if (loaded->smoothOverlaps && !inGlideGroup[clipIndex] && !profiledStart && clipIndex > 0)
             {
                 const auto& previous = *orderedClips[clipIndex - 1];
                 const auto overlap = previous.startSeconds + previous.durationSeconds - clip.startSeconds;
@@ -2537,7 +2861,7 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
                     loaded->clip.fadeInSeconds = std::max(loaded->clip.fadeInSeconds,
                         std::min(0.006, loaded->clip.durationSeconds * 0.5));
             }
-            if (track.smoothOverlaps && !inGlideGroup[clipIndex]
+            if (loaded->smoothOverlaps && !inGlideGroup[clipIndex] && !profiledEnd
                 && clipIndex + 1 < orderedClips.size())
             {
                 const auto& next = *orderedClips[clipIndex + 1];
@@ -2645,7 +2969,13 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
             // Until a selected external engine is present, the native mld5 renderer is the
             // deterministic model-free fallback rather than device-rate resampling, which
             // shifts both F0 and formants and creates the "old/child voice" failure mode.
-            if (!track.accompaniment && track.compose && !renderClip.notes.empty() && inGlideGroup[clipIndex])
+            if(virtualOnly)
+            {
+                // A waveform-only slice of the one group decode. No per-source
+                // neural render is scheduled for a fully bound physical owner.
+                loaded->rendered=std::make_shared<RenderedClip>();
+            }
+            else if (!track.accompaniment && track.compose && !renderClip.notes.empty() && inGlideGroup[clipIndex])
             {
                 // Filled from the phrase once it is decoded, below.  It is not
                 // a renderCache entry: the phrase is what the cache holds, and
@@ -2665,6 +2995,7 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
                 auto cacheKey = nativeCacheKey ? *nativeCacheKey : renderKey(
                     renderClip, track, hifiganModelDirectory, inferenceConfiguration,
                     utauResamplerFile, dsOptions, defaultUtauOutputEngine, utauWavtoolFile, &bankStamp, &project.nativeConnections)
+                    + nativeVirtualPitchCacheSuffix(virtualPitchCurves,renderClip)
                     + (renderComponent == WavExportComponent::full ? std::string{}
                         : "|export-component=" + std::to_string(static_cast<int>(renderComponent)));
                 bool forceNative = false;
@@ -2924,12 +3255,181 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& sourceProject, bool diff
             loaded->clip.notes.shrink_to_fit();
             loadedClips.push_back(std::move(loaded));
         }
+        // Explicit virtual groups are one acoustic assembly and ONE decoded
+        // output, not N pitch-aligned renders mixed afterwards. Author owners
+        // remain intact; only their bound support is replaced in the mixer.
+        for(const auto& group:virtualGroups)if(group.trackId==track.id&&!group.plan.members.empty())
+        {
+            const auto plan=virtualBindings.at(group.plan.members.front().noteId).plan;
+            double from=std::numeric_limits<double>::infinity(),to=-from;
+            for(const auto& member:plan->members){from=std::min(from,member.from);to=std::max(to,member.to);}
+            juce::String issue;
+            if((track.pitchAlgorithm!=PitchAlgorithm::nsfHifigan&&track.pitchAlgorithm!=PitchAlgorithm::world)||trackUsesVoicebankSynthesis(track)
+                ||track.stretchAlgorithm==StretchAlgorithm::wcsNonLoop || static_cast<int>(track.stretchAlgorithm)==5
+                ||renderComponent!=WavExportComponent::full)
+                issue="Virtual source assembly is unsupported for this backend or export component";
+            auto parts=std::make_shared<backend::NsfHifiganSourceAssembly>();
+            backend::Mld5FileRenderRequest request;
+            const bool worldAssembly=track.pitchAlgorithm==PitchAlgorithm::world;
+            request.pitchBackend=worldAssembly?backend::PitchRenderBackend::world:backend::PitchRenderBackend::nsfHifigan;
+            request.targetDurationSeconds=to-from;request.framePeriodMs=5.;request.stretchAlgorithm=worldAssembly?0:1;
+            request.hifiganModelDirectory=hifiganModelDirectory;request.inference=inferenceConfiguration;
+            request.nsfNoiseProtection=track.nsfNoiseProtection;request.nsfSmoothPitchTransitions=track.nsfSmoothPitchTransitions;
+            request.nsfIncrementalRender=diagnosticNsfIncrementalRender.value_or(track.nsfNoiseProtection);
+            request.neuralGuardStartSeconds=request.neuralGuardEndSeconds=0;
+            std::string key="native-source-assembly-v1|"+group.id.toStdString();
+            ProjectData authorProject;
+            for(const auto& author:originalProject.tracks)if(author.id==track.id)authorProject.tracks.push_back(author);
+            expandProjectClipParts(authorProject);
+            for(std::size_t index=0;index<plan->members.size()&&issue.isEmpty();++index)
+            {
+                const auto& member=plan->members[index];
+                const ClipData* owner=nullptr;
+                for(const auto* candidate:orderedClips)
+                    if(std::any_of(candidate->notes.begin(),candidate->notes.end(),[&](const auto& n){return n.id==member.noteId;})){owner=candidate;break;}
+                if(!owner){issue="Virtual source assembly lost its expanded source owner";break;}
+                auto memberRequest=makeRenderRequest(*owner,track,hifiganModelDirectory,inferenceConfiguration,false,false,&nativePitchLines,&nativeEnvelopes);
+                const auto neutral=[&](const auto& values)
+                {for(std::size_t i=0;i<values.size();++i)if(owner->startSeconds+i*.005>=member.from-1.e-9&&owner->startSeconds+i*.005<=member.to+1.e-9&&std::abs(values[i])>=1.e-6f)return false;return true;};
+                if(std::any_of(memberRequest.robustPitchCurve.begin(),memberRequest.robustPitchCurve.end(),[](float v){return v>0.f;}))
+                {issue="Virtual source assembly does not yet support robust pitch controls";break;}
+                if(!neutral(memberRequest.tension)||!neutral(memberRequest.breath))
+                {issue="Virtual source assembly does not yet support non-neutral tension or breath controls";break;}
+                const auto sourceKey=owner->sourceFile.getFullPathName().toStdString(); auto readerIt=readers.find(sourceKey); if(readerIt==readers.end()||!readerIt->second){auto opened=std::shared_ptr<juce::AudioFormatReader>(formatManager.createReaderFor(owner->sourceFile));if(opened){readers[sourceKey]=opened;readerIt=readers.find(sourceKey);}}
+                if(readerIt==readers.end()||!readerIt->second){issue="Virtual source recording is unavailable";break;}
+                const auto& reader=*readerIt->second;
+                const auto begin=juce::jlimit<juce::int64>(0,reader.lengthInSamples,
+                    static_cast<juce::int64>(std::floor(member.sourceFromSeconds*reader.sampleRate)));
+                const auto end=juce::jlimit<juce::int64>(begin,reader.lengthInSamples,
+                    static_cast<juce::int64>(std::ceil(member.sourceToSeconds*reader.sampleRate)));
+                const auto length=end-begin;
+                if(length<=0||length>std::numeric_limits<int>::max())
+                {issue="Virtual source assembly has invalid physical source coverage";break;}
+                auto pcm=std::make_shared<juce::AudioBuffer<float>>(juce::jlimit(1,2,int(reader.numChannels)),int(length));
+                pcm->clear();readerIt->second->read(pcm.get(),0,int(length),begin,true,pcm->getNumChannels()>1);
+                auto author=std::make_shared<LoadedClip>();author->clip=*owner;
+                // Recover AUTHOR fades/envelopes, not the projected internal
+                // legacy-join suppression or newly added per-owner de-click.
+                if(!authorProject.tracks.empty())for(const auto& original:authorProject.tracks.front().clips)
+                    if(std::any_of(original.notes.begin(),original.notes.end(),[&](const auto& n){return n.id==member.noteId;}))
+                    {
+                        author->clip.gain=original.gain;author->clip.fadeInSeconds=original.fadeInSeconds;author->clip.fadeOutSeconds=original.fadeOutSeconds;
+                        author->clip.crossfadeInSeconds=original.crossfadeInSeconds;author->clip.crossfadeOutSeconds=original.crossfadeOutSeconds;
+                        author->clip.gainEnvelope=original.gainEnvelope;author->clip.inheritedGainEnvelopes=original.inheritedGainEnvelopes;
+                        shiftClipGainEnvelopes(author->clip,original.startSeconds-owner->startSeconds);break;
+                    }
+                if(const auto spans=sourceEdgeSpans.find(owner->id);spans!=sourceEdgeSpans.end())author->sourceEdges=spans->second;
+                author->clip.notes.clear();
+                const auto origin=owner->startSeconds;
+                auto gain=std::make_shared<const std::vector<float>>(std::move(memberRequest.noteGain));
+                auto sourceMidi=std::make_shared<const std::vector<float>>(std::move(memberRequest.sourceMidi));
+                auto formant=std::make_shared<const std::vector<float>>(std::move(memberRequest.formantSemitones));
+                const bool mutedSource=owner->muted;
+                // Same piecewise-linear frame-control sampling as RenderService.
+                const auto sample=[](const std::vector<float>& values,double position,float fallback)
+                {if(values.empty())return fallback;position=std::clamp(position,0.,double(values.size()-1));const auto i=std::size_t(position),j=std::min(i+1,values.size()-1);return values[i]+float(position-i)*(values[j]-values[i]);};
+                backend::NsfHifiganSourcePart part;part.source=pcm;part.sampleRate=reader.sampleRate;
+                part.supportFrom=member.from-from;part.supportTo=member.to-from;
+                for(const auto& point:memberRequest.timeMap)part.timeMap.push_back({origin+point.targetSeconds-from,
+                    owner->sourceOffsetSeconds+point.sourceSeconds-double(begin)/reader.sampleRate});
+                part.gainAt=[author,plan,index,from,origin,gain,sample,mutedSource](double seconds)
+                {
+                    if(mutedSource)return 0.f;
+                    const auto absolute=from+seconds,local=absolute-origin;
+                    return author->clip.gain*clipGainEnvelopeAt(author->clip,local)*fadeEnvelope(*author,local,absolute)
+                        *float(nativeVirtualMemberContribution(*plan,index,absolute))*sample(*gain,local/.005,1.f);
+                };
+                part.formantAt=[formant,from,origin](double seconds)
+                {
+                    if(formant->empty())return 0.f;
+                    const auto pos=std::clamp((from+seconds-origin)/.005,0.,double(formant->size()-1));
+                    const auto i=std::size_t(pos),j=std::min(i+1,formant->size()-1);
+                    return (*formant)[i]+float(pos-i)*((*formant)[j]-(*formant)[i]);
+                };
+                part.sourceMidiAt=[sourceMidi,from,origin](double seconds)
+                {
+                    if(sourceMidi->empty())return 0.f;
+                    const auto pos=std::clamp((from+seconds-origin)/.005,0.,double(sourceMidi->size()-1));
+                    // Never interpolate a voiced frame through a source UV hole.
+                    const auto i=std::size_t(pos),j=std::min(i+1,sourceMidi->size()-1);
+                    if((*sourceMidi)[i]<=0||(*sourceMidi)[j]<=0)return 0.f;
+                    return (*sourceMidi)[i]+float(pos-i)*((*sourceMidi)[j]-(*sourceMidi)[i]);
+                };
+                parts->push_back(std::move(part));
+                key+="|"+renderKey(*owner,pitchAuthority,hifiganModelDirectory,inferenceConfiguration,utauResamplerFile,dsOptions,
+                    defaultUtauOutputEngine,utauWavtoolFile,&bankStamp,&project.nativeConnections);
+                if(const auto hash=authorWaveformHashes.find(member.noteId);hash!=authorWaveformHashes.end())key+="|author="+std::to_string(hash->second);
+            }
+            const auto* pitch=nativePitchLines.memberFor(plan->members.front().noteId);
+            const bool hasGroupTarget=pitch&&pitch->line&&pitch->virtualSinglePitch;
+             if(issue.isEmpty()&&!hasGroupTarget)
+             {
+                 bool voicedSource=false;for(const auto& part:*parts)for(double t=part.supportFrom;t<part.supportTo;t+=.005)if(part.sourceMidiAt&&part.sourceMidiAt(t)>0){voicedSource=true;break;}
+                 if(voicedSource)issue="Virtual source assembly has no authoritative single target";
+             }
+            if(issue.isEmpty())
+            {
+                const auto frames=std::max(2,int(std::ceil((to-from)/.005))+1);
+                request.targetMidi.reserve(std::size_t(frames));
+                for(int i=0;i<frames;++i)request.targetMidi.push_back(hasGroupTarget?pitch->line->midiAt(std::min(to,from+i*.005)):0.f);
+                request.sourceAssembly=parts;request.sourceBuffer=parts->front().source;request.sourceRate=parts->front().sampleRate;
+                request.sourceDurationSeconds=request.sourceBuffer->getNumSamples()/request.sourceRate;
+                juce::MemoryOutputStream targetStamp;for(float value:request.targetMidi)targetStamp.writeFloat(value);
+                key+="|target="+juce::SHA256(targetStamp.getData(),targetStamp.getDataSize()).toHexString().toStdString();
+            }
+            if(issue.isNotEmpty())nativeSourceEdgeError+="Virtual group ["+group.id+"]: "+issue+"; ";
+            activeRenderKeys.insert(key);auto& state=renderCache[key];if(!state)state=std::make_shared<RenderedClip>();
+            if(issue.isEmpty())
+            {
+                const juce::ScopedLock sliceGuard(state->sliceLock);
+                for(const auto& owner:loadedClips)if(owner->trackId==track.id.toStdString()&&!owner->virtualBindings.empty()
+                    &&owner->virtualBindings.front().plan==plan&&owner->rendered&&!owner->rendered->scheduled.exchange(true))
+                {
+                    RenderedClip::SliceTarget target{owner->rendered,
+                        int(std::llround((owner->clip.startSeconds-from)*request.sourceRate)),
+                        std::max(1,int(std::llround(owner->clip.durationSeconds*request.sourceRate)))};
+                    if(state->ready.load(std::memory_order_acquire))sliceInto(*state,target);
+                    else state->pendingSlices.push_back(std::move(target));
+                }
+            }
+            else for(const auto& owner:loadedClips)if(owner->trackId==track.id.toStdString()&&!owner->virtualBindings.empty()
+                &&owner->virtualBindings.front().plan==plan&&owner->rendered&&!owner->rendered->scheduled.load())
+                {owner->rendered->warning=issue;owner->rendered->finished.store(true,std::memory_order_release);}
+            auto output=std::make_unique<LoadedClip>();
+            output->clip.id="__virtual-source-assembly/"+plan->members.front().noteId;
+            output->clip.startSeconds=from;output->clip.durationSeconds=to-from;output->clip.gain=1.f;
+            output->trackId=track.id.toStdString();output->trackGain=track.volume;output->trackPan=juce::jlimit(-1.f,1.f,track.pan);output->meter=meter;output->rendered=state;
+            loadedClips.push_back(std::move(output));
+            if(issue.isNotEmpty()){state->warning=issue;state->finished.store(true,std::memory_order_release);continue;}
+            if(state->finished.load(std::memory_order_acquire)&&!state->ready.load(std::memory_order_acquire))
+            {state->finished.store(false);state->scheduled.store(false);}
+            if(!state->scheduled.exchange(true))
+                renderService.renderMld5File(std::move(request),[state,sliceInto,generation=nativeWaveformGeneration](backend::RenderedAudio result)
+                {
+                    if(result.buffer.getNumSamples()>0&&result.sampleRate>0)
+                    {
+                        state->buffer=std::move(result.buffer);state->sampleRate=result.sampleRate;
+                        state->firstAudibleSample=0;state->lastAudibleSample=state->buffer.getNumSamples()-1;
+                        state->nativePeaks=measureNativeRenderedPeaks(state->buffer,state->sampleRate);
+                        state->backend=std::move(result.backend);state->warning=std::move(result.warning);state->ready.store(true,std::memory_order_release);
+                    }
+                    else state->warning=result.warning.isNotEmpty()?result.warning:"Virtual source assembly returned no audio";
+                    {
+                        const juce::ScopedLock sliceGuard(state->sliceLock);
+                        for(const auto& target:state->pendingSlices)
+                            if(state->ready.load(std::memory_order_acquire))sliceInto(*state,target);
+                            else {target.clip->warning=state->warning;target.clip->finished.store(true,std::memory_order_release);}
+                        state->pendingSlices.clear();
+                    }
+                    state->progress.store(1.f,std::memory_order_release);state->finished.store(true,std::memory_order_release);generation->fetch_add(1,std::memory_order_release);
+                },{key,from,to,[state]{state->scheduled.store(false,std::memory_order_release);}});
+        }
         for (auto& group : pendingGroups)
         {
             // A clip may have been dropped between grouping and loading (an
             // unreadable source), which would leave the slices misaligned.
             if (group.clips.size() < 2 || group.rendered.size() != group.clips.size()) continue;
-            const auto mergedKey = mergedRenderKey(group.clips, track,
+            const auto mergedKey = mergedRenderKey(group.clips, pitchAuthority,
                 hifiganModelDirectory, inferenceConfiguration, &project.nativeConnections);
             activeRenderKeys.insert(mergedKey);
             auto& phrase = renderCache[mergedKey];
@@ -3057,6 +3557,51 @@ float AudioEngine::fadeEnvelope(const ClipData& clip, double localSeconds)
     return gain;
 }
 
+const AudioEngine::NativeSourceEdgeSpan* AudioEngine::sourceEdgeAt(const LoadedClip& loaded,double local)
+{
+    const auto found=std::upper_bound(loaded.sourceEdges.begin(),loaded.sourceEdges.end(),local,[](double time,const auto& span){return time<span.begin;});
+    if(found==loaded.sourceEdges.begin())return nullptr;
+    const auto& span=*std::prev(found);return local>=span.begin&&local<span.end?&span:nullptr;
+}
+const AudioEngine::NativeVirtualBinding* AudioEngine::virtualBindingAt(const LoadedClip& loaded,double local,double absolute)
+{
+    const auto time=std::isfinite(absolute)?absolute:loaded.clip.startSeconds+local;
+    for(const auto& binding:loaded.virtualBindings)
+    {
+        const auto& member=binding.plan->members[binding.member];
+        if(time>=member.from&&time<member.to)return &binding;
+    }
+    return nullptr;
+}
+float AudioEngine::virtualContribution(const LoadedClip& loaded,double local,double absolute)
+{
+    // This owner's bound support is replaced by the ONE assembly output.
+    // Outside that exact support (e.g. da in a da_re owner), retain its normal
+    // independent rendering, fades, source clock and author gain unchanged.
+    if(virtualBindingAt(loaded,local,absolute))return 0.f;
+    return 1.f;
+}
+float AudioEngine::fadeEnvelope(const LoadedClip& loaded,double local,double absolute)
+{
+    auto gain=fadeEnvelope(loaded.clip,local)*virtualContribution(loaded,local,absolute); // author fades stay separately multiplicative
+    const auto* span=sourceEdgeAt(loaded,local);if(!span)return gain;
+    const auto curve=[](double phase){const auto x=static_cast<float>(juce::jlimit(0.0,1.0,phase));return x*x*(3.0f-2.0f*x);};
+    if(span->entryWindowActive)
+        gain*=span->entryTo>span->entryFrom?curve((local-span->entryFrom)/(span->entryTo-span->entryFrom)):(local>=span->entryTo?1.0f:0.0f);
+    if(span->exitWindowActive)
+    {
+        if(local>=span->termination)return 0.0f;
+        gain*=span->exitTo>span->exitFrom?curve((span->exitTo-local)/(span->exitTo-span->exitFrom)):(local<span->exitTo?1.0f:0.0f);
+    }
+    return gain; // internal members stay flat: their termination metadata is not an exposed end
+}
+std::optional<float> AudioEngine::diagnosticNativeSourceEdgeGain(const juce::String& clipId,double local) const
+{
+    const juce::ScopedReadLock guard(renderLock);
+    const auto found=std::find_if(loadedClips.begin(),loadedClips.end(),[&](const auto& loaded){return loaded->clip.id==clipId;});
+    if(found==loadedClips.end())return {};return fadeEnvelope(**found,local);
+}
+
 void AudioEngine::getNextAudioBlock(const juce::AudioSourceChannelInfo& info)
 {
     info.clearActiveBufferRegion();
@@ -3086,10 +3631,16 @@ void AudioEngine::getNextAudioBlock(const juce::AudioSourceChannelInfo& info)
             playing.store(false);
             return;
         }
-        const auto availableSeconds = (static_cast<double>(auditionReader->lengthInSamples)
-                                       - firstSourcePosition) / readerRate;
-        const auto outputCount = juce::jlimit(0, info.numSamples,
-            static_cast<int>(std::ceil(availableSeconds * sampleRate)));
+        // Raw source audition obeys the SAME transport endpoint as project
+        // playback. This branch returns before the normal mix endpoint check.
+        // Use the half-open output sample grid and leave the remaining block
+        // zeroed (clearActiveBufferRegion above), never a timer-based overshoot.
+        const auto physicalEnd = static_cast<double>(auditionReader->lengthInSamples) / readerRate;
+        const auto requestedEnd = playUntilSeconds.load();
+        const auto auditionEnd = requestedEnd > 0 ? std::min(physicalEnd, requestedEnd) : physicalEnd;
+        const auto endSample = static_cast<juce::int64>(std::ceil(auditionEnd * sampleRate - 1.e-7));
+        if (blockStartSample >= endSample) { timelineSample.store(endSample); playing.store(false); return; }
+        const auto outputCount = static_cast<int>(std::min<juce::int64>(info.numSamples, endSample - blockStartSample));
         const auto lastSourcePosition = firstSourcePosition
             + static_cast<double>(std::max(0, outputCount - 1)) * readerRate / sampleRate;
         const auto sourceBase = static_cast<juce::int64>(std::floor(firstSourcePosition));
@@ -3118,7 +3669,7 @@ void AudioEngine::getNextAudioBlock(const juce::AudioSourceChannelInfo& info)
                 info.buffer->setSample(1, info.startSample + outputOffset, right);
         }
         timelineSample.fetch_add(outputCount);
-        if (outputCount < info.numSamples) playing.store(false);
+        if (blockStartSample + outputCount >= endSample) playing.store(false);
         if (!offlineRendering.load(std::memory_order_relaxed)) sendChangeMessage();
         return;
     }
@@ -3138,6 +3689,17 @@ void AudioEngine::getNextAudioBlock(const juce::AudioSourceChannelInfo& info)
         return static_cast<int>(juce::jlimit(0.0, static_cast<double>(info.numSamples),
             std::ceil(seconds * sampleRate - 1.0e-7) - static_cast<double>(blockStartSample)));
     };
+    const auto edgeLocalTime = [&](const LoadedClip& loaded,double legacyLocal,int blockOffset)
+    {
+        if(loaded.sourceEdges.empty())return legacyLocal; // legacy arithmetic stays bit-identical
+        auto origin=loaded.clip.startSeconds*sampleRate;
+        const auto grid=std::round(origin);
+        if(std::abs(origin-grid)<=1.e-7)origin=grid;
+        // Use the same absolute sample grid as PCM reads. Adding two seconds
+        // fractions can put the first child sample one ULP before its start,
+        // miss its edge span and emit one full-volume sample at the seam.
+        return (static_cast<double>(blockStartSample+blockOffset)-origin)/sampleRate;
+    };
     for (const auto& loaded : loadedClips)
     {
         if (!exportTrackFilter.empty() && loaded->trackId != exportTrackFilter) continue;
@@ -3156,8 +3718,10 @@ void AudioEngine::getNextAudioBlock(const juce::AudioSourceChannelInfo& info)
         for (auto output = begin; output < end; ++output)
         {
             const auto absoluteSeconds = blockStart + static_cast<double>(output) / sampleRate;
-            sums[static_cast<std::size_t>(output)] += fadeEnvelope(
-                clip, absoluteSeconds - clip.startSeconds);
+            const auto local = edgeLocalTime(*loaded,absoluteSeconds-clip.startSeconds,output);
+            const auto virtualTime=static_cast<double>(blockStartSample+output)/sampleRate;
+            if(sourceEdgeAt(*loaded,local)!=nullptr||virtualBindingAt(*loaded,local,virtualTime)!=nullptr)continue; // explicit source/group route is not an overlap-normalisation contributor
+            sums[static_cast<std::size_t>(output)] += fadeEnvelope(*loaded,local,virtualTime);
             ++counts[static_cast<std::size_t>(output)];
         }
     }
@@ -3165,8 +3729,10 @@ void AudioEngine::getNextAudioBlock(const juce::AudioSourceChannelInfo& info)
     const auto smoothedGain = [&](const LoadedClip& loaded, double localSeconds,
                                   int blockOffset)
     {
-        auto envelope = fadeEnvelope(loaded.clip, localSeconds);
-        if (loaded.smoothOverlaps)
+        localSeconds=edgeLocalTime(loaded,localSeconds,blockOffset);
+        const auto virtualTime=static_cast<double>(blockStartSample+blockOffset)/sampleRate;
+        auto envelope = fadeEnvelope(loaded, localSeconds,virtualTime);
+        if (loaded.smoothOverlaps && sourceEdgeAt(loaded,localSeconds)==nullptr && virtualBindingAt(loaded,localSeconds,virtualTime)==nullptr)
         {
             const auto sums = overlapEnvelopeSums.find(loaded.trackId);
             const auto counts = overlapCounts.find(loaded.trackId);
@@ -3367,6 +3933,8 @@ void AudioEngine::play()
     }
     if (duration > 0.0 && position() >= duration)
         setPosition(0.0);
+    if(!auditionMode.load()&&nativeScorePrerollStartSeconds.load()<0&&std::abs(position())<.5/outputSampleRate.load())
+        setPosition(nativeScorePrerollStartSeconds.load());
     playing.store(true);
     sendChangeMessage();
 }
@@ -3390,7 +3958,8 @@ void AudioEngine::stop()
 
 void AudioEngine::setPosition(double seconds)
 {
-    timelineSample.store(static_cast<juce::int64>(std::max(0.0, seconds) * outputSampleRate.load()));
+    const auto minimum=auditionMode.load()?0.0:nativeScorePrerollStartSeconds.load();
+    timelineSample.store(static_cast<juce::int64>(std::max(minimum,std::isfinite(seconds)?seconds:0.0) * outputSampleRate.load()));
     if (!auditionMode.load()) renderService.setPlaybackPosition(position());
     sendChangeMessage();
 }
@@ -3524,6 +4093,7 @@ juce::String AudioEngine::activeRenderWarnings() const
 {
     const juce::ScopedReadLock guard(renderLock);
     juce::StringArray warnings;
+    if(nativeSourceEdgeError.isNotEmpty())warnings.add(nativeSourceEdgeError);
     for (const auto& loaded : loadedClips)
         if (loaded->rendered != nullptr
             && loaded->rendered->finished.load(std::memory_order_acquire)
@@ -3561,7 +4131,11 @@ juce::StringArray AudioEngine::renderCapabilityWarnings(const ProjectData& proje
                 // source geometry, not an unsupported UTAU-only override. Only
                 // suppress a warning when the stored source markers AGREE;
                 // independently edited protocol values still need a warning.
-                const auto boundTiming = note.materialAudioId.isNotEmpty() && note.materialRegionId.isNotEmpty()
+                // GUI198: in-memory Melodyne conversions carry the same native
+                // source snapshot without a published material binding; other
+                // unbound protocol overrides are still reported.
+                const auto boundTiming = ((note.materialAudioId.isNotEmpty() && note.materialRegionId.isNotEmpty())
+                        || note.nativeProvenance == "melodyne")
                     && note.nativeSourceStartSeconds >= 0 && note.nativeSourceEndSeconds > note.nativeSourceStartSeconds
                     && !note.nativeSegments.empty();
                 const auto sourceOrigin = note.materialSourceStartSeconds >= 0
@@ -3602,19 +4176,19 @@ juce::StringArray AudioEngine::renderCapabilityWarnings(const ProjectData& proje
                 }
             }
             ignored.removeDuplicates(false);
-            if (!ignored.isEmpty()) note(juce::String::fromUTF8("HiFisampler 不支持这些 FLAG：") + ignored.joinIntoString(", "));
+            if (!ignored.isEmpty()) note(I18n::uiText("engine.hifiUnsupportedFlags") + ignored.joinIntoString(", "));
         }
         else if (usesFlags || usesFlagCurve)
-            note(juce::String::fromUTF8("UTAU flags 仅在 UTAU 渲染后端生效，当前后端将忽略"));
+            note(I18n::uiText("engine.flagsUtauOnly"));
 
         if (usesConsonantVelocity && !nativeOto)
-            note(juce::String::fromUTF8("辅音速度仅 UTAU 后端生效；其他后端用起音时间映射近似"));
+            note(I18n::uiText("engine.velocityUtauOnly"));
         if (usesTimingOverride && !nativeOto)
-            note(juce::String::fromUTF8("先行/交叠覆盖仅 UTAU 后端生效"));
+            note(I18n::uiText("engine.timingOverrideUtauOnly"));
         if (usesStp && !nativeOto)
-            note(juce::String::fromUTF8("STP 仅 UTAU 后端生效"));
+            note(I18n::uiText("engine.stpUtauOnly"));
         if (usesRegionFlags && !nativeOto)
-            note(juce::String::fromUTF8("分区 flag 仅 UTAU 后端生效"));
+            note(I18n::uiText("engine.regionFlagsUtauOnly"));
     }
     return warnings;
 }
@@ -3745,8 +4319,22 @@ bool AudioEngine::exportWav(const juce::File& file, juce::String& error,
     const auto previousPlayUntil = playUntilSeconds.exchange(0.0);
     offlineRendering.store(true, std::memory_order_release);
     const auto songSeconds = projectDurationSeconds.load();
-    const auto fromClamped = juce::jlimit(0.0, std::max(0.0, songSeconds), fromSeconds);
-    const auto toClamped = toSeconds > fromClamped
+    double scoreOrigin=0.0;
+    if(nativeScorePrerollStartSeconds.load()<0)
+    {
+        const juce::ScopedReadLock guard(renderLock);
+        for(const auto& loaded:loadedClips)
+            if(loaded->nativeScoreMaterial&&(trackId.isEmpty()||loaded->trackId==trackId.toStdString()))
+                scoreOrigin=std::min(scoreOrigin,loaded->clip.startSeconds);
+    }
+    // Full/default export keeps explicit native pre-P audio before beat zero.
+    // The file gains a preroll; the imported musical score is never shifted.
+    const auto requestedFrom=fromSeconds==0.0&&scoreOrigin<0?scoreOrigin:fromSeconds;
+    const auto fromClamped = juce::jlimit(scoreOrigin, std::max(0.0, songSeconds), requestedFrom);
+    // An explicit end is judged against the caller's own range, not the derived
+    // preroll start: the default (0,0) must still export to the end of the song.
+    const auto rangeReference=scoreOrigin<0?fromSeconds:fromClamped; // preserve legacy clamped-range semantics
+    const auto toClamped = toSeconds > rangeReference
         ? std::min(toSeconds, songSeconds) : songSeconds;
     timelineSample.store(static_cast<juce::int64>(std::llround(fromClamped * sampleRate)));
     masterLimiterGain.store(1.0f, std::memory_order_relaxed);

@@ -503,6 +503,10 @@ bool MaterialAnnotationSession::split(const std::vector<double>& sourceTimes, ju
         }
         const auto old = next[match];
         auto left = old, right = old;
+        if(!clipNativePronunciationEdges(old.nativePronunciationEdges,old.regionStartSeconds,old.regionEndSeconds,
+                old.regionStartSeconds,cut,left.nativePronunciationEdges,error)
+            ||!clipNativePronunciationEdges(old.nativePronunciationEdges,old.regionStartSeconds,old.regionEndSeconds,
+                cut,old.regionEndSeconds,right.nativePronunciationEdges,error))return false;
         right.materialRegionId = newId('p');
         left.regionEndSeconds = cut; right.regionStartSeconds = cut;
         left.fixedDurationSeconds = std::min(old.fixedDurationSeconds, cut-old.regionStartSeconds);
@@ -536,8 +540,11 @@ bool MaterialAnnotationSession::moveBoundary(const juce::String& leftId, double 
     if (right == next.end() || !std::isfinite(time) || time <= left->regionStartSeconds + 1.e-6
         || time >= right->regionEndSeconds - 1.e-6)
         return rejected(error, "Boundary must stay inside its two adjacent pronunciations");
-    const auto retime = [](SampleRegionSetting& row, double begin, double end)
+    const auto retime = [&](SampleRegionSetting& row, double begin, double end)
     {
+        std::optional<NativePronunciationEdges> profile;
+        if(!affineNativePronunciationEdges(row.nativePronunciationEdges,row.regionStartSeconds,row.regionEndSeconds,
+            begin,end,profile,error))return false;
         const auto previous = row.regionStartSeconds;
         const auto scale = (end-begin)/(row.regionEndSeconds-previous);
         const auto at = [&](double value) { return begin + (value-previous)*scale; };
@@ -550,10 +557,10 @@ bool MaterialAnnotationSession::moveBoundary(const juce::String& leftId, double 
             segment.alignmentSeconds = at(segment.alignmentSeconds);
         }
         for (auto& point : row.amplitudeEnvelope) point.timeSeconds *= scale;
-        row.regionStartSeconds = begin; row.regionEndSeconds = end;
+        row.regionStartSeconds = begin; row.regionEndSeconds = end;row.nativePronunciationEdges=std::move(profile);
+        return true;
     };
-    retime(*left, left->regionStartSeconds, time);
-    retime(*right, time, right->regionEndSeconds);
+    if(!retime(*left, left->regionStartSeconds, time)||!retime(*right, time, right->regionEndSeconds))return false;
     return commit(std::move(next), error);
 }
 
@@ -580,6 +587,18 @@ bool MaterialAnnotationSession::setRow(const juce::String& id, const SampleRegio
     if (row.materialRegionId != id || row.materialAudioId != audioId)
         return rejected(error, "Editing cannot replace stable material identities");
     auto updated = row;
+    if(found->nativePronunciationEdges&&!validateNativePronunciationEdges(*found->nativePronunciationEdges,
+        found->regionStartSeconds,found->regionEndSeconds,error))return false;
+    if((updated.regionStartSeconds!=found->regionStartSeconds||updated.regionEndSeconds!=found->regionEndSeconds)
+        &&updated.nativePronunciationEdges==found->nativePronunciationEdges)
+        if(!affineNativePronunciationEdges(found->nativePronunciationEdges,found->regionStartSeconds,found->regionEndSeconds,
+            updated.regionStartSeconds,updated.regionEndSeconds,updated.nativePronunciationEdges,error))return false;
+    if((updated.regionStartSeconds!=found->regionStartSeconds||updated.regionEndSeconds!=found->regionEndSeconds)
+        &&updated.nativeTransition&&updated.nativeTransition==found->nativeTransition)
+        updated.nativeTransition->boundarySourceSeconds=std::lerp(updated.regionStartSeconds,updated.regionEndSeconds,
+            (found->nativeTransition->boundarySourceSeconds-found->regionStartSeconds)/(found->regionEndSeconds-found->regionStartSeconds));
+    if(updated.pronunciationKind==PronunciationKind::transition)
+        for(auto& candidate:next)if(candidate.connectedNextRegionId==id)candidate.connectedNextRegionId.clear();
     const auto sameSegment = [](const auto& a, const auto& b)
     {
         return a.id == b.id && a.alias == b.alias && a.role == b.role
@@ -624,6 +643,9 @@ bool MaterialAnnotationSession::merge(const std::vector<juce::String>& ids, juce
             return rejected(error, "Only adjacent, non-overlapping source pronunciations can be merged");
     const auto first = positions.front(), last = positions.back();
     auto merged = next[first];
+    const std::vector<SampleRegionSetting> edgeRows(next.begin()+static_cast<std::ptrdiff_t>(first),
+        next.begin()+static_cast<std::ptrdiff_t>(last+1));
+    if(!mergeNativePronunciationEdges(edgeRows,merged.nativePronunciationEdges,error))return false;
     for (auto i = first+1; i <= last; ++i)
     {
         for (auto segment : next[i].segments)

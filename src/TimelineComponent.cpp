@@ -2,6 +2,7 @@
 #include "AudioEngine.h"
 #include "SourceWaveformPreview.h"
 #include "TimelineComponent.h"
+#include "I18n.h"
 #include "ClipParts.h"
 #include "TrackGainEnvelope.h"
 #include "Theme.h"
@@ -18,9 +19,15 @@ struct GainControlLayout
     juce::Rectangle<float> bounds, icon, knob, value;
 };
 
+bool detailedClipHeader(juce::Rectangle<float> clip) { return clip.getWidth()>=72.0f; }
+juce::Rectangle<float> muteControlBounds(juce::Rectangle<float> clip)
+{
+    return detailedClipHeader(clip)?juce::Rectangle<float>(clip.getX()+2.f,clip.getY()+2.f,14.f,13.f):juce::Rectangle<float>{};
+}
 GainControlLayout gainControlLayout(juce::Rectangle<float> clip)
 {
     GainControlLayout result;
+    if(!detailedClipHeader(clip))return result; // never leave invisible gain hit targets at overview zoom
     // Scale graphics with the lane height, but keep a readable text size.
     // In the shortest lanes share the header row, beside the mute badge.
     const auto compact = clip.getHeight() < 34.0f;
@@ -198,7 +205,7 @@ void TimelineComponent::rebuildNativeWaveformHashes()
     for(const auto& track:snapshot.tracks)
         if(track.compose&&!track.accompaniment&&!trackUsesVoicebankSynthesis(track))
             for(const auto& clip:track.clips)for(const auto& part:expandedClipParts(clip))
-                nativeClipHashes.emplace(part.id.toStdString(),AudioEngine::nativeClipWaveformHash(part,track));
+                nativeClipHashes.emplace(part.id.toStdString(),AudioEngine::nativeClipWaveformHash(part,track,&snapshot.nativeVirtualGroups));
 }
 
 void TimelineComponent::setNativeClipWaveforms(std::shared_ptr<const std::vector<NativeRenderedWaveform>> waveforms)
@@ -532,12 +539,15 @@ void TimelineComponent::paint(juce::Graphics& g)
             g.setColour(Palette::text);
             g.setColour(Palette::panel.withAlpha(0.82f));
             g.fillRect(bounds.toNearestInt().withHeight(17));
+            if(detailedClipHeader(bounds))
+            {
             g.setColour(clip.muted ? Palette::noteFill : colour.brighter(0.5f));
             g.fillRoundedRectangle(bounds.getX() + 2.0f, bounds.getY() + 2.0f, 14.0f, 13.0f, 2.0f);
             g.setColour(light ? Palette::contrastingText(clip.muted ? Palette::noteFill : colour.brighter(0.5f)) : Palette::panel);
             g.setFont(9.0f);
             g.drawText("M", static_cast<int>(bounds.getX() + 2.0f), static_cast<int>(bounds.getY() + 1.0f),
                        14, 14, juce::Justification::centred);
+            }
             g.setColour(light ? Palette::contrastingText(clipSurface.overlaidWith(Palette::panel.withAlpha(0.82f))) : Palette::text);
             g.setFont(10.0f);
             const auto displayGain = clip.id == draggedClip && dragMode == DragMode::gain
@@ -546,7 +556,7 @@ void TimelineComponent::paint(juce::Graphics& g)
             const auto knob = gainControl.knob;
             g.drawText(clipHeaderText(track, clip, displayGain),
                        bounds.toNearestInt().withTrimmedLeft(bounds.getHeight() < 34.0f && !gainControl.bounds.isEmpty()
-                           ? static_cast<int>(std::ceil(gainControl.bounds.getRight()-bounds.getX()+3.0f)) : 19).withHeight(17),
+                           ? static_cast<int>(std::ceil(gainControl.bounds.getRight()-bounds.getX()+3.0f)) : detailedClipHeader(bounds)?19:3).withHeight(17),
                        juce::Justification::centredLeft, true);
             g.setColour(light ? Palette::noteEdge : colour.brighter(0.65f));
             juce::Path leftHandle;
@@ -783,8 +793,7 @@ void TimelineComponent::mouseMove(const juce::MouseEvent& event)
                 setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
                 return;
             }
-            const auto muteBounds = juce::Rectangle<float>(it->bounds.getX() + 2.0f,
-                it->bounds.getY() + 2.0f, 14.0f, 13.0f);
+            const auto muteBounds = muteControlBounds(it->bounds);
             if (muteBounds.contains(event.position))
             {
                 setMouseCursor(juce::MouseCursor::PointingHandCursor);
@@ -843,8 +852,7 @@ void TimelineComponent::mouseDoubleClick(const juce::MouseEvent& event)
     for (auto it = clipHits.rbegin(); it != clipHits.rend(); ++it)
         if (it->bounds.contains(event.position))
         {
-            const auto muteBounds = juce::Rectangle<float>(it->bounds.getX() + 2.0f,
-                it->bounds.getY() + 2.0f, 14.0f, 13.0f);
+            const auto muteBounds = muteControlBounds(it->bounds);
             if (muteBounds.contains(event.position)) return;
             draggedClip.clear();
             dragMode = DragMode::none;
@@ -865,7 +873,7 @@ void TimelineComponent::showTempoMenu(double quarterPosition,
                                       juce::Point<int> screenPosition)
 {
     juce::PopupMenu menu;
-    menu.addItem(1, juce::String::fromUTF8("改变曲速…"));
+    menu.addItem(1, I18n::uiText("改变曲速…"));
     juce::Component::SafePointer<TimelineComponent> safe(this);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(
         juce::Rectangle<int>(screenPosition.x, screenPosition.y, 1, 1)),
@@ -883,19 +891,19 @@ void TimelineComponent::showTempoDialog(double quarterPosition)
 {
     const auto initialTempo = snapshot.tempoAtQuarterPosition(quarterPosition);
     auto* dialog = new juce::AlertWindow(
-        juce::String::fromUTF8("改变曲速"),
-        juce::String::fromUTF8("从当前四分之一小节开始使用新的曲速。\n"
+        I18n::uiText("改变曲速"),
+        I18n::uiText("从当前四分之一小节开始使用新的曲速。\n"
             "同步修改音符：按曲速调整音符位置和长度。\n"
             "不修改音符：保留音符位置和长度，只修改曲速。"),
         juce::MessageBoxIconType::NoIcon);
     dialog->addTextEditor("bpm", juce::String(initialTempo, 2),
-                          juce::String::fromUTF8("BPM（20–400）"));
-    dialog->addComboBox("noteTiming", { juce::String::fromUTF8("同步修改音符"),
-        juce::String::fromUTF8("不修改音符") }, juce::String::fromUTF8("音符处理"));
+                          I18n::uiText("BPM（20–400）"));
+    dialog->addComboBox("noteTiming", { I18n::uiText("同步修改音符"),
+        I18n::uiText("不修改音符") }, I18n::uiText("音符处理"));
     dialog->getComboBoxComponent("noteTiming")->setSelectedItemIndex(0,
         juce::dontSendNotification);
-    dialog->addButton(juce::String::fromUTF8("确定"), 1);
-    dialog->addButton(juce::String::fromUTF8("取消"), 0,
+    dialog->addButton(I18n::uiText("确定"), 1);
+    dialog->addButton(I18n::uiText("取消"), 0,
                       juce::KeyPress(juce::KeyPress::escapeKey));
     juce::Component::SafePointer<TimelineComponent> safe(this);
     dialog->enterModalState(true,
@@ -977,8 +985,7 @@ void TimelineComponent::mouseDown(const juce::MouseEvent& event)
                 repaint();
                 return;
             }
-            const auto muteBounds = juce::Rectangle<float>(it->bounds.getX() + 2.0f,
-                it->bounds.getY() + 2.0f, 14.0f, 13.0f);
+            const auto muteBounds = muteControlBounds(it->bounds);
             if (muteBounds.contains(event.position))
             {
                 model.setClipMuted(it->id, !it->muted);

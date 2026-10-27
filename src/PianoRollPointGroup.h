@@ -13,6 +13,7 @@ void PianoRollComponent::cancelPointDrag()
 
 void PianoRollComponent::mouseDown(const juce::MouseEvent& event)
 {
+    cancelMaterialReclick();
     auto previous=selectedPoints;
     if(previous.empty()&&selectedPoint&&selectedPoint->index>=0)previous.push_back(*selectedPoint);
     std::erase_if(previous,[&](const auto& p){return p.revision!=model.revisionNumber();});

@@ -66,7 +66,7 @@ Windows 默认目录 `%LOCALAPPDATA%/HachiShifter/cache/hnsep-v1`，可用 `HACH
 - `src/hn_harmonic.h`：复用已有 FLAG 数学与 LF 声门模型，计算逐帧相对增益；Mq 同时被普通路径调用。
 - `hf_backend/logmel_v3_copy.py`：替换 `harm_power_spec`，复用现有非谐波处理与合并。
 - `hf_backend/hf_daemon.py --hn`：本机 51766 端口，要求内部 HN2 协议并返回 OKHN2（用户 FLAG 仍为 HN1）。普通 HF 仍在 51765，旧服务不能冒充 HN 成功。
-- 编辑器 `juce/src/backend/UtauRenderer.cpp::supportsComponentExport`：共用 FLAG 优先级，HN 禁止分离导出。
+- 编辑器 `src/backend/UtauRenderer.cpp::supportsComponentExport`：共用 FLAG 优先级，HN 禁止分离导出。
 
 HN-SEP 模型沿用 HiFisampler v0.0.6 配套导出版本，来源、哈希及许可证在 `hf_backend/hnsep/`。需要 Python ONNX Runtime；本机配布使用已有 1.22.0 包的 CPU 推理提供器。
 

@@ -1,6 +1,21 @@
 #pragma once
 #include "../NativeAudioOverlap.h"
 #include "../NativeAudioClipboard.h"
+#if JUCE_WINDOWS
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#ifdef near
+#undef near
+#endif
+#ifdef far
+#undef far
+#endif
+#ifdef small
+#undef small
+#endif
+#endif
 namespace hachi
 {
 inline bool runNativeAudioOverlapSmoke(const juce::File& folder)
@@ -46,7 +61,24 @@ inline bool runNativeAudioOverlapSmoke(const juce::File& folder)
     const auto image=[&](const char* name){const auto pic=roll.createComponentSnapshot({0,static_cast<int>(roll.diagnosticYForMidi(57))-145,1280,320});
         juce::PNGImageFormat png;auto stream=folder.getChildFile(name).createOutputStream();if(stream){stream->setPosition(0);stream->truncate();}
         return stream&&png.writeImageToStream(pic,*stream);};
-    juce::Thread::sleep(200);check("overlap_preview_image_written",image("overlap-enabled.png"));check("overlap_has_two_source_waveform_card",roll.diagnosticOverlapCardCount()>=2);
+    juce::Thread::sleep(200);check("overlap_preview_image_written",image("overlap-enabled.png"));check("overlap_cards_open_only_on_explicit_request",roll.diagnosticOverlapCardCount()==0); // 194 selector contract: no auto-open cards
+    {
+        // GUI198 phase4: one automatic marker per actual overlap; its organize
+        // actions reuse the existing Model trims / connection writer.
+        check("automatic_overlap_marker_present",roll.diagnosticOverlapMarkerCount()==1);
+        const auto before=model.contentFingerprint();juce::String organizeError;
+        check("marker_crop_later_head_removes_overlap",roll.applyNativeOverlapOrganize(0,3,organizeError)&&!overlaps(model.snapshot().tracks[0]));
+        const auto sync=[&]{model.dispatchPendingMessages();roll.diagnosticRefresh();image("overlap-enabled.png");};
+        model.undo();check("marker_crop_is_one_undo",model.contentFingerprint()==before);
+        sync();
+        check("marker_crop_earlier_tail_removes_overlap",roll.applyNativeOverlapOrganize(0,2,organizeError)&&!overlaps(model.snapshot().tracks[0]));
+        model.undo();sync();
+        check("marker_keep_crossfade_keeps_audio",roll.applyNativeOverlapOrganize(0,1,organizeError)&&model.contentFingerprint()==before);
+        image("overlap-enabled.png");
+        const auto pos=roll.diagnosticOverlapMarker(0);
+        if(pos){roll.mouseDown(juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(),*pos,juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier),1,0,0,0,0,&roll,&roll,juce::Time::getCurrentTime(),*pos,juce::Time::getCurrentTime(),1,false));}
+        image("overlap-enabled.png");check("marker_click_opens_exactly_one_selector_card",pos&&roll.diagnosticOverlapCardCount()==1);
+    }
     check("closing_overlap_crops_later_head",model.setNativeAudioOverlap("native",false));const auto cropped=model.snapshot();const auto a=get(cropped,"A"),b=get(cropped,"B");
     check("earlier_duration_source_and_end_unchanged",near(a.startSeconds,1)&&near(a.durationSeconds,1)&&near(a.sourceOffsetSeconds,0)&&near(a.sourceDurationSeconds,1));
     check("later_end_fixed_and_overlap_removed",near(b.startSeconds,2)&&near(b.durationSeconds,.6)&&near(b.startSeconds+b.durationSeconds,2.6)&&!overlaps(cropped.tracks[0]));
@@ -84,9 +116,31 @@ inline bool runNativeAudioOverlapSmoke(const juce::File& folder)
     const auto bank=folder.getChildFile("ds-bank");bank.createDirectory();bank.getChildFile("dsconfig.yaml").replaceWithText("test: true");
     auto ds=u;ds.tracks[0].utauMode=UtauMode::mou;ds.tracks[0].voicebankDirectory=bank;model.replace(ds);check("diffsinger_does_not_use_native_overlap_toggle",!model.setNativeAudioOverlap("native",true));
     MainComponent main;main.setSize(1600,900);main.diagnosticProject().replace(overlapped);main.diagnosticProject().dispatchPendingMessages();main.diagnosticSelectTrack("native");main.diagnosticRefreshControls();
+    main.setTrackSettingsVisible(true); // 198: track-wide options live in the right dock
     auto& button=main.diagnosticNativeAudioOverlapButton();check("native_toolbar_has_enabled_overlap_toggle",button.isVisible()&&button.getToggleState()&&button.getWidth()>0);
     const auto view=main.createComponentSnapshot(main.getLocalBounds());juce::PNGImageFormat png;auto stream=folder.getChildFile("interface-enabled.png").createOutputStream();if(stream){stream->setPosition(0);stream->truncate();}check("full_interface_preview_written",stream&&png.writeImageToStream(view,*stream));
-    button.setToggleState(false,juce::sendNotification);check("toolbar_click_closes_and_crops_overlap",!main.diagnosticProject().snapshot().tracks[0].allowNativeAudioOverlap&&!overlaps(main.diagnosticProject().snapshot().tracks[0]));
+    {int count=-1;for(const auto& t:main.diagnosticProject().snapshot().tracks)if(t.id=="native")count=nativeAudioOverlapCount(t);std::cout<<"debug_overlap_count_before_click="<<count<<" toggle="<<button.getToggleState()<<std::endl;}
+    button.setToggleState(false,juce::sendNotification);
+    // JUCE 8 message boxes are shown asynchronously; pump until it appears.
+    for(int spin=0;spin<50&&juce::Component::getCurrentlyModalComponent()==nullptr;++spin)
+    {
+#if JUCE_WINDOWS
+        MSG message{};while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageW(&message);}
+#endif
+        juce::Thread::sleep(5);
+    }
+    std::cout<<"debug_modal_after_click="<<(juce::Component::getCurrentlyModalComponent()?juce::Component::getCurrentlyModalComponent()->getName():juce::String("none"))<<" allow="<<main.diagnosticProject().snapshot().tracks[0].allowNativeAudioOverlap<<" toggle="<<button.getToggleState()<<std::endl;
+    check("disabling_existing_overlap_asks_first",main.diagnosticProject().snapshot().tracks[0].allowNativeAudioOverlap&&juce::Component::getCurrentlyModalComponent()!=nullptr);
+    if(auto* confirm=juce::Component::getCurrentlyModalComponent())confirm->exitModalState(1);
+    // Modal results are delivered asynchronously through the message queue.
+    for(int spin=0;spin<50&&main.diagnosticProject().snapshot().tracks[0].allowNativeAudioOverlap;++spin)
+    {
+#if JUCE_WINDOWS
+        MSG message{};while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageW(&message);}
+#endif
+        main.diagnosticProject().dispatchPendingMessages();juce::Thread::sleep(5);
+    }
+    check("toolbar_click_closes_and_crops_overlap",!main.diagnosticProject().snapshot().tracks[0].allowNativeAudioOverlap&&!overlaps(main.diagnosticProject().snapshot().tracks[0]));
     main.diagnosticProject().replace(u);main.diagnosticSelectTrack("native");main.diagnosticRefreshControls();check("overlap_toggle_hidden_for_utau",!button.isVisible());
     main.diagnosticProject().replace(ds);main.diagnosticSelectTrack("native");main.diagnosticRefreshControls();check("overlap_toggle_hidden_for_diffsinger",!button.isVisible());
     // Verify actual native output: the shared interval is a sum, closing removes

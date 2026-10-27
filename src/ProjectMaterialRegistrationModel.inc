@@ -112,6 +112,9 @@ void normalizeReferences(ClipData& clip)
         // materialSourceStart/End are NOT normalized: they choose the existing
         // P/source origin and remain musical/source-clock authority.
         note.materialLocalOverride = false; note.materialReferenceUnresolved = false;
+        // Pure registration annotations (including auto transition identity)
+        // must never make a music/source render fingerprint stale.
+        note.pronunciationKind = PronunciationKind::normal;note.nativeTransition.reset();note.nativePronunciationEdges.reset();
     }
     for (auto& part : clip.parts) normalizeReferences(part);
 }
@@ -131,6 +134,7 @@ juce::String ProjectModel::registrationMusicSourceFingerprint(const ProjectData&
     // Constructor only sets the untitled name; no reset/replace or normalization.
     ProjectModel serializer;
     serializer.project = input;
+    serializer.project.logicalTransitions.clear(); // source annotation identity, never an acoustic edit
     for (auto& track : serializer.project.tracks)
         for (auto& clip : track.clips) registration_model_detail::normalizeReferences(clip);
     juce::MemoryOutputStream bytes;

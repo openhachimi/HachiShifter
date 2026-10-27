@@ -175,7 +175,7 @@ https://github.com/Team-BRAPA/Umidaji-DiffSinger/releases/tag/v110
 
 ## 开发与验证
 
-适配器：`juce/engines/diffsinger/bridge.py`、`expressions.py`、`compatibility.py` 、`runtime.py` 和 `timing.py`，C++ 接入：`backend/DiffSingerRenderer.cpp`。
+适配器：`engines/diffsinger/bridge.py`、`expressions.py`、`compatibility.py` 、`runtime.py` 和 `timing.py`，C++ 接入：`backend/DiffSingerRenderer.cpp`。
 发行版包括 `engines/python/python.exe`、适配器及 `engines/diffsinger/packages` 中的依赖。
 使用匹配 Python 版本的 `requirements.txt` 安装到 packages；不依赖开发机绝对路径。
 开发/测试可设置 `HACHI_DIFFSINGER_RUNTIME` 指向含 python 和 diffsinger 的 engines 目录。

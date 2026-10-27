@@ -4,7 +4,7 @@ This is an implementation log, not a completed-release claim. Public version rem
 
 ## 当前集成状态（2026-10-22，非发布说明）
 
-公开版本 **0.25**、WCSNDM **0.0803** 不变。用户当前要求是完成所有非自动注音功能后停止，交给用户验收；本轮不新增 ASR／TIFA 自动注音，也不把现有工程摆放或分析帧冒称词法恢复。下面早期检查记录保留历史语境，已修复的失败不能再视为当前失败，已通过的旧构建也不能替代最新改动的验证。
+公开版本 **0.25**、WCSNDM **0.0803** 不变。阶段一已获用户验收，2026-10-22 后授权 CSV 和原生 ASR／TIFA；第二阶段实际实现与限制见 japanese-annotation.md，权威入口见 AI_SOURCE_INDEX.md。CSV 主界面、真实录音 CPU／DirectML、音节 OTTO 保存冷重开、实际组合外沿规划／混音、精确范围试听及引擎灰禁均有本次专项记录。包内默认模型路径已用实际推理验证；旧无 profile 的短工程与上一交付 EXE 的 WAV SHA256 完全一致（不是整曲或通用准确率证明）。下面早期检查保留历史语境，不将之前失败或未验收状态冒充当前结论；本轮也未重测 teio／东京泰迪熊整曲。
 
 ### 当前入口与已验证范围
 
@@ -27,7 +27,7 @@ This is an implementation log, not a completed-release claim. Public version rem
 ### 最新待验证改动与停止条件
 
 1. 用户已明确确认“携带的摆放注音变体”：保留原片段边界、P 和 `-` 标签；已有 5513 个时钟结点、209 个原始分区及调音不应被格式化重建。它不是自动推断真正词组，也不把分析帧变为手工 V。
-2. [ProjectMaterialRegistrationFacts](../juce/src/ProjectMaterialRegistrationFacts.h) 默认 `unresolved` 必须拒绝；仅显式 `ConfirmedCarriedPlacements` 允许上述解释。局部素材的基线 `-1` 哨兵必须原样保留，避免移动 P；作者／来源指纹新增基线覆盖。这些修正在 28b 的模型／登记事实专项及真实 teio 前后／冷重开音频中通过；不可因此跳过尚待整合的局部 GUI。
+2. [ProjectMaterialRegistrationFacts](../src/ProjectMaterialRegistrationFacts.h) 默认 `unresolved` 必须拒绝；仅显式 `ConfirmedCarriedPlacements` 允许上述解释。局部素材的基线 `-1` 哨兵必须原样保留，避免移动 P；作者／来源指纹新增基线覆盖。这些修正在 28b 的模型／登记事实专项及真实 teio 前后／冷重开音频中通过；不可因此跳过尚待整合的局部 GUI。
 3. 登记租约在项目成功收纳后必须立刻 `retainAfterAdoption()`；即使后续素材根偏好写入失败，也只能提示重试，不能删除已被项目引用的新目录。一个物理 WAV 只复制一次，多个变体使用不同稳定注音 ID；不虚构一个跨文件／偏好／项目的全局原子提交。
 4. 新社区向导的宿主模拟 GUI 测试仍在运行，未报告通过；Main 登记控制器／真实加载 GUI、局部第三方字段适配／两个生产入口和最终三种界面的人工图片复核仍有工作。完成这些非自动注音项目后停止等待用户验收，不进入下一阶段自动注音。
 5. 未发布、未推送；不改公开版本，不增加尚未完成的正式更新编号。公开接口索引待头文件稳定后统一重新生成。

@@ -4,6 +4,11 @@
 #include "AudioEngine.h"
 #include "ProjectModel.h"
 #include "NativeSharedEnvelope.h"
+#include "NativeMaterialContinuity.h"
+#include "NativeVirtualPitchPlan.h"
+#include "NativeVirtualGroupPlan.h"
+#include "NativeVirtualRenderPlan.h"
+#include "NativeCoupledSelectionMove.h"
 #include "NativePitchVoicingDisplay.h"
 #include "backend/UtauRenderer.h"
 #include "SampleSettings.h"
@@ -103,10 +108,15 @@ public:
     [[nodiscard]] juce::Rectangle<float> diagnosticOverlapSelectorCloseBounds() const { return nativeOverlapSelectorClose; }
     // Update immediately before focusing notes created by a synchronous edit.
     void refreshFromModel();
+    [[nodiscard]] std::vector<std::pair<juce::String,double>> nativeForcedSeams() const;
     // Builds the same sounding spans/curves as the loudness lane, then commits once.
     int crossfadeSelectedNotes(bool curved = false);
     ~PianoRollComponent() override;
 
+    enum class NoteStyle { mld, rep };
+    void setNoteStyle(NoteStyle style) { noteStyle=style; repaint(); }
+    [[nodiscard]] NoteStyle noteStyleValue() const { return noteStyle; }
+    [[nodiscard]] const std::vector<NativeMaterialSeam>& diagnosticMaterialSeams() const { return materialSeamViews; }
     void setPixelsPerSecond(float value);
     void setRowHeight(float value);
     void setSourceEditMode(bool enabled);
@@ -370,6 +380,9 @@ public:
     {
         return midiToY(midi) + rowHeight * 0.5f;
     }
+    // Existing native support -> physical P, in painted roll coordinates.
+    // Empty for typed/logical transitions or P at support start; never infers P.
+    [[nodiscard]] juce::Rectangle<float> diagnosticNativeYellowBounds(const juce::String& id) const;
     [[nodiscard]] std::size_t diagnosticHitCount() const { return noteHits.size(); }
     [[nodiscard]] float diagnosticHitX(std::size_t index) const
     {
@@ -378,6 +391,16 @@ public:
     [[nodiscard]] juce::Rectangle<float> diagnosticHitBounds(std::size_t index) const
     {
         return index < noteHits.size() ? noteHits[index].bounds
+                                       : juce::Rectangle<float>();
+    }
+    [[nodiscard]] juce::String diagnosticHitNoteId(std::size_t index) const
+    {
+        return index < noteHits.size() ? noteHits[index].id : juce::String();
+    }
+    // The pickable block, which is what a real pointer gesture targets.
+    [[nodiscard]] juce::Rectangle<float> diagnosticHitNominalBounds(std::size_t index) const
+    {
+        return index < noteHits.size() ? noteHits[index].nominalBounds
                                        : juce::Rectangle<float>();
     }
     // Test seam: puts the roll into the state a note drag would, so a harness
@@ -598,7 +621,9 @@ public:
     void setPitchScope(PitchScope scope);
     [[nodiscard]] std::vector<ResolvedConnectionPitchCurve> diagnosticConnectionPitchCurves() const;
     [[nodiscard]] std::optional<juce::Point<float>> diagnosticConnectionPitchPoint(const juce::String&, int) const;
+    [[nodiscard]] std::optional<juce::Point<float>> diagnosticConnectionPitchBezierHandle(const juce::String&,int,int) const;
     bool diagnosticConnectionPitchShape(const juce::String&, int, PitchCurveShape);
+    bool diagnosticRestoreConnectionPitchCurve(const juce::String& id,int index){return applyConnectionPitchPointMenu(id,index,8);}
     [[nodiscard]] bool diffSingerPitchRestoreAvailable() const;
     [[nodiscard]] bool diffSingerPitchRestoreMode() const { return dsPitchRestoreMode; }
     void setDiffSingerPitchRestoreMode(bool enabled);
@@ -772,18 +797,45 @@ public:
     std::function<void(const juce::String&)> onEditRejected;
     std::function<void(const juce::String&)> onNoteAliasCommitted;
     std::function<void(const juce::String&, const juce::String&)> onRequestMaterialSourceInput;
+    std::function<void(const std::vector<juce::String>&,const juce::String& clickedNote)> onRequestMaterialSourceSequence;
     bool diagnosticBeginAliasEdit(const juce::String& noteId);
     bool suspendInlineAliasInput(const juce::String& noteId);
     void resumeInlineAliasInput(const juce::String& noteId, bool discard = false);
     // Open the four-region / oto editor for this note's voicebank entry.
     std::function<void(const juce::String&)> onOpenRegionEditor;
     std::function<void()> onOpenNativeEnvelope;
+    // 198: reveal a bound note's exact source/variant/pronunciation in the
+    // material manager; and highlight project uses of a manager selection.
+    static constexpr int revealMaterialNoteMenuItem = 19801;
+    static constexpr int virtualSelectGroupItem=19810,virtualToggleGroupItem=19811,
+        virtualGeneratePitchItem=19812,virtualResetPitchItem=19813,virtualDissolveItem=19814,virtualExpandItem=19815;
+    std::size_t diagnosticVirtualGroupViewCount() const {return virtualConnectionViews.size();}
+    std::size_t diagnosticVirtualMarkerCount() const {return virtualMarkerHits.size();}
+    std::optional<juce::Point<float>> diagnosticVirtualHandoverGrip(const juce::String& group,const juce::String& left,const juce::String& right,bool start) const
+    {for(const auto& grip:virtualHandoverGrips)if(grip.groupId==group&&grip.leftId==left&&grip.rightId==right&&grip.leftEdge==start)return grip.bounds.getCentre();return {};}
+    std::optional<std::pair<double,double>> diagnosticVirtualHandoverWindow(const juce::String& group,const juce::String& left,const juce::String& right) const
+    {for(const auto& view:virtualConnectionViews)if(view.id==group)for(const auto& h:view.geometry.handovers)if(h.leftNoteId==left&&h.rightNoteId==right)return std::pair{h.from,h.to};return {};}
+    juce::Rectangle<float> diagnosticVirtualMarkerBounds(std::size_t index) const {return index<virtualMarkerHits.size()?virtualMarkerHits[index].bounds:juce::Rectangle<float>{};}
+    juce::String diagnosticExpandedVirtualGroup() const {return expandedVirtualGroup;}
+    std::size_t diagnosticLogicalTransitionMemberCount() const {return logicalTransitionMembers.size();}
+    static constexpr int restoreConsonantFragmentsItem=19820;
+    static constexpr int setTransitionNoteItem=19821,editTransitionMiddleItem=19822,setNormalNoteItem=19823;
+    static constexpr int virtualMovementItem=19824;
+    static constexpr int cycleOverlapNoteMenuItem = 34;
+    std::function<void(const juce::String& noteId)> onRevealMaterial;
+    void setMaterialUseHighlight(std::vector<juce::String> noteIds);
+    [[nodiscard]] const std::unordered_set<std::string>& diagnosticMaterialUseHighlight() const { return materialUseHighlight; }
     std::function<void(const juce::String&)> onDiffSingerPronunciation, onDiffSingerPitch, onDiffSingerParameters;
     // 单独OTO编辑: the OTO editor, for this note's own copy of its entry.
     std::function<void(const juce::String&)> onOpenNoteOtoEditor;
     std::function<void(int, const SampleRegionSetting&, bool)> onSampleRegionEdited;
 
 private:
+    bool requestScoreMaterialReplacement(const juce::String& clickedNote);
+    juce::String materialReclickCandidate;
+    std::unordered_set<std::string> materialReclickSelection;
+    std::uint64_t materialReclickRevision=0,materialReclickSerial=0;
+    void cancelMaterialReclick(){materialReclickCandidate.clear();++materialReclickSerial;}
     friend bool runPointGroupSmoke(const juce::File&);
     bool groupPointHitTest=false;
     // Selection outlives the drag. A consumed/stale selection still owns Delete
@@ -1196,6 +1248,41 @@ private:
     ProjectModel& model;
     const I18n& strings;
     ProjectData snapshot;
+    struct ForcedNativeSeamView
+    {
+        juce::String connectionId,trackId;
+        double targetSeconds=0;
+        float leftMidi=60,rightMidi=60;
+    };
+    struct VirtualConnectionView
+    {
+        juce::String id,trackId;bool enabled=true,editablePitch=false;
+        NativeVirtualConnectionPlan geometry;
+        NativeVirtualPitchPlan pitch;
+        std::vector<float> midi;juce::StringArray labels;
+    };
+    struct VirtualMarkerHit{juce::String groupId;juce::Rectangle<float> bounds;};
+    std::vector<VirtualConnectionView> virtualConnectionViews;
+    std::vector<VirtualMarkerHit> virtualMarkerHits;
+    struct VirtualHandoverGrip{juce::String groupId,leftId,rightId;bool leftEdge=false;juce::Rectangle<float> bounds;};
+    std::vector<VirtualHandoverGrip> virtualHandoverGrips;
+    struct VirtualHandoverDrag
+    {
+        juce::String groupId,leftId,rightId;bool leftEdge=false,valid=false;std::uint64_t revision=0;
+        double from=0,to=0,low=0,high=0;NativeVirtualGroup original;
+    };
+    std::optional<VirtualHandoverDrag> virtualHandoverDrag;
+    bool virtualHandoverMouseDown(const juce::MouseEvent&);
+    void moveVirtualHandover(const juce::MouseEvent&);
+    juce::String expandedVirtualGroup;
+    void paintVirtualConnections(juce::Graphics&);
+    std::vector<ForcedNativeSeamView> forcedNativeSeamViews;
+    std::vector<NativeMaterialSeam> materialSeamViews;
+    std::unordered_set<std::string> materialUseHighlight;
+    std::unordered_set<std::string> logicalTransitionMembers; // view classification only, never note C/P
+    std::unordered_map<std::string,double> materialOwnedStarts,materialOwnedEnds;
+    std::map<juce::String,SharedPitchLines> forcedNativePitchLines;
+    void rebuildForcedNativeSeams(const ProjectData& physicalSnapshot);
     juce::AudioFormatManager formats;
     juce::AudioThumbnailCache thumbnailCache { 96 };
     std::unordered_map<std::string, std::unique_ptr<juce::AudioThumbnail>> thumbnails;
@@ -1267,6 +1354,7 @@ private:
     // The shared UTAU-style editor starts with waveform ink hidden; it can be
     // enabled from the view menu when source detail is useful.
     bool showWaveforms = false;
+    NoteStyle noteStyle = NoteStyle::mld;
     bool showUtauWaveforms = false;
     bool showNativeWaveforms = true;
     bool showLyrics = true;
@@ -1306,6 +1394,19 @@ private:
     std::vector<std::pair<juce::String,juce::Rectangle<float>>> nativeOverlapLines;
     std::size_t nativeOverlapCardCount = 0;
     juce::Rectangle<float> nativeOverlapSelectorClose;
+    // GUI198 phase4: one automatic marker per real overlapping source pair.
+    struct NativeOverlapMarker { juce::Rectangle<float> bounds; juce::String trackId, earlierNoteId, laterNoteId; double from = 0, to = 0; };
+    std::vector<NativeOverlapMarker> nativeOverlapMarkers;
+    bool nativeOverlapMarkerMouseDown(const juce::MouseEvent&);
+    void showNativeOverlapOrganizeMenu(const NativeOverlapMarker&);
+public:
+    [[nodiscard]] std::size_t diagnosticOverlapMarkerCount() const { return nativeOverlapMarkers.size(); }
+    [[nodiscard]] std::optional<juce::Point<float>> diagnosticOverlapMarker(std::size_t index) const
+    { if (index < nativeOverlapMarkers.size()) return nativeOverlapMarkers[index].bounds.getCentre(); return {}; }
+    // Organize actions, shared by the marker menu and checks: 1 keep crossfade,
+    // 2 crop earlier tail, 3 crop later head, 4 virtual/partial connect.
+    bool applyNativeOverlapOrganize(std::size_t markerIndex, int action, juce::String& error);
+private:
     [[nodiscard]] std::optional<NativeOverlapPair> overlapPairFor(const juce::String& noteId, double time) const;
     void openNativeOverlapSelector(const juce::String& noteId, double time);
     void closeNativeOverlapSelector();
@@ -1467,7 +1568,7 @@ private:
     std::optional<std::pair<juce::String,int>> connectionPointAt(juce::Point<float>) const;
     std::optional<juce::String> connectionCurveAt(juce::Point<float>) const;
     void drawConnectionPitchCurves(juce::Graphics&);
-    void clipNotePitchAgainstConnections(juce::Graphics&, const TrackData&) const;
+    void clipNotePitchAgainstConnections(juce::Graphics&, const TrackData&,const juce::String& noteId) const;
     bool connectionPitchMouseDown(const juce::MouseEvent&);
     void moveConnectionPitchPoint(const juce::MouseEvent&);
     bool connectionPitchDoubleClick(const juce::MouseEvent&);
@@ -1477,6 +1578,7 @@ private:
     bool graphPointDragging = false, graphDragValid = false;
     juce::String graphDragId;
     int graphDragIndex = -1;
+    int graphDragBezierHandle = 0; // 0 vertex, 1/2 existing cubic control grips
     juce::Point<float> graphDragDown;
     std::uint64_t graphDragRevision = 0;
     std::vector<PitchCurveEditPoint> graphDragOriginal;

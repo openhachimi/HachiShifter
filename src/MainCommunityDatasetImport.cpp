@@ -1,6 +1,5 @@
-// DRAFT: intentionally UNREGISTERED until the parent adds the six declarations
-// and entry/close/shutdown hooks described in the handoff. This translation unit
-// is Main orchestration only: no new import parser, publisher or model action.
+// Main-owned CSV import orchestration. Parsing, planning and atomic publication
+// remain exclusively CommunityDatasetIO; this action never rewrites live notes.
 #include "MainComponent.h"
 #include "CommunityDatasetImportDialog.h"
 #include "OtoWaveformEditorComponent.h"
@@ -33,13 +32,10 @@ struct MainComponent::CommunityDatasetImportState
     std::vector<std::unique_ptr<Job>> jobs;
     juce::Component::SafePointer<CommunityDatasetImportDialog> wizard;
     bool stopping = false, publicationGate = false, mainWasEnabled = true;
+    juce::String gateOwner; // CSV and Japanese publication cannot unlock each other
     std::vector<std::pair<juce::Component::SafePointer<juce::Component>, bool>> gatedEditors;
     std::uint64_t expectedRevision = 0;
-    juce::File expectedRoot, expectedManifest;
-    juce::MemoryBlock expectedManifestFingerprint; // exact service-observed token, not a second writer
-    bool expectedManifestExisted = false;
-    std::set<juce::String> targetRegistrationIds;
-    std::map<juce::String, juce::String> expectedSourceFingerprints;
+    juce::File expectedRoot; // for retained-commit shutdown diagnostics only
 
     void enqueue(std::function<void()> fn)
     {
@@ -73,6 +69,44 @@ juce::String communityPathKey(const juce::File& file)
 
 bool MainComponent::communityDatasetImportBlocksProjectEdits() const
 { return communityDatasetImportState && communityDatasetImportState->publicationGate; }
+
+std::function<void(std::function<void()>)> MainComponent::ownedAnnotationExecutor()
+{
+    if (!communityDatasetImportState) communityDatasetImportState = std::make_shared<CommunityDatasetImportState>();
+    const auto state = communityDatasetImportState;
+    return [state](std::function<void()> fn) { state->enqueue(std::move(fn)); };
+}
+void MainComponent::drainAnnotationWorker()
+{ if (communityDatasetImportState) communityDatasetImportState->drain(); }
+bool MainComponent::annotationPublicationGateHeldBy(const juce::String& owner) const
+{ return communityDatasetImportState && communityDatasetImportState->publicationGate && communityDatasetImportState->gateOwner == owner; }
+bool MainComponent::setAnnotationPublicationGate(const juce::String& owner, bool acquiring)
+{
+    if (acquiring)
+    {
+        if (closingUI || !communityDatasetImportState || communityDatasetImportState->stopping || communityDatasetImportState->publicationGate) return false;
+        const auto state = communityDatasetImportState;
+        stopSourcePreview();
+        state->publicationGate = true; state->gateOwner = owner; state->mainWasEnabled = isEnabled(); state->gatedEditors.clear();
+        for (const auto& editor : otoPreviews) if (editor)
+        {
+            state->gatedEditors.push_back({juce::Component::SafePointer<juce::Component>(editor.getComponent()),editor->isEnabled()});
+            editor->stopPlaybackPreview(); editor->setEnabled(false);
+        }
+        audio.stop(); setEnabled(false);
+        statusLabel.setText(strings.text("csv.wait"),juce::dontSendNotification);
+        return true;
+    }
+    if (!annotationPublicationGateHeldBy(owner)) return false;
+    const auto state = communityDatasetImportState;
+    state->publicationGate = false; state->gateOwner.clear();
+    if (!closingUI)
+    {
+        setEnabled(state->mainWasEnabled);
+        for (auto& entry : state->gatedEditors) if (entry.first) entry.first->setEnabled(entry.second);
+    }
+    state->gatedEditors.clear(); return true;
+}
 
 // SHUTDOWN ONLY. Ordinary dialog Cancel must use wizard.cancel(), retaining this
 // state until its actual completion releases the gate/registers any committed
@@ -108,71 +142,46 @@ void MainComponent::showCommunityDatasetImport(const juce::File& initialRoot)
 {
     if (closingUI) return;
     if (communityDatasetImportBlocksProjectEdits())
-    { statusLabel.setText("Dataset annotation publication is in progress; wait for its actual result.", juce::dontSendNotification); return; }
+    { statusLabel.setText(strings.text("csv.wait"), juce::dontSendNotification); return; }
     if (importInProgress || exportWaitingForRender || projectRegistrationOperation)
-    { showError("Finish the current project import/export/material-registration operation before importing a community dataset."); return; }
+    { showError(strings.text("csv.busy")); return; }
     constexpr const char* windowKey = "community-dataset-import";
     communityDatasetImportWindows.removeClosed();
     if (communityDatasetImportWindows.showExisting(windowKey)) return;
     if (!assetManager) setAssetManagerVisible(true); // existing manager creation route, BEFORE preflight
-    if (!assetManager) { showError("The material manager is unavailable."); return; }
+    if (!assetManager) { showError(strings.text("csv.unavailable")); return; }
     if (!communityDatasetImportState) communityDatasetImportState = std::make_shared<CommunityDatasetImportState>();
     const auto state = communityDatasetImportState;
     juce::Component::SafePointer<MainComponent> safe(this);
     CommunityDatasetImportDialog::Host host;
-    host.runOnWorker = [state](std::function<void()> work) { state->enqueue(std::move(work)); };
+    host.runOnWorker = ownedAnnotationExecutor();
     host.publishing = [safe,state](bool acquiring)
     {
-        if (!acquiring)
-        {
-            if (!state->publicationGate) return;
-            state->publicationGate = false;
-            if (safe && !safe->closingUI && safe->communityDatasetImportState == state)
-            {
-                safe->setEnabled(state->mainWasEnabled);
-                for (auto& entry : state->gatedEditors) if (entry.first) entry.first->setEnabled(entry.second);
-            }
-            state->gatedEditors.clear();
-            return;
-        }
-        if (!safe || safe->closingUI || state->stopping || safe->communityDatasetImportState != state || state->publicationGate) return;
-        state->publicationGate = true;
-        state->mainWasEnabled = safe->isEnabled();
-        state->gatedEditors.clear();
-        // These are Main's already registered quick/precise/local OTO editors,
-        // not arbitrary top-level windows from another project/Main instance.
-        for (const auto& editor : safe->otoPreviews)
-            if (editor)
-            {
-                state->gatedEditors.push_back({juce::Component::SafePointer<juce::Component>(editor.getComponent()), editor->isEnabled()});
-                editor->setEnabled(false);
-            }
-        safe->audio.stop();
-        safe->setEnabled(false); // main widgets, keys and drag/drop are gated
-        safe->statusLabel.setText("Publishing dataset annotations; normal project editing is temporarily gated.", juce::dontSendNotification);
+        if (!safe || safe->communityDatasetImportState != state || (acquiring && state->stopping)) return;
+        safe->setAnnotationPublicationGate("community-dataset-import", acquiring);
     };
     host.preflight = [safe,state](const CommunityDatasetIO::Plan& plan, juce::String& error)
     {
         error.clear();
         const auto reject = [&](const juce::String& message) { error = message; return false; };
-        if (!safe || safe->closingUI || state->stopping || safe->communityDatasetImportState != state || !state->publicationGate)
-            return reject("The Main publication gate is unavailable.");
+        if (!safe || safe->closingUI || state->stopping || safe->communityDatasetImportState != state || !safe->annotationPublicationGateHeldBy("community-dataset-import"))
+            return reject(safe ? safe->strings.text("csv.unavailable") : juce::String("Main unavailable"));
         if (safe->importInProgress || safe->exportWaitingForRender || safe->projectRegistrationOperation || safe->pendingNativeAnalyses > 0)
-            return reject("Finish pending project imports, material registration, source analysis or export before publishing this dataset.");
+            return reject(safe->strings.text("csv.busy"));
         if (!safe->assetManager || !plan.ready || plan.published || plan.audio.empty() || plan.manifest != plan.dataset.root.getChildFile("otto.ini"))
-            return reject("The current preview/manager/root publication target is unavailable; preview again.");
+            return reject(safe->strings.text("csv.unavailable"));
         std::set<juce::String> registrations, sourcePaths;
         for (const auto& audio : plan.audio)
         {
             if (audio.audioId.isEmpty() || !audio.audio.isAChildOf(plan.dataset.root) || !registrations.insert(audio.audioId).second)
-                return reject("Dataset preview has ambiguous annotation registration identities.");
+                return reject(safe->strings.text("csv.identity"));
             sourcePaths.insert(communityPathKey(audio.audio));
             for (const auto& row : audio.rows) if (row.materialAudioId != audio.audioId)
-                return reject("Preview rows disagree with their explicit annotation registration ID.");
+                return reject(safe->strings.text("csv.identity"));
         }
         const auto revision = safe->project.revisionNumber();
         const auto project = safe->project.snapshot(); // one authoritative preflight snapshot only
-        if (safe->project.revisionNumber() != revision) return reject("The project changed during dataset preflight; retry for the current project.");
+        if (safe->project.revisionNumber() != revision) return reject(safe->strings.text("csv.drift"));
         for (const auto& track : project.tracks)
         {
             // A voicebank-backed project may resolve sources without carrying
@@ -180,13 +189,12 @@ void MainComponent::showCommunityDatasetImport(const juce::File& initialRoot)
             if (trackUsesVoicebankSynthesis(track) && track.voicebankDirectory != juce::File{}
                 && (communityPathKey(track.voicebankDirectory) == communityPathKey(plan.dataset.root)
                     || track.voicebankDirectory.isAChildOf(plan.dataset.root) || plan.dataset.root.isAChildOf(track.voicebankDirectory)))
-                return reject("This dataset root is used by a current voicebank track. Close that project or choose an independent dataset/root; live source updates are not supported by this import action.");
+                return reject(safe->strings.text("csv.inUse"));
             for (const auto& clip : track.clips)
             {
                 for (const auto& note : clip.notes)
                     if (registrations.count(note.materialAudioId))
-                        return reject("Dataset annotation registration is used by current note " + note.id
-                            + ". Close that project or choose an independent dataset/root. This conservative import action does not rewrite live note annotations.");
+                        return reject(safe->strings.text("csv.inUse") + " (" + note.id + ")");
                 const auto uncertainOwner = [&](const ClipData& owner, const juce::String& partId)
                 {
                     if (!sourcePaths.count(communityPathKey(owner.sourceFile))) return false;
@@ -194,22 +202,16 @@ void MainComponent::showCommunityDatasetImport(const juce::File& initialRoot)
                     { return note.clipPartId == partId && note.materialAudioId.isEmpty(); });
                 };
                 if (clip.parts.empty())
-                { if (uncertainOwner(clip, {})) return reject("A current carried note uses this recording without a registration ID; its independence cannot be established. Close the project or select an independent dataset/root."); }
+                { if (uncertainOwner(clip, {})) return reject(safe->strings.text("csv.uncertain")); }
                 else for (const auto& part : clip.parts)
-                    if (uncertainOwner(part, part.id)) return reject("A current carried part uses this recording without a registration ID; close that project or select an independent dataset/root.");
+                    if (uncertainOwner(part, part.id)) return reject(safe->strings.text("csv.uncertain"));
             }
         }
         // This import is NEW/unreferenced variants only. Foreign, explicit
         // same-file registrations remain untouched; NEVER call physical-path
         // applySourceSettingsWithReport with only these newly imported rows.
         state->expectedRevision = revision;
-        state->expectedRoot = plan.dataset.root; state->expectedManifest = plan.manifest;
-        state->expectedManifestFingerprint = plan.document.fingerprint;
-        state->expectedManifestExisted = plan.document.existed;
-        state->targetRegistrationIds = std::move(registrations);
-        state->expectedSourceFingerprints.clear();
-        for (const auto& recording : plan.dataset.recordings)
-            state->expectedSourceFingerprints.emplace(communityPathKey(recording.audio), recording.audioFingerprint);
+        state->expectedRoot = plan.dataset.root;
         return true; // service still owns source hashes + cooperative manifest token checks
     };
     host.published = [safe,state](const CommunityDatasetIO::Plan& plan, const CommunityDatasetIO::Report& report)
@@ -232,22 +234,25 @@ void MainComponent::showCommunityDatasetImport(const juce::File& initialRoot)
         {
             if (std::find(safe->projectRegistrationRetryRoots.begin(), safe->projectRegistrationRetryRoots.end(), plan.dataset.root) == safe->projectRegistrationRetryRoots.end())
                 safe->projectRegistrationRetryRoots.push_back(plan.dataset.root);
-            safe->showError("Dataset OTTO was committed and is retained at:\n" + plan.dataset.root.getFullPathName()
-                + "\nMaterial-library registration/persistence failed: " + error
-                + "\nUse File > Retry material folder registration. No source data was deleted or rolled back; current note annotations were not changed.");
+            safe->showError(safe->strings.text("csv.retained") + "\n" + plan.dataset.root.getFullPathName() + "\n" + error);
         }
-        else safe->statusLabel.setText("Community dataset annotations imported: " + juce::String(report.recordings)
-            + " recordings, " + juce::String(report.pronunciations) + " pronunciations. Current notes unchanged.", juce::dontSendNotification);
+        else
+        {
+            safe->materialSourcesChanged({ plan.dataset.root.getFullPathName() }, true);
+            safe->statusLabel.setText(safe->strings.text("csv.success") + " (" + juce::String(report.recordings) + "/" + juce::String(report.pronunciations) + ")", juce::dontSendNotification);
+        }
         if (revisionDrift)
-            safe->showError("Dataset OTTO was committed, but the project revision changed while worker publication was running. Current notes were NOT rewritten or rebound. This UI gate is not a global MCP/model transaction; inspect current references before further source editing.");
+            safe->showError(safe->strings.text("csv.drift"));
         safe->menuItemsChanged();
     };
     auto* dialog = new CommunityDatasetImportDialog(strings, std::move(host), initialRoot);
     state->wizard = dialog;
     juce::DialogWindow::LaunchOptions options;
-    options.dialogTitle = "Import community DiffSinger dataset annotations";
+    options.dialogTitle = strings.text("csv.ui0");
     options.dialogBackgroundColour = Palette::panel; options.escapeKeyTriggersCloseButton = true;
     options.useNativeTitleBar = true; options.resizable = true; options.content.setOwned(dialog);
     if (auto* window = communityDatasetImportWindows.show(options, windowKey)) window->setResizeLimits(1000, 820, 1800, 1400);
 }
 }
+
+#include "tests/MainCommunityDatasetImportSmoke.h"

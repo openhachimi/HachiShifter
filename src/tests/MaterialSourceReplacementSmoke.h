@@ -102,6 +102,8 @@ inline bool runMaterialSourceReplacementSmoke(const juce::File& output)
     compare(fixture,bound,"every_1ms_all_note_score_expression_preserved_pending");
     check("legacy_unguarded_analysis_cannot_complete_new_binding",!model.setNativeTrimSourceAnalysis(bFile,sourceFacts(57,2))
         &&!noteOf(model.snapshot(),"middle").sourcePitchMeasured&&ownerOf(model.snapshot(),"middle").muted);
+    check("generic_same_hash_semantic_result_cannot_claim_exact_source_ticket",!model.setNativeTrimSourceAnalysis(bFile,sourceFacts(57,2),result.ticket.sourceFingerprint)
+        &&!noteOf(model.snapshot(),"middle").sourcePitchMeasured&&ownerOf(model.snapshot(),"middle").materialSourceAnalysisPending&&ownerOf(model.snapshot(),"middle").muted);
     check("source_action_single_undo",model.undo()&&!model.canUndo()&&model.contentFingerprint()==before);
     check("source_action_redo_restores_pending_binding",model.redo()&&model.pendingMaterialSourceAnalyses().size()==1);
     const auto pendingFile=output.getChildFile("source-pending.hachi");ProjectModel pendingReload;

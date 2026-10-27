@@ -1,5 +1,5 @@
 #include "SettingsComponent.h"
-#include "backend/NsfHifiganRenderer.h"
+#include "ProjectModel.h"
 #include "backend/DiffSingerRenderer.h"
 #include "backend/AnalysisService.h"
 #include <cmath>
@@ -87,11 +87,16 @@ SettingsComponent::SettingsComponent(I18n& stringsToUse,
     language.addItem("en-US", 5);
     theme.addItem("Dark", 1);
     theme.addItem("Light", 2);
+    theme.setComponentID("settings-theme");
+    noteStyle.setComponentID("settings-note-style");
+    noteStyle.addItem("mld", 1);
+    noteStyle.addItem("rep", 2);
     interfacePage.addRow(languageLabel, language);
     interfacePage.addRow(themeLabel, theme);
     interfacePage.addRow(accentLabel, accent);
     interfacePage.addRow(accentLightLabel, accentLight);
     interfacePage.addRow(noteColourLabel, noteColour);
+    interfacePage.addRow(noteStyleLabel, noteStyle);
     interfacePage.addWide(showNoteLabels);
    #if JUCE_WINDOWS
     interfacePage.addWide(softwareRendering);
@@ -101,6 +106,32 @@ SettingsComponent::SettingsComponent(I18n& stringsToUse,
     uiScale.setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 20);
     uiScale.setValue(1.0);
     interfacePage.addRow(uiScaleLabel, uiScale);
+    openTranslations.setComponentID("settings-open-translations");
+    reloadTranslations.setComponentID("settings-reload-translations");
+    openTranslations.onClick = [this]
+    {
+        // Opening a hand-maintained file is read-only. Generate only when
+        // absent; even malformed/partially edited TSV must not be overwritten.
+        juce::String error; const auto file = I18n::translationFile();
+        if (!file.existsAsFile()&&!I18n::exportTranslations(file, error)) { translationStatus.setText(error, juce::dontSendNotification); return; }
+        file.startAsProcess();
+        translationStatus.setText(file.getFullPathName(), juce::dontSendNotification);
+    };
+    reloadTranslations.onClick = [this]
+    {
+        const auto report = I18n::loadTranslations();
+        auto text = strings.text("settings.translationsLoaded").replace("{count}", juce::String(report.overrides));
+        if (report.rejected > 0 || !report.problems.isEmpty())
+            text += "  |  " + strings.text("settings.translationsRejected").replace("{count}", juce::String(std::max(report.rejected, report.problems.size())))
+                + "  " + report.problems[0];
+        translationStatus.setText(text, juce::dontSendNotification);
+        translationStatus.setTooltip(report.problems.joinIntoString("\n"));
+        setTexts();
+        if (onApplied) onApplied(); // the host re-reads every visible caption
+    };
+    interfacePage.addRow(translationLabel, openTranslations);
+    interfacePage.addRow(translationReloadLabel, reloadTranslations);
+    interfacePage.addWide(translationStatus);
 
     currentAudioDevice.setColour(juce::Label::backgroundColourId, Palette::background);
     currentAudioDevice.setColour(juce::Label::outlineColourId, Palette::border);
@@ -170,10 +201,7 @@ SettingsComponent::SettingsComponent(I18n& stringsToUse,
     importedAlgorithm.addItem("nsf-hifigan", 2);
     importedAlgorithm.addItem("WORLD", 3);
     importedAlgorithm.addItem("llsm2", 6);
-    const auto configuredHifigan = juce::File(properties.getValue("algorithm.hifiganPath"));
-    const auto defaultImportedAlgorithm = backend::NsfHifiganRenderer::modelAvailable(
-        configuredHifigan) ? 2 : 6;
-    refreshImportedStretchItems(defaultImportedAlgorithm);
+    refreshImportedStretchItems(properties.getIntValue("import.stretchAlgorithm", 1));
     importedAlgorithm.onChange = [this]
     {
         refreshImportedStretchItems(importedStretchAlgorithm.getSelectedId());
@@ -183,6 +211,17 @@ SettingsComponent::SettingsComponent(I18n& stringsToUse,
     importPage.addRow(importedAlgorithmLabel, importedAlgorithm);
     importPage.addRow(importedStretchAlgorithmLabel, importedStretchAlgorithm);
     importPage.addWide(preserveProjectEdits);
+    autoRegisterTransitions.setToggleState(properties.getBoolValue("import.autoRegisterTransitions",true),juce::dontSendNotification);
+    autoVirtualConnections.setToggleState(properties.getBoolValue("import.autoVirtualConnections",false),juce::dontSendNotification);
+    autoVirtualPitch.setToggleState(properties.getBoolValue("import.autoVirtualPitch",false),juce::dontSendNotification);
+    autoMergeConsonants.setToggleState(properties.getBoolValue("import.autoMergeConsonants",false),juce::dontSendNotification);
+    autoRegisterTransitions.setButtonText(strings.text("settings.autoRegisterTransitions"));
+    autoRegisterTransitions.setComponentID("settings-auto-register-transitions");
+    importPage.addWide(autoRegisterTransitions);
+    autoVirtualConnections.setComponentID("settings-auto-virtual-connections");
+    autoVirtualPitch.setComponentID("settings-auto-virtual-pitch");
+    importPage.addWide(autoVirtualConnections);importPage.addWide(autoVirtualPitch);
+    autoMergeConsonants.setComponentID("settings-auto-merge-consonants");importPage.addWide(autoMergeConsonants);
     importPage.addWide(locateMediaRecursively);
 
     const auto u8 = [](const char* s) { return juce::String::fromUTF8(s); };
@@ -238,13 +277,18 @@ SettingsComponent::SettingsComponent(I18n& stringsToUse,
     // tab click, making the settings dialog appear completely empty.
     tabs.setCurrentTabIndex(0, false);
     loadValues();
+    if(!properties.containsKey("import.autoRegisterTransitions"))autoRegisterTransitions.setToggleState(true,juce::dontSendNotification);
+    theme.onChange=[this]{themeEdited=true;};
     refreshInferenceDevice();
     setTexts();
+    lookAndFeelChanged();
     applyButton.onClick = [this]
     {
         saveValues();
         setTexts();
         if (onApplied) onApplied();
+        sendLookAndFeelChange();
+        repaint();
     };
     setSize(720, 570);
 }
@@ -272,6 +316,8 @@ void SettingsComponent::loadValues()
     accent.setText(properties.getValue("ui.accent", "7F69CA"), false);
     accentLight.setText(properties.getValue("ui.accentLight", "CBCBFA"), false);
     noteColour.setText(properties.getValue("ui.noteColour", "F4C000"), false);
+    noteStyle.setSelectedId(properties.getValue("ui.noteStyle", "mld") == "rep" ? 2 : 1,
+                            juce::dontSendNotification);
     showNoteLabels.setToggleState(properties.getBoolValue("ui.showNoteLabels", false),
                                   juce::dontSendNotification);
     softwareRendering.setToggleState(properties.getBoolValue("ui.softwareRendering", false),
@@ -297,15 +343,14 @@ void SettingsComponent::loadValues()
     melodyneCompose.setSelectedId(juce::jlimit(1, 4,
         properties.getIntValue("import.melodyneCompose", 1)), juce::dontSendNotification);
     melodynePitchSource.setSelectedId(properties.getIntValue("import.melodynePitchSource", 1), juce::dontSendNotification);
-    const auto configuredHifigan = juce::File(properties.getValue("algorithm.hifiganPath"));
-    const auto defaultImportedAlgorithm = backend::NsfHifiganRenderer::modelAvailable(
-        configuredHifigan) ? 2 : 6;
-    const auto importedAlgorithmId = properties.getIntValue("import.algorithm",
-        defaultImportedAlgorithm);
-    importedAlgorithm.setSelectedId(importedAlgorithm.indexOfItemId(importedAlgorithmId) >= 0
-        ? importedAlgorithmId : defaultImportedAlgorithm, juce::dontSendNotification);
+    importedAlgorithm.setSelectedId(pitchAlgorithmPickerItem(defaultImportedPitchAlgorithm(&properties)),
+                                    juce::dontSendNotification);
     refreshImportedStretchItems(properties.getIntValue("import.stretchAlgorithm", 1));
     preserveProjectEdits.setToggleState(properties.getBoolValue("import.preserveEdits", true), juce::dontSendNotification);
+    autoRegisterTransitions.setToggleState(properties.getBoolValue("import.autoRegisterTransitions",true),juce::dontSendNotification);
+    autoVirtualConnections.setToggleState(properties.getBoolValue("import.autoVirtualConnections",false),juce::dontSendNotification);
+    autoVirtualPitch.setToggleState(properties.getBoolValue("import.autoVirtualPitch",false),juce::dontSendNotification);
+    autoMergeConsonants.setToggleState(properties.getBoolValue("import.autoMergeConsonants",false),juce::dontSendNotification);
     locateMediaRecursively.setToggleState(properties.getBoolValue("import.recursiveMedia", true), juce::dontSendNotification);
     const auto ds = backend::DiffSingerOptions::read(properties);
     dsBackend.setSelectedId(ds.backend, juce::dontSendNotification);
@@ -318,6 +363,34 @@ void SettingsComponent::loadValues()
     dsDepth.setValue(ds.depth * 100, juce::dontSendNotification);
     refreshDiffSingerControls();
     refreshAudioValues();
+}
+
+void SettingsComponent::lookAndFeelChanged()
+{
+    if(auto* themed=dynamic_cast<HachiLookAndFeel*>(&getLookAndFeel()))themed->refreshColours();
+    if(!themeEdited)theme.setSelectedId(properties.getValue("ui.theme",theme.getSelectedId()==2?"light":"dark")=="light"?2:1,juce::dontSendNotification);
+    for(int i=0;i<tabs.getNumTabs();++i)tabs.setTabBackgroundColour(i,Palette::panel);
+    currentAudioDevice.setColour(juce::Label::backgroundColourId,Palette::background);
+    currentAudioDevice.setColour(juce::Label::outlineColourId,Palette::border);
+    currentAudioDevice.setColour(juce::Label::textColourId,Palette::text);
+    const auto refreshEditors=[&](auto&& self,juce::Component& component)->void
+    {
+        if(auto* editor=dynamic_cast<juce::TextEditor*>(&component))
+        {
+            editor->setColour(juce::TextEditor::backgroundColourId,Palette::base);
+            editor->setColour(juce::TextEditor::textColourId,Palette::text);
+            editor->setColour(juce::TextEditor::highlightColourId,Palette::selection);
+            editor->setColour(juce::TextEditor::highlightedTextColourId,Palette::contrastingText(Palette::selection));
+            editor->setColour(juce::TextEditor::outlineColourId,Palette::border);
+            editor->setColour(juce::TextEditor::focusedOutlineColourId,Palette::accent);
+            // TextEditor stores colour on existing glyph runs, not only LAF IDs.
+            editor->applyColourToAllText(Palette::text,false);
+        }
+        for(int i=0;i<component.getNumChildComponents();++i)self(self,*component.getChildComponent(i));
+    };
+    refreshEditors(refreshEditors,*this);
+    if(auto* dialog=findParentComponentOfClass<juce::DialogWindow>()){dialog->setBackgroundColour(Palette::panel);dialog->repaint();}
+    repaint();
 }
 
 void SettingsComponent::refreshDiffSingerControls()
@@ -336,10 +409,16 @@ void SettingsComponent::saveValues()
 {
     applyAudioValues();
     properties.setValue("ui.language", language.getSelectedId());
-    properties.setValue("ui.theme", theme.getSelectedId() == 2 ? "light" : "dark");
+    // An unrelated style change (or closing a stale modeless window) must not
+    // overwrite a newer theme selected elsewhere with this combo's old value.
+    const auto selectedTheme=themeEdited?(theme.getSelectedId()==2?juce::String("light"):juce::String("dark"))
+        :properties.getValue("ui.theme",theme.getSelectedId()==2?"light":"dark");
+    properties.setValue("ui.theme",selectedTheme);
+    theme.setSelectedId(selectedTheme=="light"?2:1,juce::dontSendNotification);themeEdited=false;
     properties.setValue("ui.accent", accent.getText().trim());
     properties.setValue("ui.accentLight", accentLight.getText().trim());
     properties.setValue("ui.noteColour", noteColour.getText().trim());
+    properties.setValue("ui.noteStyle", noteStyle.getSelectedId() == 2 ? "rep" : "mld");
     properties.setValue("ui.showNoteLabels", showNoteLabels.getToggleState());
     properties.setValue("ui.softwareRendering", softwareRendering.getToggleState());
     properties.setValue("ui.uiScale", uiScale.getValue());
@@ -360,9 +439,13 @@ void SettingsComponent::saveValues()
     properties.setValue("import.melodyneCompose", juce::jlimit(1, 4, melodyneCompose.getSelectedId()));
     properties.setValue("import.melodynePitchSource", melodynePitchSource.getSelectedId());
     properties.setValue("import.algorithm", importedAlgorithm.getSelectedId() > 0
-        ? importedAlgorithm.getSelectedId() : 1);
+        ? importedAlgorithm.getSelectedId() : pitchAlgorithmPickerItem(defaultImportedPitchAlgorithm(&properties)));
     properties.setValue("import.stretchAlgorithm", importedStretchAlgorithm.getSelectedId());
     properties.setValue("import.preserveEdits", preserveProjectEdits.getToggleState());
+    properties.setValue("import.autoRegisterTransitions",autoRegisterTransitions.getToggleState());
+    properties.setValue("import.autoVirtualConnections",autoVirtualConnections.getToggleState());
+    properties.setValue("import.autoVirtualPitch",autoVirtualPitch.getToggleState());
+    properties.setValue("import.autoMergeConsonants",autoMergeConsonants.getToggleState());
     properties.setValue("import.recursiveMedia", locateMediaRecursively.getToggleState());
     backend::DiffSingerOptions ds;
     ds.backend = dsBackend.getSelectedId(); ds.device = dsDevice.getSelectedId() - 1;
@@ -402,6 +485,7 @@ void SettingsComponent::setTexts()
     accentLabel.setText(strings.text("settings.accent"), juce::dontSendNotification);
     accentLightLabel.setText(strings.text("settings.accentLight"), juce::dontSendNotification);
     noteColourLabel.setText(strings.text("settings.noteColour"), juce::dontSendNotification);
+    noteStyleLabel.setText(strings.text("settings.noteStyle"), juce::dontSendNotification);
     showNoteLabels.setButtonText(strings.text("settings.showNoteLabels"));
     softwareRendering.setButtonText(strings.text("settings.softwareRendering"));
     uiScaleLabel.setText(strings.text("settings.uiScale"), juce::dontSendNotification);
@@ -443,6 +527,16 @@ void SettingsComponent::setTexts()
                                            juce::dontSendNotification);
     refreshImportedStretchItems(importedStretchAlgorithm.getSelectedId());
     preserveProjectEdits.setButtonText(strings.text("settings.preserveEdits"));
+    autoRegisterTransitions.setTooltip(strings.text("settings.autoRegisterTransitionsHelp"));
+    autoVirtualConnections.setButtonText(strings.text("settings.autoVirtualConnections"));
+    autoVirtualPitch.setButtonText(strings.text("settings.autoVirtualPitch"));
+    autoMergeConsonants.setButtonText(strings.text("settings.autoMergeConsonants"));autoMergeConsonants.setTooltip(strings.text("settings.autoMergeConsonantsHelp"));
+    autoVirtualConnections.setTooltip(strings.text("settings.autoVirtualHelp"));autoVirtualPitch.setTooltip(strings.text("settings.autoVirtualPitchHelp"));
+    translationLabel.setText(strings.text("settings.translationFile"), juce::dontSendNotification);
+    translationReloadLabel.setText({}, juce::dontSendNotification);
+    openTranslations.setButtonText(strings.text("settings.openTranslations"));
+    openTranslations.setTooltip(strings.text("settings.openTranslationsTip"));
+    reloadTranslations.setButtonText(strings.text("settings.reloadTranslations"));
     locateMediaRecursively.setButtonText(strings.text("settings.recursiveMedia"));
     applyButton.setButtonText(strings.text("dialog.apply"));
 }

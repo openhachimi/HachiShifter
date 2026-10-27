@@ -248,11 +248,17 @@ AnalysisResult AnalysisService::analyse(const juce::File& file,
         options.intraOpThreads = juce::jlimit(1, 4, juce::SystemStats::getNumCpus() / 2);
         options.inference = config.inference;
         options.deviceIndex = config.deviceIndex;
+        options.preserveFullSourcePitch = config.preserveFullSourcePitch;
         juce::String gameError;
         auto game = GameAnalyzer::analyse(file, result.status.gameModelDirectory,
                                           result.status.fcpeModelPath,
                                           options, gameError, progress);
         result.notes = std::move(game.notes);
+        if(config.preserveFullSourcePitch)
+        {
+            result.sourcePitchNotes=std::move(game.sourcePitchNotes);
+            result.sourcePitchVoicedPoints=game.sourcePitchVoicedPoints;
+        }
         if (!result.notes.empty())
         {
             result.status.activeBackend = game.fcpeUsed ? "GAME+FCPE" : "GAME+native-hq";
@@ -267,6 +273,12 @@ AnalysisResult AnalysisService::analyse(const juce::File& file,
     }
     result.notes = NativeAnalyzer::analyse(file, error, std::move(progress));
     result.status.activeBackend = "native-hq";
+    if(config.preserveFullSourcePitch&&result.sourcePitchNotes.empty())
+    {
+        result.sourcePitchNotes=result.notes;
+        for(const auto& note:result.sourcePitchNotes)for(const auto& point:note.contour)
+            if(point.voiced)++result.sourcePitchVoicedPoints;
+    }
     if (result.warning.isEmpty() && result.status.gameModelReady
         && !result.status.onnxRuntimeReady)
         result.warning = result.status.message;

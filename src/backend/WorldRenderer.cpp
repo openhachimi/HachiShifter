@@ -1,4 +1,5 @@
 #include "WorldRenderer.h"
+#include "NsfHifiganRenderer.h"
 
 #include <world/cheaptrick.h>
 #include <world/d4c.h>
@@ -80,6 +81,132 @@ bool hasPitchDifference(const std::vector<float>& sourceMidi,
             return true;
     return false;
 }
+}
+
+juce::AudioBuffer<float> WorldRenderer::renderAssembly(
+    const std::vector<NsfHifiganSourcePart>& assembly, int targetSamples,
+    double sampleRate, double framePeriodMs, const std::vector<float>& targetMidi,
+    const std::vector<float>& formantSemitones, juce::AudioBuffer<float>* noiseOutput)
+{
+    if (noiseOutput != nullptr) noiseOutput->setSize(0, 0);
+    if (assembly.empty() || targetSamples <= 0 || sampleRate <= 0.0) return {};
+    const auto fs = std::max(8000, static_cast<int>(std::llround(sampleRate)));
+    const auto period = std::clamp(framePeriodMs, 1.0, 20.0);
+    const auto targetFrames = GetSamplesForHarvest(fs, targetSamples, period);
+    if (targetFrames <= 0) return {};
+
+    struct PartAnalysis {
+        const NsfHifiganSourcePart* part = nullptr;
+        int fs = 0, fft = 0, frames = 0;
+        double duration = 0.0;
+        std::vector<double> times, f0;
+        std::vector<std::vector<double>> spectrum, ap;
+    };
+    std::vector<PartAnalysis> parts;
+    for (const auto& part : assembly)
+    {
+        if (!part.source || part.source->getNumSamples() <= 0 || part.source->getNumChannels() <= 0
+            || !std::isfinite(part.sampleRate) || part.sampleRate <= 0.0
+            || !std::isfinite(part.supportFrom) || !std::isfinite(part.supportTo)
+            || part.supportTo <= part.supportFrom) continue;
+        PartAnalysis item;
+        item.part = &part;
+        item.fs = std::max(8000, static_cast<int>(std::llround(part.sampleRate)));
+        item.duration = static_cast<double>(part.source->getNumSamples()) / item.fs;
+        HarvestOption ho; InitializeHarvestOption(&ho); ho.frame_period = period;
+        ho.f0_floor = 40.0; ho.f0_ceil = std::min(1600.0, item.fs * .45);
+        item.frames = GetSamplesForHarvest(item.fs, part.source->getNumSamples(), period);
+        if (item.frames <= 0) continue;
+        item.times.resize(static_cast<size_t>(item.frames)); item.f0.resize(item.times.size());
+        std::vector<double> mono(static_cast<size_t>(part.source->getNumSamples()));
+        for (int s = 0; s < part.source->getNumSamples(); ++s) {
+            double v = 0.0; for (int c = 0; c < part.source->getNumChannels(); ++c) v += part.source->getSample(c, s);
+            mono[static_cast<size_t>(s)] = v / part.source->getNumChannels();
+        }
+        Harvest(mono.data(), part.source->getNumSamples(), item.fs, &ho,
+                item.times.data(), item.f0.data());
+        CheapTrickOption co; InitializeCheapTrickOption(item.fs, &co);
+        co.f0_floor = ho.f0_floor; co.fft_size = GetFFTSizeForCheapTrick(item.fs, &co);
+        item.fft = co.fft_size;
+        const auto bins = item.fft / 2 + 1;
+        item.spectrum.assign(item.frames, std::vector<double>(static_cast<size_t>(bins)));
+        item.ap.assign(item.frames, std::vector<double>(static_cast<size_t>(bins)));
+        std::vector<double*> sp(item.frames), ap(item.frames);
+        for (int f = 0; f < item.frames; ++f) { sp[f] = item.spectrum[f].data(); ap[f] = item.ap[f].data(); }
+        D4COption d4; InitializeD4COption(&d4);
+        CheapTrick(mono.data(), part.source->getNumSamples(), item.fs, item.times.data(), item.f0.data(), item.frames, &co, sp.data());
+        D4C(mono.data(), part.source->getNumSamples(), item.fs, item.times.data(), item.f0.data(), item.frames, item.fft, &d4, ap.data());
+        parts.push_back(std::move(item));
+    }
+    if (parts.empty()) return {};
+    CheapTrickOption outputCheapTrick; InitializeCheapTrickOption(fs, &outputCheapTrick);
+    outputCheapTrick.fft_size = GetFFTSizeForCheapTrick(fs, &outputCheapTrick);
+    const auto outBins = outputCheapTrick.fft_size / 2 + 1;
+    // WORLD spectra are amplitudes. Accumulate gain^2 in power, then sqrt once;
+    // this is deliberately not NSF's Mel-amplitude rule.
+    std::vector<std::vector<double>> power(static_cast<size_t>(targetFrames), std::vector<double>(static_cast<size_t>(outBins), 0.0));
+    std::vector<std::vector<double>> apPower(static_cast<size_t>(targetFrames), std::vector<double>(static_cast<size_t>(outBins), 0.0));
+    std::vector<double> weights(static_cast<size_t>(targetFrames), 0.0), f0Weights(static_cast<size_t>(targetFrames), 0.0), targetF0(static_cast<size_t>(targetFrames), 0.0);
+    std::vector<bool> active(static_cast<size_t>(targetFrames), false);
+    const auto mapAt = [](const NsfHifiganSourcePart& p, double t) {
+        if (p.timeMap.size() < 2) return t;
+        auto r = std::upper_bound(p.timeMap.begin(), p.timeMap.end(), t,
+            [](double x, const NsfHifiganTimeMapPoint& q) { return x < q.targetSeconds; });
+        if (r == p.timeMap.begin()) return r->sourceSeconds;
+        if (r == p.timeMap.end()) return (r - 1)->sourceSeconds;
+        const auto& a = *(r - 1); const auto& b = *r;
+        const auto u = b.targetSeconds > a.targetSeconds ? std::clamp((t-a.targetSeconds)/(b.targetSeconds-a.targetSeconds),0.0,1.0) : 0.0;
+        return a.sourceSeconds + (b.sourceSeconds-a.sourceSeconds)*u;
+    };
+    for (int tf = 0; tf < targetFrames; ++tf) {
+        const double t = tf * period / 1000.0;
+        for (const auto& item : parts) {
+            const auto& p = *item.part;
+            if (t < p.supportFrom || t >= p.supportTo) continue;
+            const double g = p.gainAt ? std::max(0.0f, p.gainAt(t)) : 1.0;
+            if (g <= 0.0) continue;
+            const double sf = std::clamp(mapAt(p, t) * 1000.0 / period, 0.0, double(item.frames - 1));
+            const auto l = static_cast<size_t>(std::floor(sf)); const auto r = std::min(l + 1, item.spectrum.size()-1); const auto u = sf-l;
+            const double sourceF0 = item.f0[l] + (item.f0[r]-item.f0[l])*u;
+            const double midi = p.sourceMidiAt ? p.sourceMidiAt(t) : 0.0f;
+            // sourceMidiAt marks source voicing for the common F0, but an
+            // unvoiced source still contributes its measured D4C noise/AP.
+            // This preserves consonants and UV material instead of dropping it.
+            const bool sourceVoiced=midi>0.0&&std::isfinite(midi);
+            active[static_cast<size_t>(tf)] = true;
+            const double w = g*g; weights[static_cast<size_t>(tf)] += w;
+            if (sourceVoiced&&sourceF0>0.0) { targetF0[static_cast<size_t>(tf)] += w*sourceF0; f0Weights[static_cast<size_t>(tf)] += w; }
+            const double formant = curveAt(formantSemitones, t*1000.0/period, 0.0);
+            const double formantRatio = std::pow(2.0, formant / 12.0);
+            for (int b = 0; b < outBins; ++b) {
+                const double hz = b * double(fs) / (2.0 * outBins - 2.0);
+                const double sb = (hz / std::max(1.0e-6, formantRatio)) * item.fft / item.fs;
+                const auto sb0 = static_cast<size_t>(std::min(std::max(0.0, std::floor(sb)), double(item.spectrum[l].size()-1)));
+                const auto sb1 = std::min(sb0+1, item.spectrum[l].size()-1); const auto bu = sb-sb0;
+                const auto amp0 = item.spectrum[l][sb0] + (item.spectrum[l][sb1]-item.spectrum[l][sb0])*bu;
+                const auto amp1 = item.spectrum[r][sb0] + (item.spectrum[r][sb1]-item.spectrum[r][sb0])*bu;
+                const auto amp = amp0 + (amp1-amp0)*u;
+                const auto a0 = item.ap[l][sb0] + (item.ap[l][sb1]-item.ap[l][sb0])*bu;
+                const auto a1 = item.ap[r][sb0] + (item.ap[r][sb1]-item.ap[r][sb0])*bu;
+                power[static_cast<size_t>(tf)][static_cast<size_t>(b)] += w * amp * amp;
+                apPower[static_cast<size_t>(tf)][static_cast<size_t>(b)] += w * amp * amp * std::clamp(a0+(a1-a0)*u, 0.001, 0.999999);
+            }
+        }
+        if (f0Weights[static_cast<size_t>(tf)] > 0.0) targetF0[static_cast<size_t>(tf)] /= f0Weights[static_cast<size_t>(tf)];
+        const auto tm = curveAt(targetMidi, t*1000.0/period, 0.0);
+        if (targetF0[static_cast<size_t>(tf)] > 0.0 && tm > 0.0)
+            targetF0[static_cast<size_t>(tf)] = 440.0 * std::pow(2.0, (tm-69.0)/12.0);
+        if (!active[static_cast<size_t>(tf)]) targetF0[static_cast<size_t>(tf)] = 0.0;
+    }
+    const int fft = outputCheapTrick.fft_size; std::vector<std::vector<double>> spec(targetFrames, std::vector<double>(outBins)), ap(targetFrames, std::vector<double>(outBins));
+    std::vector<double*> spp(targetFrames), app(targetFrames);
+    for (int f=0; f<targetFrames; ++f) for (int b=0;b<outBins;++b) { spec[f][b]=std::sqrt(std::max(0.0,power[f][b])); ap[f][b]=weights[f]>0?std::clamp(apPower[f][b]/std::max(1e-20,power[f][b]),.001,.999999):.999999; spp[f]=spec[f].data(); app[f]=ap[f].data(); }
+    std::vector<double> out(static_cast<size_t>(targetSamples)), noise(static_cast<size_t>(targetSamples));
+    SynthesisWithNoiseOutput(targetF0.data(), targetFrames, spp.data(), app.data(), fft, period, fs, targetSamples, out.data(), noiseOutput ? noise.data() : nullptr);
+    juce::AudioBuffer<float> result(1, targetSamples); result.clear();
+    if (noiseOutput) noiseOutput->setSize(1, targetSamples, false, true, true);
+    for(int s=0;s<targetSamples;++s){ const auto f=std::min(targetFrames-1,int(s/(sampleRate*period/1000.0))); result.setSample(0,s,active[static_cast<size_t>(f)]&&std::isfinite(out[s])?float(out[s]):0.f); if(noiseOutput) noiseOutput->setSample(0,s,active[static_cast<size_t>(f)]&&std::isfinite(noise[s])?float(noise[s]):0.f); }
+    return result;
 }
 
 juce::AudioBuffer<float> WorldRenderer::render(

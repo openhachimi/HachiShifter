@@ -7,6 +7,18 @@
 namespace hachi
 {
 
+namespace
+{
+// Local editor callback responses only; backend protocol and diagnostics stay unchanged.
+juce::var diffSingerUiError(const char* literal)
+{
+    auto* response = new juce::DynamicObject();
+    response->setProperty("ok", false);
+    response->setProperty("error", I18n::uiText(literal));
+    return juce::var(response);
+}
+}
+
 void MainComponent::showDiffSingerPronunciationEditor(const juce::String& noteId)
 {
     if (diffSingerBusy) return;
@@ -33,7 +45,7 @@ void MainComponent::showDiffSingerPronunciationEditor(const juce::String& noteId
         [safe, revision, trackId, ids, json](const auto& readings, const auto& dictionary, bool commit, auto done)
         {
             if (safe == nullptr) return;
-            if (safe->diffSingerBusy) { done(juce::JSON::parse(R"({"ok":false,"error":"已有 DS 任务进行中，请稍后重试"})")); return; }
+            if (safe->diffSingerBusy) { done(diffSingerUiError("已有 DS 任务进行中，请稍后重试")); return; }
             auto requestJson = juce::JSON::parse(juce::JSON::toString(json));
             requestJson.getDynamicObject()->setProperty("dictionary", dictionary);
             for (auto& item : *requestJson["notes"].getArray()) for (const auto& [id, text] : readings)
@@ -49,18 +61,18 @@ void MainComponent::showDiffSingerPronunciationEditor(const juce::String& noteId
                     if (safe == nullptr) return;
                     safe->diffSingerBusy = false;
                     auto response = result;
-                    if (cancel->load()) response = juce::JSON::parse(R"({"ok":false,"error":"发音检查已取消"})");
+                    if (cancel->load()) response = diffSingerUiError("发音检查已取消");
                     if ((bool) response["ok"] && commit)
                     {
                         std::vector<std::pair<juce::String, juce::String>> mapped;
                         for (const auto& [id, text] : readings)
                             if (id.getIntValue() >= 0 && id.getIntValue() < ids.size()) mapped.emplace_back(ids[id.getIntValue()], text);
                         if (!safe->project.applyDiffSingerPronunciation(revision, trackId, mapped, dictionary))
-                            response = juce::JSON::parse(R"({"ok":false,"error":"工程已变化，请关闭窗口后重新打开发音编辑器"})");
+                            response = diffSingerUiError("工程已变化，请关闭窗口后重新打开发音编辑器");
                         else
                         {
                             safe->diffSingerStatusUntil = juce::Time::getMillisecondCounterHiRes()+5000;
-                            safe->statusLabel.setText(juce::String::fromUTF8("DS 发音已应用；现有 pitch 保留，需要时可重生成选中音符。Ctrl+Z 撤销。"), juce::dontSendNotification);
+                            safe->statusLabel.setText(I18n::uiText("DS 发音已应用；现有 pitch 保留，需要时可重生成选中音符。Ctrl+Z 撤销。"), juce::dontSendNotification);
                         }
                     }
                     done(response);
@@ -68,7 +80,7 @@ void MainComponent::showDiffSingerPronunciationEditor(const juce::String& noteId
             });
         });
     juce::DialogWindow::LaunchOptions options;
-    options.dialogTitle = juce::String::fromUTF8("谋•UTAU — DS 发音转换与读音覆盖");
+    options.dialogTitle = I18n::uiText("谋•UTAU — DS 发音转换与读音覆盖");
     options.dialogBackgroundColour = Palette::panel;
     options.escapeKeyTriggersCloseButton = true; options.useNativeTitleBar = true; options.resizable = true;
     options.content.setOwned(editor);
@@ -80,7 +92,7 @@ void MainComponent::loadDiffSingerVoicebank(const juce::String& trackId, const j
 {
     if (diffSingerBusy)
     {
-        statusLabel.setText(juce::String::fromUTF8("DiffSinger 任务进行中，请等待或在编辑菜单取消后再选择音源。"), juce::dontSendNotification);
+        statusLabel.setText(I18n::uiText("DiffSinger 任务进行中，请等待或在编辑菜单取消后再选择音源。"), juce::dontSendNotification);
         return;
     }
     const auto data = project.snapshot();
@@ -95,7 +107,7 @@ void MainComponent::loadDiffSingerVoicebank(const juce::String& trackId, const j
     diffSingerCancel = std::make_shared<std::atomic<bool>>(false);
     const auto cancel = diffSingerCancel;
     const juce::Component::SafePointer<MainComponent> safe(this);
-    statusLabel.setText(juce::String::fromUTF8("正在预检 DiffSinger 音源与声码器… 可在编辑菜单取消"), juce::dontSendNotification);
+    statusLabel.setText(I18n::uiText("正在预检 DiffSinger 音源与声码器… 可在编辑菜单取消"), juce::dontSendNotification);
     juce::Thread::launch([safe, cancel, trackId, directory,
                          json = backend::DiffSingerRenderer::requestJson(request, "inspect")]
     {
@@ -106,7 +118,7 @@ void MainComponent::loadDiffSingerVoicebank(const juce::String& trackId, const j
             safe->diffSingerBusy = false;
             if (cancel->load())
             {
-                safe->statusLabel.setText(juce::String::fromUTF8("已取消音源预检"), juce::dontSendNotification);
+                safe->statusLabel.setText(I18n::uiText("已取消音源预检"), juce::dontSendNotification);
                 return;
             }
             if (!(bool) result["ok"]) { safe->showError(result["error"].toString()); return; }
@@ -124,8 +136,8 @@ void MainComponent::loadDiffSingerVoicebank(const juce::String& trackId, const j
             if (const auto* values = result["warnings"].getArray())
                 for (const auto& value : *values) warnings.add(value.toString());
             safe->diffSingerStatusUntil = juce::Time::getMillisecondCounterHiRes() + 5000.0;
-            safe->statusLabel.setText(juce::String::fromUTF8("DiffSinger 预检通过；")
-                + (warnings.isEmpty() ? juce::String::fromUTF8("模型已就绪，可生成 pitch、试听或导出") : warnings.joinIntoString(" ")),
+            safe->statusLabel.setText(I18n::uiText("DiffSinger 预检通过；")
+                + (warnings.isEmpty() ? I18n::uiText("模型已就绪，可生成 pitch、试听或导出") : warnings.joinIntoString(" ")),
                 juce::dontSendNotification);
             safe->refreshProjectControls();
             safe->refreshSelectedNoteParameter();
@@ -139,16 +151,16 @@ bool MainComponent::refreshDiffSingerFlagContext()
     const auto track = std::find_if(data.tracks.begin(), data.tracks.end(),
         [this](const auto& t) { return t.id == selectedTrackId; });
     const auto enabled = track != data.tracks.end() && trackIsDiffSinger(*track);
-    flagCurveButton.setButtonText(juce::String::fromUTF8(enabled ? "FLAG" : "线性flag"));
-    flagEnvelopeButton.setButtonText(juce::String::fromUTF8(enabled ? "FLAG曲线" : "flag 包络"));
+    flagCurveButton.setButtonText(I18n::uiText(enabled ? "FLAG" : "线性flag"));
+    flagEnvelopeButton.setButtonText(I18n::uiText(enabled ? "FLAG曲线" : "flag 包络"));
     flagCurveButton.setClickingTogglesState(!enabled);
-    flagCurveButton.setTooltip(juce::String::fromUTF8(enabled
+    flagCurveButton.setTooltip(I18n::uiText(enabled
         ? "打开预测 FLAG 实参；在下方参数选择旁切换「实参 / 偏移」。启用偏移开关位于偏移通道"
         : "为选中音符开启 WCSNDM 线性 FLAG（普通 UTAU / 界 / 谋模式）；每条参数曲线独立保存，需使用支持此扩展的 WCSNDM 引擎"));
-    flagEnvelopeButton.setTooltip(juce::String::fromUTF8(enabled
+    flagEnvelopeButton.setTooltip(I18n::uiText(enabled
         ? "点击打开预测实参，下方切换实参 / 偏移；右键可局部重算。实参：橙色为直接值，蓝色虚线为原始预测，绿色为叠加偏移后的值；实参无需开启 FLAG。偏移保留旧单位；PEXP 在生成 pitch 时生效"
         : "在底部通道绘制 FLAG 曲线；先为音符开启线性 FLAG"));
-    const auto modeHelp = juce::String::fromUTF8("；右键 FLAG 按钮可切换逐音符控制点 / 跨音符连续绘制。连续模式作用于当前轨道已开启 FLAG 的音符，Esc 取消本笔");
+    const auto modeHelp = I18n::uiText("；右键 FLAG 按钮可切换逐音符控制点 / 跨音符连续绘制。连续模式作用于当前轨道已开启 FLAG 的音符，Esc 取消本笔");
     flagCurveButton.setTooltip(flagCurveButton.getTooltip() + modeHelp);
     flagEnvelopeButton.setTooltip(flagEnvelopeButton.getTooltip() + modeHelp);
     if (!enabled)
@@ -158,8 +170,8 @@ bool MainComponent::refreshDiffSingerFlagContext()
             && effectiveUtauOutputEngine(*track, audio.currentUtauOutputEngine()) == UtauOutputEngine::pcNsfHifigan;
         pianoRoll.setHifisamplerFlagContext(hifi);
         if (hifi) {
-            flagCurveButton.setTooltip(juce::String::fromUTF8("启用 HiFisampler 参数曲线：g / Hb / Hv / Ht / HG / P / t / A；G、He 在 FLAG 文本中输入") + modeHelp);
-            flagEnvelopeButton.setTooltip(juce::String::fromUTF8("在底部绘制 HiFisampler FLAG 曲线，曲线覆盖同名文本参数") + modeHelp);
+            flagCurveButton.setTooltip(I18n::uiText("启用 HiFisampler 参数曲线：g / Hb / Hv / Ht / HG / P / t / A；G、He 在 FLAG 文本中输入") + modeHelp);
+            flagEnvelopeButton.setTooltip(I18n::uiText("在底部绘制 HiFisampler FLAG 曲线，曲线覆盖同名文本参数") + modeHelp);
         }
         diffSingerParameterLanePendingBank.clear();
         return false;
@@ -192,9 +204,9 @@ bool MainComponent::refreshDiffSingerFlagContext()
                 {
                     auto* item = new juce::DynamicObject();
                     item->setProperty("key",kind.flag);
-                    item->setProperty("label",juce::String::fromUTF8(kind.label));
+                    item->setProperty("label",I18n::uiText(kind.label));
                     item->setProperty("supported",juce::String(kind.flag)=="DS:DYN");
-                    item->setProperty("reason",juce::String::fromUTF8("读取失败，请在音源库设置重试"));
+                    item->setProperty("reason",I18n::uiText("读取失败，请在音源库设置重试"));
                     fallback.add(juce::var(item));
                 }
                 capabilities=juce::var(fallback);
@@ -210,7 +222,7 @@ bool MainComponent::refreshDiffSingerFlagContext()
                         { safe->showDiffSingerParameterLane(); break; }
             }
             if (!(bool) result["ok"])
-                safe->statusLabel.setText(juce::String::fromUTF8("DiffSinger 参数读取失败：")
+                safe->statusLabel.setText(I18n::uiText("DiffSinger 参数读取失败：")
                     + result["error"].toString(), juce::dontSendNotification);
         });
     });
@@ -266,7 +278,7 @@ void MainComponent::showDiffSingerPhonemeEditor(const juce::String& trackId, con
     diffSingerCancel = std::make_shared<std::atomic<bool>>(false);
     const auto cancel = diffSingerCancel;
     const juce::Component::SafePointer<MainComponent> safe(this);
-    statusLabel.setText(juce::String::fromUTF8("谋•UTAU：正在预测 DS 音素时长… 可在编辑菜单取消"), juce::dontSendNotification);
+    statusLabel.setText(I18n::uiText("谋•UTAU：正在预测 DS 音素时长… 可在编辑菜单取消"), juce::dontSendNotification);
     juce::Thread::launch([safe, cancel, revision, ids, visibleIds, auditionIds, focusId, json]
     {
         const auto result = backend::DiffSingerRenderer::invoke(json, [cancel] { return cancel->load(); });
@@ -278,11 +290,11 @@ void MainComponent::showDiffSingerPhonemeEditor(const juce::String& trackId, con
             if (!(bool) result["ok"]) { safe->showError(result["error"].toString()); return; }
             if (safe->project.revisionNumber() != revision)
             {
-                safe->showError(juce::String::fromUTF8("预测期间工程已变化，请重新打开音素时长编辑器。"));
+                safe->showError(I18n::uiText("预测期间工程已变化，请重新打开音素时长编辑器。"));
                 return;
             }
             juce::DialogWindow::LaunchOptions options;
-            options.dialogTitle = juce::String::fromUTF8("谋•UTAU — DiffSinger 音素时长");
+            options.dialogTitle = I18n::uiText("谋•UTAU — DiffSinger 音素时长");
             options.dialogBackgroundColour = Palette::panel;
             options.escapeKeyTriggersCloseButton = true;
             options.useNativeTitleBar = true; options.resizable = true;
@@ -299,7 +311,7 @@ void MainComponent::showDiffSingerPhonemeEditor(const juce::String& trackId, con
                     }
                     if (!safe->project.applyDiffSingerTiming(revision, mapped)) return false;
                     safe->diffSingerStatusUntil = juce::Time::getMillisecondCounterHiRes() + 5000;
-                    safe->statusLabel.setText(juce::String::fromUTF8("DS 音素时长已应用；试听和导出使用新时长，Ctrl+Z 可撤销。"), juce::dontSendNotification);
+                    safe->statusLabel.setText(I18n::uiText("DS 音素时长已应用；试听和导出使用新时长，Ctrl+Z 可撤销。"), juce::dontSendNotification);
                     return true;
                 }, [safe, auditionIds]
                 {
@@ -342,13 +354,13 @@ void MainComponent::showDiffSingerParameterLane()
         {
             diffSingerParameterLanePendingBank = key;
             setEnvelopeLane(EnvelopeLane::flagCurve);
-            statusLabel.setText(juce::String::fromUTF8("正在读取音源参数能力，完成后打开实参…"),juce::dontSendNotification);
+            statusLabel.setText(I18n::uiText("正在读取音源参数能力，完成后打开实参…"),juce::dontSendNotification);
             return;
         }
         if (!pianoRoll.setDiffSingerParameterLayer(true))
         {
             setEnvelopeLane(EnvelopeLane::flagCurve);
-            statusLabel.setText(juce::String::fromUTF8("当前音源没有可用的预测实参；可在偏移通道使用它支持的其他控制。"),juce::dontSendNotification);
+            statusLabel.setText(I18n::uiText("当前音源没有可用的预测实参；可在偏移通道使用它支持的其他控制。"),juce::dontSendNotification);
             return;
         }
         setEnvelopeLane(EnvelopeLane::flagCurve);
@@ -377,16 +389,16 @@ void MainComponent::generateDiffSingerParameters(bool wholeTrack, const juce::St
     std::erase_if(selected,[&](const auto& id){return !ids.contains(id);});
     if(!noteId.isEmpty()) {
         // A note-menu action must never fall back to regenerating the whole track.
-        if(!ids.contains(noteId)) {showDiffSingerError(juce::String::fromUTF8("此音符不在当前可用片段内，请重新选择音符。"));return;}
+        if(!ids.contains(noteId)) {showDiffSingerError(I18n::uiText("此音符不在当前可用片段内，请重新选择音符。"));return;}
         if(std::find(selected.begin(),selected.end(),noteId)==selected.end())selected={noteId};
     }
     else if(!wholeTrack && !pianoRoll.selectedNoteIds().empty() && selected.empty()) {
-        showDiffSingerError(juce::String::fromUTF8("所选音符不在当前可用轨道内。"));return;
+        showDiffSingerError(I18n::uiText("所选音符不在当前可用轨道内。"));return;
     }
     if(!selected.empty()) {
         juce::Array<juce::var> chosen;
         for(const auto& id:selected) if(ids.contains(id)) chosen.add(juce::String(ids.indexOf(id)));
-        if(chosen.isEmpty()) {showDiffSingerError(juce::String::fromUTF8("所选音符不在当前可用轨道内。"));return;}
+        if(chosen.isEmpty()) {showDiffSingerError(I18n::uiText("所选音符不在当前可用轨道内。"));return;}
         request.getDynamicObject()->setProperty("retake_ids",chosen);
     }
     const auto revision=project.revisionNumber();
@@ -394,7 +406,7 @@ void MainComponent::generateDiffSingerParameters(bool wholeTrack, const juce::St
     diffSingerBusy=true;diffSingerCancel=std::make_shared<std::atomic<bool>>(false);
     const auto cancel=diffSingerCancel;
     const juce::Component::SafePointer<MainComponent> safe(this);
-    statusLabel.setText(juce::String::fromUTF8(selected.empty()
+    statusLabel.setText(I18n::uiText(selected.empty()
         ? "DS 正在重新生成整轨实参… 可在编辑菜单取消"
         : "DS 正在局部重算实参，锁定未选区域… 可在编辑菜单取消"),juce::dontSendNotification);
     juce::Thread::launch([safe,cancel,revision,ids,request,trackId,selected] {
@@ -402,7 +414,7 @@ void MainComponent::generateDiffSingerParameters(bool wholeTrack, const juce::St
         juce::MessageManager::callAsync([safe,cancel,revision,ids,result,trackId,selected] {
             if(safe==nullptr) return;
             safe->diffSingerBusy=false;
-            if(cancel->load()) {safe->finishMcpDiffSinger(false, "Cancelled");safe->statusLabel.setText(juce::String::fromUTF8("已取消实参预测"),juce::dontSendNotification);return;}
+            if(cancel->load()) {safe->finishMcpDiffSinger(false, "Cancelled");safe->statusLabel.setText(I18n::uiText("已取消实参预测"),juce::dontSendNotification);return;}
             if(!(bool)result["ok"]) {safe->showDiffSingerError(result["error"].toString());return;}
             std::map<juce::String,std::vector<FlagCurve>> edits;
             if(auto* rows=result["parameters"].getArray()) for(const auto& row:*rows) {
@@ -418,14 +430,14 @@ void MainComponent::generateDiffSingerParameters(bool wholeTrack, const juce::St
                 }
             }
             if(!safe->project.applyDiffSingerParameters(revision,edits)) {
-                safe->showDiffSingerError(juce::String::fromUTF8("工程在预测期间已修改，或没有有效实参。结果未写入，请重试。"));return;
+                safe->showDiffSingerError(I18n::uiText("工程在预测期间已修改，或没有有效实参。结果未写入，请重试。"));return;
             }
             safe->finishMcpDiffSinger(true);
             if(safe->selectedTrackId==trackId) {
                 safe->pianoRoll.setDiffSingerParameterLayer(true);
                 safe->setEnvelopeLane(EnvelopeLane::flagCurve);
             }
-            safe->statusLabel.setText(juce::String::fromUTF8(selected.empty()
+            safe->statusLabel.setText(I18n::uiText(selected.empty()
                 ? "整轨实参已重生成，FLAG 偏移保留；Ctrl+Z 撤销。"
                 : "局部实参已重算，未选音符和 FLAG 偏移保留；Ctrl+Z 撤销。"),juce::dontSendNotification);
         });
@@ -447,7 +459,7 @@ void MainComponent::generateDiffSingerPitch(bool wholeTrack, const juce::String&
         });
     if (track == data.tracks.end() || !trackIsDiffSinger(*track))
     {
-        showDiffSingerError(juce::String::fromUTF8("请先在谋•UTAU 模式选择含 dsconfig.yaml 的 DiffSinger 音源目录。"));
+        showDiffSingerError(I18n::uiText("请先在谋•UTAU 模式选择含 dsconfig.yaml 的 DiffSinger 音源目录。"));
         return;
     }
     juce::StringArray noteIds;
@@ -458,7 +470,7 @@ void MainComponent::generateDiffSingerPitch(bool wholeTrack, const juce::String&
     if (noteIds.contains(noteId) && std::find(selectedNotes.begin(), selectedNotes.end(), noteId) == selectedNotes.end())
         selectedNotes = {noteId};
     if (!wholeTrack && noteId.isEmpty() && !pianoRoll.selectedNoteIds().empty() && selectedNotes.empty())
-    { showDiffSingerError(juce::String::fromUTF8("当前所选音符不在本轨的可用片段内，请重新选择音符。")); return; }
+    { showDiffSingerError(I18n::uiText("当前所选音符不在本轨的可用片段内，请重新选择音符。")); return; }
     auto json = backend::DiffSingerRenderer::requestJson(request, "pitch");
     if (!selectedNotes.empty())
     {
@@ -471,7 +483,7 @@ void MainComponent::generateDiffSingerPitch(bool wholeTrack, const juce::String&
     diffSingerCancel = std::make_shared<std::atomic<bool>>(false);
     const auto cancel = diffSingerCancel;
     const juce::Component::SafePointer<MainComponent> safe(this);
-    statusLabel.setText(juce::String::fromUTF8(selectedNotes.empty()
+    statusLabel.setText(I18n::uiText(selectedNotes.empty()
         ? "DiffSinger 正在生成整轨 pitch… 可在编辑菜单取消"
         : "DS 正在局部重生成 pitch；其余音高作为锁定上下文… 可在编辑菜单取消"), juce::dontSendNotification);
     juce::Thread::launch([safe, cancel, revision, noteIds, selectedNotes, json]
@@ -484,7 +496,7 @@ void MainComponent::generateDiffSingerPitch(bool wholeTrack, const juce::String&
             if (cancel->load())
             {
                 safe->finishMcpDiffSinger(false, "Cancelled");
-                safe->statusLabel.setText(juce::String::fromUTF8("已取消 DiffSinger pitch 生成"), juce::dontSendNotification);
+                safe->statusLabel.setText(I18n::uiText("已取消 DiffSinger pitch 生成"), juce::dontSendNotification);
                 return;
             }
             if (!(bool) result["ok"]) { safe->showDiffSingerError(result["error"].toString()); return; }
@@ -529,12 +541,12 @@ void MainComponent::generateDiffSingerPitch(bool wholeTrack, const juce::String&
                 }
             if (!safe->project.applyDiffSingerPitch(revision, curves, !selectedNotes.empty()))
             {
-                safe->showDiffSingerError(juce::String::fromUTF8("生成期间工程已修改，或选中音符没有可生成的歌词。此次结果未写入，请重新生成。"));
+                safe->showDiffSingerError(I18n::uiText("生成期间工程已修改，或选中音符没有可生成的歌词。此次结果未写入，请重新生成。"));
                 return;
             }
             safe->finishMcpDiffSinger(true);
-            safe->statusLabel.setText(juce::String::fromUTF8("DiffSinger pitch 已写入 ")
-                + juce::String((int) curves.size()) + juce::String::fromUTF8(" 个音符；可继续编辑，Ctrl+Z 撤销本次生成"), juce::dontSendNotification);
+            safe->statusLabel.setText(I18n::uiText("DiffSinger pitch 已写入 ")
+                + juce::String((int) curves.size()) + I18n::uiText(" 个音符；可继续编辑，Ctrl+Z 撤销本次生成"), juce::dontSendNotification);
         });
     });
 }
@@ -563,23 +575,23 @@ void MainComponent::showDiffSingerSettings(const TrackData& track)
             juce::StringArray languages, speakers;
             if (auto* values = result["languages"].getArray()) for (const auto& v : *values) languages.add(v.toString());
             languages.addIfNotAlreadyThere(track.diffSingerLanguage);
-            speakers.add(juce::String::fromUTF8("默认"));
+            speakers.add(I18n::uiText("默认"));
             if (auto* values = result["speakers"].getArray()) for (const auto& v : *values) speakers.add(v.toString());
-            auto* window = new juce::AlertWindow("DiffSinger — " + track.voicebankDirectory.getFileName(),
+            auto* window = new juce::AlertWindow(I18n::uiText("DiffSinger — ") + track.voicebankDirectory.getFileName(),
                 (bool) result["has_pitch"]
-                    ? juce::String::fromUTF8("支持自动 pitch。编辑 → DiffSinger 生成 pitch；未选音符时生成整轨；选中音符时锁定未选音高作为上下文，局部重生成。")
-                    : juce::String::fromUTF8("音源没有 pitch 预测模型，可按已有 MIDI / pitch 曲线合成。"), juce::MessageBoxIconType::InfoIcon);
-            window->addComboBox("language", languages, juce::String::fromUTF8("歌词词典（zh 为中文拼音；汉字自动转拼音）"));
+                    ? I18n::uiText("支持自动 pitch。编辑 → DiffSinger 生成 pitch；未选音符时生成整轨；选中音符时锁定未选音高作为上下文，局部重生成。")
+                    : I18n::uiText("音源没有 pitch 预测模型，可按已有 MIDI / pitch 曲线合成。"), juce::MessageBoxIconType::InfoIcon);
+            window->addComboBox("language", languages, I18n::uiText("歌词词典（zh 为中文拼音；汉字自动转拼音）"));
             window->getComboBoxComponent("language")->setSelectedItemIndex(languages.indexOf(track.diffSingerLanguage));
-            window->addComboBox("speaker", speakers, juce::String::fromUTF8("音色 / 说话人"));
+            window->addComboBox("speaker", speakers, I18n::uiText("音色 / 说话人"));
             window->getComboBoxComponent("speaker")->setSelectedItemIndex(std::max(0, speakers.indexOf(track.diffSingerSpeaker)));
-            window->addTextBlock(juce::String::fromUTF8("谋•UTAU：右键音符 → DS 音素时长（Ctrl+G），可拖动音素边界；编辑菜单可生成 pitch。编辑菜单或音符右键可打开 DS 发音转换，预览中英文读音、设置覆盖和用户词典；多音节分配用 +2、+3，延音用 +，休止用 RR。GPU 与质量档位在设置 → DiffSinger 中调整。点击 FLAG 查看预测实参，在下方切换实参 / 偏移；偏移侧的启用按钮控制所选音符的偏移，可叠加多条参数曲线；灰色项表示音源不支持。PEXP 修改后需重新生成 pitch。传统 UTAU FLAG、OTO 和分区参数不适用于此音源。"));
-            window->addTextBlock(juce::String::fromUTF8("音源预检通过。反复试听会复用模型和未修改乐句；闲置两分钟后释放模型。"));
+            window->addTextBlock(I18n::uiText("谋•UTAU：右键音符 → DS 音素时长（Ctrl+G），可拖动音素边界；编辑菜单可生成 pitch。编辑菜单或音符右键可打开 DS 发音转换，预览中英文读音、设置覆盖和用户词典；多音节分配用 +2、+3，延音用 +，休止用 RR。GPU 与质量档位在设置 → DiffSinger 中调整。点击 FLAG 查看预测实参，在下方切换实参 / 偏移；偏移侧的启用按钮控制所选音符的偏移，可叠加多条参数曲线；灰色项表示音源不支持。PEXP 修改后需重新生成 pitch。传统 UTAU FLAG、OTO 和分区参数不适用于此音源。"));
+            window->addTextBlock(I18n::uiText("音源预检通过。反复试听会复用模型和未修改乐句；闲置两分钟后释放模型。"));
             if (const auto* values = result["warnings"].getArray())
                 for (const auto& value : *values) window->addTextBlock(value.toString());
-            window->addButton(juce::String::fromUTF8("GPU / 质量设置"), 2);
-            window->addButton(juce::String::fromUTF8("确定"), 1, juce::KeyPress(juce::KeyPress::returnKey));
-            window->addButton(juce::String::fromUTF8("取消"), 0, juce::KeyPress(juce::KeyPress::escapeKey));
+            window->addButton(I18n::uiText("GPU / 质量设置"), 2);
+            window->addButton(I18n::uiText("确定"), 1, juce::KeyPress(juce::KeyPress::returnKey));
+            window->addButton(I18n::uiText("取消"), 0, juce::KeyPress(juce::KeyPress::escapeKey));
             window->enterModalState(true, juce::ModalCallbackFunction::create([safe, window, track, speakers](int code)
             {
                 if (safe == nullptr) return;

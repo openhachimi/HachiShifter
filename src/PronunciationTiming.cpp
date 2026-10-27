@@ -7,6 +7,176 @@
 
 namespace hachi
 {
+bool validateNativeTransitionShape(const NativeTransitionShape& shape,double begin,double end,juce::String& error)
+{
+    if(shape.version!=1||!std::isfinite(begin)||!std::isfinite(end)||!std::isfinite(shape.boundarySourceSeconds)
+        ||begin<0||end<=begin||shape.boundarySourceSeconds<=begin||shape.boundarySourceSeconds>=end)
+    {error="Transition boundary must lie strictly inside its source coverage";return false;}
+    return true;
+}
+juce::var nativeTransitionShapeValue(const NativeTransitionShape& shape)
+{juce::Array<juce::var> values;values.add(shape.version);values.add(shape.boundarySourceSeconds);values.add(shape.provenance);return juce::var(values);}
+bool nativeTransitionShapeFromValue(const juce::var& value,NativeTransitionShape& output,juce::String& error)
+{
+    const auto* values=value.getArray();if(!values||values->size()!=3||!(*values)[0].isInt()||int((*values)[0])!=1
+        ||!((*values)[1].isDouble()||(*values)[1].isInt()||(*values)[1].isInt64())||!(*values)[2].isString()||!std::isfinite(double((*values)[1])))
+    {error="Invalid versioned transition metadata";return false;}
+    output={1,double((*values)[1]),(*values)[2].toString()};return true;
+}
+bool editNativeTransitionShape(SampleRegionSetting& row,double boundary,juce::String& error)
+{
+    NativeTransitionShape candidate{1,boundary,"manual-transition-boundary"};
+    if(!validateNativeTransitionShape(candidate,row.regionStartSeconds,row.regionEndSeconds,error))return false;
+    if(row.nativePronunciationEdges&&(boundary<row.nativePronunciationEdges->entryToSourceSeconds||boundary>row.nativePronunciationEdges->exitFromSourceSeconds))
+    {error="Transition middle must lie between its left and right fade windows";return false;}
+    row.nativeTransition=std::move(candidate);return true;
+}
+bool validateNativePronunciationEdges(const NativePronunciationEdges& p,double begin,double end,juce::String& error)
+{
+    const double values[]{p.entryFromSourceSeconds,p.entryToSourceSeconds,p.exitFromSourceSeconds,p.exitToSourceSeconds,p.terminationSourceSeconds};
+    if(p.version!=1||!std::isfinite(begin)||!std::isfinite(end)||begin<0||end<begin)
+    {error="Invalid native pronunciation edge profile/version";return false;}
+    for(const auto value:values)if(!std::isfinite(value)||value<begin||value>end)
+    {error="Native pronunciation edge lies outside its physical source coverage";return false;}
+    if(p.entryToSourceSeconds<p.entryFromSourceSeconds||p.exitToSourceSeconds<p.exitFromSourceSeconds
+        ||p.terminationSourceSeconds<p.exitToSourceSeconds)
+    {error="Reversed native pronunciation edge window";return false;}
+    if(std::abs(p.entryFromSourceSeconds-begin)>1.e-9||std::abs(p.exitToSourceSeconds-end)>1.e-9
+        ||std::abs(p.terminationSourceSeconds-end)>1.e-9)
+    {error="Version 1 native edges must anchor the full source coverage";return false;}
+    return true;
+}
+juce::var nativePronunciationEdgesValue(const NativePronunciationEdges& p)
+{
+    juce::Array<juce::var> values;
+    values.add(p.version);values.add(p.entryFromSourceSeconds);values.add(p.entryToSourceSeconds);
+    values.add(p.exitFromSourceSeconds);values.add(p.exitToSourceSeconds);values.add(p.terminationSourceSeconds);values.add(p.provenance);
+    return juce::var(values);
+}
+bool nativePronunciationEdgesFromValue(const juce::var& value,NativePronunciationEdges& out,juce::String& error)
+{
+    const auto* values=value.getArray();
+    if(!values||values->size()!=7||!(*values)[0].isInt()||int((*values)[0])!=1||!(*values)[6].isString())
+    {error="Invalid versioned native pronunciation edge metadata";return false;}
+    NativePronunciationEdges p;double* numbers[]{&p.entryFromSourceSeconds,&p.entryToSourceSeconds,&p.exitFromSourceSeconds,&p.exitToSourceSeconds,&p.terminationSourceSeconds};
+    for(int i=0;i<5;++i)
+    {
+        const auto& n=(*values)[i+1];
+        if(!(n.isDouble()||n.isInt()||n.isInt64())){error="Native pronunciation edge must be numeric";return false;}
+        *numbers[i]=double(n);
+    }
+    p.provenance=(*values)[6].toString();
+    if(!validateNativePronunciationEdges(p,p.entryFromSourceSeconds,p.exitToSourceSeconds,error))return false;
+    out=std::move(p);return true;
+}
+
+namespace
+{
+bool validEdgeEditCoverage(double begin,double end,juce::String& error)
+{
+    if(!std::isfinite(begin)||!std::isfinite(end)||begin<0||end<=begin)
+    {error="Invalid source coverage for native edge edit";return false;}
+    return true;
+}
+}
+bool affineNativePronunciationEdges(const std::optional<NativePronunciationEdges>& old,
+    double oldBegin,double oldEnd,double begin,double end,std::optional<NativePronunciationEdges>& output,juce::String& error)
+{
+    error.clear();
+    if(!validEdgeEditCoverage(oldBegin,oldEnd,error)||!validEdgeEditCoverage(begin,end,error))return false;
+    if(old&&!validateNativePronunciationEdges(*old,oldBegin,oldEnd,error))return false;
+    if(!old){output.reset();return true;}
+    auto candidate=*old;
+    const auto at=[&](double source){return std::lerp(begin,end,(source-oldBegin)/(oldEnd-oldBegin));};
+    candidate.entryFromSourceSeconds=begin;candidate.entryToSourceSeconds=at(old->entryToSourceSeconds);
+    candidate.exitFromSourceSeconds=at(old->exitFromSourceSeconds);candidate.exitToSourceSeconds=end;candidate.terminationSourceSeconds=end;
+    if(!validateNativePronunciationEdges(candidate,begin,end,error))return false;
+    output=std::move(candidate);return true;
+}
+bool clipNativePronunciationEdges(const std::optional<NativePronunciationEdges>& old,
+    double oldBegin,double oldEnd,double begin,double end,std::optional<NativePronunciationEdges>& output,juce::String& error)
+{
+    error.clear();
+    if(!validEdgeEditCoverage(oldBegin,oldEnd,error)||!validEdgeEditCoverage(begin,end,error))return false;
+    if(old&&!validateNativePronunciationEdges(*old,oldBegin,oldEnd,error))return false;
+    if(begin<oldBegin||end>oldEnd){error="Native edge clip must stay inside its old physical coverage";return false;}
+    if(!old){output.reset();return true;}
+    auto candidate=*old;candidate.entryFromSourceSeconds=begin;candidate.exitToSourceSeconds=candidate.terminationSourceSeconds=end;
+    candidate.entryToSourceSeconds=std::clamp(old->entryToSourceSeconds,begin,end);
+    candidate.exitFromSourceSeconds=std::clamp(old->exitFromSourceSeconds,begin,end);
+    if(!validateNativePronunciationEdges(candidate,begin,end,error))return false;
+    output=std::move(candidate);return true;
+}
+bool mergeNativePronunciationEdges(const std::vector<SampleRegionSetting>& rows,
+    std::optional<NativePronunciationEdges>& output,juce::String& error)
+{
+    error.clear();if(rows.empty()){error="No source rows to merge native edges";return false;}
+    bool any=false;
+    for(std::size_t i=0;i<rows.size();++i)
+    {
+        const auto& row=rows[i];
+        if(!validEdgeEditCoverage(row.regionStartSeconds,row.regionEndSeconds,error))return false;
+        if(i&&std::abs(rows[i-1].regionEndSeconds-row.regionStartSeconds)>1.e-7)
+        {error="Native edge merge requires ordered adjacent source rows";return false;}
+        if(row.nativePronunciationEdges)
+        {if(!validateNativePronunciationEdges(*row.nativePronunciationEdges,row.regionStartSeconds,row.regionEndSeconds,error))return false;any=true;}
+    }
+    if(!any){output.reset();return true;}
+    const auto& first=rows.front();const auto& last=rows.back();NativePronunciationEdges candidate;
+    candidate.entryFromSourceSeconds=first.regionStartSeconds;
+    candidate.entryToSourceSeconds=first.nativePronunciationEdges?first.nativePronunciationEdges->entryToSourceSeconds:first.regionStartSeconds;
+    candidate.exitFromSourceSeconds=last.nativePronunciationEdges?last.nativePronunciationEdges->exitFromSourceSeconds:last.regionEndSeconds;
+    candidate.exitToSourceSeconds=candidate.terminationSourceSeconds=last.regionEndSeconds;
+    candidate.provenance=first.nativePronunciationEdges?first.nativePronunciationEdges->provenance
+        :last.nativePronunciationEdges?last.nativePronunciationEdges->provenance:juce::String("merged-native-edges");
+    if(!validateNativePronunciationEdges(candidate,first.regionStartSeconds,last.regionEndSeconds,error))return false;
+    output=std::move(candidate);return true;
+}
+bool defaultNativePronunciationEdges(const SampleRegionSetting& row,NativePronunciationEdges& output,juce::String& error)
+{
+    if(row.pronunciationKind==PronunciationKind::transition&&row.nativeTransition)return defaultNativeTransitionEdges(row,output,error);
+    error.clear();
+    if(!validEdgeEditCoverage(row.regionStartSeconds,row.regionEndSeconds,error)
+        ||!std::isfinite(row.overlapSeconds)||!std::isfinite(row.fixedDurationSeconds)||!std::isfinite(row.alignmentSeconds))
+    {if(error.isEmpty())error="Invalid P/C/overlap for native edge defaults";return false;}
+    NativePronunciationEdges candidate;candidate.entryFromSourceSeconds=row.regionStartSeconds;
+    // Explicit creation projects legal legacy timing into NEW bounded audible
+    // windows; it never clamps or repairs a stored profile or the raw P/C/O.
+    const auto length=row.regionEndSeconds-row.regionStartSeconds;
+    candidate.entryToSourceSeconds=std::min(row.regionEndSeconds,row.regionStartSeconds+std::clamp(row.overlapSeconds,0.0,length));
+    candidate.exitFromSourceSeconds=std::min(row.regionEndSeconds,row.regionStartSeconds+std::clamp(row.fixedDurationSeconds,0.0,length));
+    candidate.exitToSourceSeconds=candidate.terminationSourceSeconds=row.regionEndSeconds;
+    candidate.provenance=row.provenance.isNotEmpty()?row.provenance:juce::String("native-cvvc-default-v1");
+    if(!validateNativePronunciationEdges(candidate,row.regionStartSeconds,row.regionEndSeconds,error))return false;
+    output=std::move(candidate);return true;
+}
+bool editNativePronunciationEdges(SampleRegionSetting& row,bool enabled,double entryTo,double exitFrom,juce::String& error)
+{
+    error.clear();if(!enabled){row.nativePronunciationEdges.reset();return true;}
+    NativePronunciationEdges candidate;
+    if(row.nativePronunciationEdges)candidate=*row.nativePronunciationEdges;
+    else if(!defaultNativePronunciationEdges(row,candidate,error))return false;
+    candidate.entryFromSourceSeconds=row.regionStartSeconds;candidate.entryToSourceSeconds=entryTo;
+    candidate.exitFromSourceSeconds=exitFrom;candidate.exitToSourceSeconds=candidate.terminationSourceSeconds=row.regionEndSeconds;
+    if(!validateNativePronunciationEdges(candidate,row.regionStartSeconds,row.regionEndSeconds,error))return false;
+    if(row.pronunciationKind==PronunciationKind::transition&&row.nativeTransition
+        &&(candidate.entryToSourceSeconds>row.nativeTransition->boundarySourceSeconds||candidate.exitFromSourceSeconds<row.nativeTransition->boundarySourceSeconds))
+    {error="Transition fade windows must remain on their respective sides of the middle";return false;}
+    row.nativePronunciationEdges=std::move(candidate);return true;
+}
+
+bool defaultNativeTransitionEdges(const SampleRegionSetting& row,NativePronunciationEdges& out,juce::String& error)
+{
+    if(!row.nativeTransition||!validateNativeTransitionShape(*row.nativeTransition,row.regionStartSeconds,row.regionEndSeconds,error))return false;
+    const auto split=row.nativeTransition->boundarySourceSeconds;
+    NativePronunciationEdges edges;edges.entryFromSourceSeconds=row.regionStartSeconds;
+    edges.entryToSourceSeconds=row.regionStartSeconds+std::min(.005,(split-row.regionStartSeconds)*.2);
+    edges.exitFromSourceSeconds=row.regionEndSeconds-std::min(.005,(row.regionEndSeconds-split)*.2);
+    edges.exitToSourceSeconds=edges.terminationSourceSeconds=row.regionEndSeconds;edges.provenance="cvvc-transition-source-default-v1";
+    if(!validateNativePronunciationEdges(edges,row.regionStartSeconds,row.regionEndSeconds,error))return false;
+    out=std::move(edges);return true;
+}
+
 juce::String pronunciationKindName(PronunciationKind kind)
 {
     switch (kind)
@@ -35,6 +205,9 @@ PronunciationTiming pronunciationTimingFor(const SampleRegionSetting& row)
         std::isfinite(row.alignmentSeconds) ? row.alignmentSeconds : timing.sourceStartSeconds);
     timing.consonantEndSeconds = juce::jlimit(timing.sourceStartSeconds, timing.sourceEndSeconds,
         timing.sourceStartSeconds + (std::isfinite(row.fixedDurationSeconds) ? row.fixedDurationSeconds : 0.0));
+    // A registered transition pronunciation has no lead-in. Its identity kind
+    // governs P; internal C/V segment roles must not impersonate this property.
+    if(row.pronunciationKind==PronunciationKind::transition)timing.alignmentSeconds=timing.consonantEndSeconds=timing.sourceStartSeconds;
     timing.overlapSeconds = std::isfinite(row.overlapSeconds) ? row.overlapSeconds : 0.0;
     timing.simplifiedConsonant = row.simplifiedConsonant;
     if (timing.simplifiedConsonant) timing.consonantEndSeconds = std::max(timing.alignmentSeconds, timing.consonantEndSeconds);
@@ -202,6 +375,13 @@ std::vector<NativeSegment> canonicalAbsoluteSegments(const SampleRegionSetting& 
 std::vector<NativeSegment> pronunciationSegmentsFor(const SampleRegionSetting& row)
 {
     const auto timing = pronunciationTimingFor(row);
+    if(row.pronunciationKind==PronunciationKind::transition&&row.nativeTransition)
+    {
+        juce::String error;if(!validateNativeTransitionShape(*row.nativeTransition,row.regionStartSeconds,row.regionEndSeconds,error))return {};
+        std::vector<NativeSegment> result;
+        const double cuts[]{0.0,row.nativeTransition->boundarySourceSeconds-row.regionStartSeconds,row.regionEndSeconds-row.regionStartSeconds};
+        for(int i=0;i<2;++i){NativeSegment segment;segment.id=(row.materialRegionId.isEmpty()?juce::String("transition"):row.materialRegionId)+(i?"-right":"-left");segment.alias=row.name;segment.role=NativeSegmentRole::transition;segment.sourceStartSeconds=cuts[i];segment.sourceEndSeconds=cuts[i+1];segment.alignmentSeconds=0;segment.stretchable=true;segment.stretchWeight=1;result.push_back(segment);}return result;
+    }
     auto segments = canonicalAbsoluteSegments(row, timing);
     for (auto& segment : segments)
     {
@@ -221,16 +401,27 @@ bool applyPronunciationTiming(SampleRegionSetting& row, PronunciationTiming timi
         || timing.sourceEndSeconds - timing.sourceStartSeconds <= timingEpsilon)
     { error = "Invalid pronunciation source timing"; return false; }
     if (!validSourceZones(row, error)) return false;
-    timing.alignmentSeconds = juce::jlimit(timing.sourceStartSeconds, timing.sourceEndSeconds, timing.alignmentSeconds);
-    timing.consonantEndSeconds = juce::jlimit(timing.sourceStartSeconds, timing.sourceEndSeconds, timing.consonantEndSeconds);
+    timing.alignmentSeconds = row.pronunciationKind==PronunciationKind::transition?timing.sourceStartSeconds
+        :juce::jlimit(timing.sourceStartSeconds, timing.sourceEndSeconds, timing.alignmentSeconds);
+    timing.consonantEndSeconds = row.pronunciationKind==PronunciationKind::transition?timing.sourceStartSeconds
+        :juce::jlimit(timing.sourceStartSeconds, timing.sourceEndSeconds, timing.consonantEndSeconds);
+    if(row.pronunciationKind==PronunciationKind::transition)timing.simplifiedConsonant=false;
     if (timing.simplifiedConsonant) timing.consonantEndSeconds = std::max(timing.alignmentSeconds, timing.consonantEndSeconds);
     auto next = row;
+    if(next.nativeTransition&&(row.regionStartSeconds!=timing.sourceStartSeconds||row.regionEndSeconds!=timing.sourceEndSeconds))
+        next.nativeTransition->boundarySourceSeconds=std::lerp(timing.sourceStartSeconds,timing.sourceEndSeconds,(next.nativeTransition->boundarySourceSeconds-row.regionStartSeconds)/(row.regionEndSeconds-row.regionStartSeconds));
     next.regionStartSeconds = timing.sourceStartSeconds; next.regionEndSeconds = timing.sourceEndSeconds;
     next.alignmentSeconds = timing.alignmentSeconds;
     next.fixedDurationSeconds = timing.consonantEndSeconds - timing.sourceStartSeconds;
     next.overlapSeconds = timing.overlapSeconds;
     next.simplifiedConsonant = timing.simplifiedConsonant;
-    next.segments = canonicalAbsoluteSegments(next, timing);
+    if(next.pronunciationKind==PronunciationKind::transition&&next.nativeTransition)
+    {
+        if(!validateNativeTransitionShape(*next.nativeTransition,next.regionStartSeconds,next.regionEndSeconds,error))return false;
+        next.segments=pronunciationSegmentsFor(next);for(auto& segment:next.segments){segment.sourceStartSeconds+=next.regionStartSeconds;segment.sourceEndSeconds+=next.regionStartSeconds;segment.alignmentSeconds+=next.regionStartSeconds;}
+        next.role=NativeSegmentRole::transition;next.vowelSplitsExplicit=false;next.connectedNextRegionId.clear();
+    }
+    else next.segments = canonicalAbsoluteSegments(next, timing);
     row = std::move(next);
     return true;
 }
@@ -288,7 +479,7 @@ bool makePronunciationStretchMap(const SampleRegionSetting& row, double targetDu
     {
         const auto& segment = segments[i];
         lengths[i] = segment.sourceEndSeconds - segment.sourceStartSeconds;
-        if (segment.role == NativeSegmentRole::vowel && segment.stretchable)
+        if ((segment.role == NativeSegmentRole::vowel || row.pronunciationKind==PronunciationKind::transition) && segment.stretchable)
         {
             if (!std::isfinite(segment.stretchWeight) || segment.stretchWeight <= 0)
             { error = "Elastic vowel weight must be positive"; return false; }

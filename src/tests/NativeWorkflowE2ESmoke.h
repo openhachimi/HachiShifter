@@ -176,10 +176,10 @@ inline bool MainComponent::diagnosticNativeWorkflow(const juce::File& output,con
         ~RestoreCallbacks(){if(manager!=nullptr){manager->onMaterialPreflight=std::move(preflight);manager->onMaterialSaved=std::move(saved);}}
     } restoreCallbacks{assetManager.get(),assetManager->onMaterialPreflight,assetManager->onMaterialSaved};
     check("main_central_publication_callbacks_wired",bool(restoreCallbacks.preflight)&&bool(restoreCallbacks.saved));
-    assetManager->onMaterialPreflight=[&,actual=restoreCallbacks.preflight](const auto& file,const auto& rows,juce::String& reason)
-    {++preflights;return actual&&actual(file,rows,reason);};
-    assetManager->onMaterialSaved=[&,actual=restoreCallbacks.saved](const auto& file,const auto& rows)
-    {++publications;if(actual)actual(file,rows);};
+    assetManager->onMaterialPreflight=[&,actual=restoreCallbacks.preflight](const auto& file,const auto& rows,juce::String& reason,const juce::String& scope)
+    {++preflights;return actual&&actual(file,rows,reason,scope);};
+    assetManager->onMaterialSaved=[&,actual=restoreCallbacks.saved](const auto& file,const auto& rows,const juce::String& scope)
+    {++publications;if(actual)actual(file,rows,scope);};
     const auto folderIndex=assetManager->diagnosticRegisterFolder(bank);
     check("import_folder_through_actual_registration",folderIndex>=0&&assetManager->diagnosticFolderCount()==1
         &&assetManager->diagnosticMembersOf(folderIndex).size()==1);

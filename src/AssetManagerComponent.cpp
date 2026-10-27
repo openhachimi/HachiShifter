@@ -245,7 +245,7 @@ std::vector<juce::File> AssetManagerComponent::membersOf(const juce::File& folde
 
 void AssetManagerComponent::rebuildMemberList(bool refresh)
 {
-    const auto previousAudio = diagnosticSelectedAudio();
+    const auto previousAudio = selectedMaterialAudio();
     members.clear();
     selectedMember = -1;
     if (selectedFolder >= 0 && selectedFolder < static_cast<int>(folders.size()))
@@ -304,8 +304,7 @@ juce::File AssetManagerComponent::takeAudioIntoFolder(const juce::File& source,
 void AssetManagerComponent::addCommunityDatasetImportAction(juce::PopupMenu& menu) const
 {
     menu.addItem(communityDatasetImportAction,
-        strings.getLanguage() == I18n::Language::zhCN
-            ? juce::String::fromUTF8("导入社区 DiffSinger 数据集…") : "Import community DiffSinger dataset...",
+        strings.text("csv.menu"),
         onRequestCommunityDatasetImport != nullptr);
 }
 
@@ -324,12 +323,23 @@ juce::PopupMenu AssetManagerComponent::diagnosticCommunityDatasetImportMenu() co
     return menu;
 }
 
+void AssetManagerComponent::addJapaneseAutoAnnotationAction(juce::PopupMenu& menu) const
+{ menu.addItem(japaneseAutoAnnotationAction,strings.text("jaAuto.menu"),onRequestJapaneseAutoAnnotation != nullptr); }
+bool AssetManagerComponent::requestJapaneseAutoAnnotation(const juce::File& root)
+{
+    const auto callback = onRequestJapaneseAutoAnnotation;
+    if (!callback || !root.isDirectory()) return false;
+    callback(root); return true;
+}
+juce::PopupMenu AssetManagerComponent::diagnosticJapaneseAutoAnnotationMenu() const
+{ juce::PopupMenu menu; addJapaneseAutoAnnotationAction(menu); return menu; }
+
 void AssetManagerComponent::showFolderActions()
 {
     const auto selected = juce::isPositiveAndBelow(selectedFolder, static_cast<int>(folders.size()));
     juce::PopupMenu menu;
     menu.addItem(1, strings.text("asset.importFolder"));
-    // Community dataset UI is postponed; keep the host seam dormant.
+    addCommunityDatasetImportAction(menu); // one CSV action, shared host dispatch
     menu.addItem(2, strings.text("asset.newFolder"));
     menu.addSeparator();
     menu.addItem(3, strings.text("asset.addAudio"), selected);
@@ -1090,7 +1100,7 @@ bool AssetManagerComponent::diagnosticSelectPronunciation(const juce::File& audi
     return false;
 }
 
-bool AssetManagerComponent::diagnosticSelectRegistration(const juce::File& audio, const juce::String& requested)
+bool AssetManagerComponent::selectMaterialRegistration(const juce::File& audio, const juce::String& requested)
 {
     juce::String id;
     if (!resolveVariantId(audio, requested, id)) return false;
@@ -1103,7 +1113,8 @@ bool AssetManagerComponent::diagnosticSelectRegistration(const juce::File& audio
         if (member == folder.children.end()) continue;
         selectedFolder = f; members = folder.children; selectedMember = static_cast<int>(member - folder.children.begin());
         pronunciationSelectionAudio = audio; selectedAudioVariantId = id;
-        selectedRegionIds.clear(); selectionAnchor.clear(); pronunciationSelectionActive = false; repaint(); return true;
+        selectedRegionIds.clear(); selectionAnchor.clear(); pronunciationSelectionActive = false;
+        folder.expanded=true;expandedAudio.insert(materialPathKey(audio)+"\n"+id);rebuildTreeRows();return true;
     }
     return false;
 }
@@ -1188,7 +1199,7 @@ void AssetManagerComponent::toggleFolder(int index)
         folder.childrenLoaded = true;
         if (index == selectedFolder)
         {
-            const auto previous = diagnosticSelectedAudio();
+            const auto previous = selectedMaterialAudio();
             members = folder.children;
             const auto found = std::find(members.begin(), members.end(), previous);
             selectedMember = found == members.end() ? -1 : static_cast<int>(found - members.begin());
@@ -1197,10 +1208,57 @@ void AssetManagerComponent::toggleFolder(int index)
     rebuildTreeRows();
 }
 
-juce::File AssetManagerComponent::diagnosticSelectedAudio() const
+juce::File AssetManagerComponent::selectedMaterialAudio() const
 {
     return selectedMember >= 0 && selectedMember < static_cast<int>(members.size())
         ? members[static_cast<std::size_t>(selectedMember)] : juce::File{};
+}
+
+juce::Rectangle<int> AssetManagerComponent::previewButtonBounds(const TreeRow& row) const
+{
+    if(row.member<0||row.region == -2)return {};
+    const int right=getWidth()-(treeScroll.isVisible()?12:0);
+    return {right-30,toolbarHeight+row.top-scrollOffset+2,26,std::max(0,row.height-4)};
+}
+bool AssetManagerComponent::previewButtonEnabled(const TreeRow& row) const
+{
+    if(!onPreviewSource||row.member<0||row.region == -2)return false;
+    const auto& file=folders[static_cast<std::size_t>(row.folder)].children[static_cast<std::size_t>(row.member)];
+    if(!file.existsAsFile())return false;
+    if(row.region == -1)return true;
+    const auto& cache=ensureManifest(folders[static_cast<std::size_t>(row.folder)].directory);
+    return !cache.pendingAudio.count(materialPathKey(file))&&cache.error.isEmpty()&&cache.audioErrors.count(materialPathKey(file))==0;
+}
+void AssetManagerComponent::previewTreeRow(const TreeRow& row)
+{
+    if(!previewButtonEnabled(row))return;
+    const auto file=folders[static_cast<std::size_t>(row.folder)].children[static_cast<std::size_t>(row.member)];
+    const auto callback=onPreviewSource;
+    if(row.region == -1){callback(file,0,-1);return;}
+    std::vector<SampleRegionSetting> rows;juce::String error;
+    const auto root=folders[static_cast<std::size_t>(row.folder)].directory;
+    // Re-resolve the EXACT stable variant/region at click time, not a cached
+    // vector index or a nearest/first row from another same-file registration.
+    if(OttoMaterialMigration::readAudioAnnotations(file,root,UtauMode::classic,rows,error,row.audioVariantId))
+    {
+        const auto found=std::find_if(rows.begin(),rows.end(),[&](const auto& candidate){return candidate.materialRegionId==row.regionId;});
+        if(found!=rows.end()&&found->regionEndSeconds>found->regionStartSeconds)
+        {callback(file,found->regionStartSeconds,found->regionEndSeconds);return;}
+    }
+    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,strings.text("preview.unavailable"),strings.text("preview.stale")+"\n"+error);
+}
+juce::Rectangle<int> AssetManagerComponent::diagnosticPreviewButtonBounds(const juce::File& file,const juce::String& audioId,const juce::String& regionId) const
+{
+    for(const auto& row:treeRows)if(row.member>=0&&row.audioVariantId==audioId&&row.regionId==regionId
+        &&folders[static_cast<std::size_t>(row.folder)].children[static_cast<std::size_t>(row.member)]==file)return previewButtonBounds(row);
+    return {};
+}
+juce::String AssetManagerComponent::getTooltip()
+{
+    const auto point=getMouseXYRelative();const int index=treeRowAt(point.y);
+    if(index<0)return {};const auto& row=treeRows[static_cast<std::size_t>(index)];
+    if(!previewButtonBounds(row).contains(point))return {};
+    return strings.text(previewButtonEnabled(row)?(row.region == -1?"preview.recording":"preview.pronunciation"):"preview.unavailable");
 }
 
 void AssetManagerComponent::mouseDown(const juce::MouseEvent& event)
@@ -1214,6 +1272,8 @@ void AssetManagerComponent::mouseDown(const juce::MouseEvent& event)
     const auto index = treeRowAt(event.y);
     if (index < 0) return;
     const auto row = treeRows[static_cast<std::size_t>(index)];
+    if(previewButtonBounds(row).contains(event.getPosition()))
+    { if(event.mods.isLeftButtonDown()&&event.getNumberOfClicks()==1)previewTreeRow(row);return; }
     if (row.member == -1 && event.x < 30 && !event.mods.isPopupMenu())
     {
         // The second down of a double-click must not undo the first toggle.
@@ -1246,6 +1306,8 @@ void AssetManagerComponent::mouseDown(const juce::MouseEvent& event)
     setWantsKeyboardFocus(true);
     if (isShowing()) grabKeyboardFocus();
     repaint();
+    if (onMaterialSelectionChanged && file.existsAsFile())
+        onMaterialSelectionChanged(file, row.audioVariantId, row.region >= 0 ? selectedRegionIds : juce::StringArray{});
     if (event.mods.isPopupMenu())
     {
         dragStartFile = juce::File{};
@@ -1255,16 +1317,20 @@ void AssetManagerComponent::mouseDown(const juce::MouseEvent& event)
             juce::PopupMenu menu;
             menu.addItem(1, strings.text("Migrate to native OTTO annotations..."));
             menu.addItem(2, strings.text("asset.exportOto"));
-            // Community dataset UI is postponed; no public root action.
+            // CSV import has one toolbar menu action; do not duplicate it here.
+            addJapaneseAutoAnnotationAction(menu);
             menu.addItem(3, strings.text("Use for current track"), onUseMaterialFolder != nullptr);
+            menu.addItem(4, strings.text("asset.refreshFolder"));
             menu.showMenuAsync(popupOptions,
                 [safe = juce::Component::SafePointer<AssetManagerComponent>(this), folder](int result)
                 {
                     if (safe == nullptr) return;
-                    if (result == communityDatasetImportAction) safe->requestCommunityDatasetImport(folder);
+                    if (result == japaneseAutoAnnotationAction) safe->requestJapaneseAutoAnnotation(folder);
+                    else if (result == communityDatasetImportAction) safe->requestCommunityDatasetImport(folder);
                     else if (result == 1) safe->migrateFolderDialog(folder);
                     else if (result == 2) safe->chooseOtoExport(folder);
                     else if (result == 3 && safe->onUseMaterialFolder) safe->onUseMaterialFolder(folder);
+                    else if (result == 4) safe->refreshMaterialFolder(folder);
                 });
             return;
         }
@@ -1436,6 +1502,7 @@ void AssetManagerComponent::mouseDoubleClick(const juce::MouseEvent& event)
     const auto index = treeRowAt(event.y);
     if (index < 0) return;
     const auto row = treeRows[static_cast<std::size_t>(index)];
+    if(previewButtonBounds(row).contains(event.getPosition()))return;
     if (row.member == -1)
     {
         if (event.x >= 30) toggleFolder(row.folder);
@@ -1452,6 +1519,52 @@ void AssetManagerComponent::refreshMaterialAnnotations(const juce::File& source)
 {
     manifestCaches.erase(materialPathKey(rootForAudio(source)));
     rebuildMemberList();
+}
+
+bool AssetManagerComponent::selectPronunciationForReveal(const juce::File& audio, const juce::String& audioId, const juce::String& regionId)
+{
+    if (!selectPronunciation(audio, regionId, false, false, false, audioId)) return false;
+    rebuildTreeRows();
+    for (std::size_t i = 0; i < treeRows.size(); ++i)
+        if (treeRows[i].regionId == regionId && treeRows[i].audioVariantId == audioId)
+        {
+            const auto height = std::max(0, getHeight() - toolbarHeight); const auto& row = treeRows[i];
+            if (row.top < scrollOffset || row.top + row.height > scrollOffset + height)
+                scrollOffset = std::max(0, row.top - height / 3);
+            updateScrollRange(); break;
+        }
+    repaint(); return true;
+}
+
+void AssetManagerComponent::notifyExternalMaterialChange(const juce::File& source)
+{
+    refreshMaterialFolder(source);
+    editorWindows.forEachVisible<OtoWaveformEditorComponent>([&](OtoWaveformEditorComponent& editor)
+    { if (editor.materialSourceAudio() == source || source.isDirectory() && editor.materialSourceAudio().isAChildOf(source)) editor.notifyExternalSourceChange(); });
+}
+
+void AssetManagerComponent::refreshMaterialFolder(const juce::File& rootOrMember)
+{
+    // Expansion/selection keys are paths, so they survive the reload.
+    for (auto& folder : folders)
+        if (rootOrMember == folder.directory || rootOrMember.isAChildOf(folder.directory) || folder.directory.isAChildOf(rootOrMember))
+        { manifestCaches.erase(materialPathKey(folder.directory)); folder.childrenLoaded = false; }
+    manifestCaches.erase(materialPathKey(rootForAudio(rootOrMember)));
+    for (auto& folder : folders)
+        if (folder.expanded && !folder.childrenLoaded) { folder.children = membersOf(folder.directory); folder.childrenLoaded = true; }
+    rebuildMemberList();
+}
+
+bool AssetManagerComponent::ownsMaterialEditor(const OtoWaveformEditorComponent* editor) const
+{return editorWindows.keyForContent(editor).isNotEmpty();}
+bool AssetManagerComponent::retargetCleanMaterialEditor(OtoWaveformEditorComponent& editor,const juce::File& manifest,const juce::String& exactAudioId,juce::String& error)
+{
+    const auto key="material-precise|"+editor.materialSourceAudio().getFullPathName()+"|"+exactAudioId;
+    if(!editorWindows.canRekeyContent(&editor,key)){error="Another live source window already owns this exact annotation registration";return false;}
+    if(!editor.retargetCleanSourceVariant(manifest,exactAudioId,error))return false;
+    // No message-loop turn occurs between the preflight, exact Session swap and
+    // key assignment, so another window cannot claim this identity in between.
+    return editorWindows.rekeyContent(&editor,key);
 }
 
 void AssetManagerComponent::openMemberEditor(const juce::File& member, const juce::String& regionId,
@@ -1497,11 +1610,11 @@ void AssetManagerComponent::openMemberEditor(const juce::File& member, const juc
     const auto manifest = root.getChildFile("otto.ini");
     juce::String openError;
     auto editor = OtoWaveformEditorComponent::forMaterial(member, manifest, strings,
-        [safe = juce::Component::SafePointer<AssetManagerComponent>(this), member](const auto& rows)
+        [safe = juce::Component::SafePointer<AssetManagerComponent>(this), member, audioId](const auto& rows)
         {
             if (safe == nullptr) return;
             backend::UtauRenderer::invalidateVoicebankCache();
-            if (safe->onMaterialSaved) safe->onMaterialSaved(member, rows);
+            if (safe->onMaterialSaved) safe->onMaterialSaved(member, rows, audioId);
             if (safe != nullptr) safe->refreshMaterialAnnotations(member);
         }, false, &openError, audioId);
     if (!editor)
@@ -1519,10 +1632,10 @@ void AssetManagerComponent::openMemberEditor(const juce::File& member, const juc
     }
     if (onConfigureMaterialEditor) onConfigureMaterialEditor(*editor);
     editor->setPublicationValidator(
-        [safe = juce::Component::SafePointer<AssetManagerComponent>(this), member](const auto& rows, juce::String& error)
+        [safe = juce::Component::SafePointer<AssetManagerComponent>(this), member, audioId](const auto& rows, juce::String& error)
         {
             if (safe == nullptr) { error = "Material manager was closed"; return false; }
-            return !safe->onMaterialPreflight || safe->onMaterialPreflight(member, rows, error);
+            return !safe->onMaterialPreflight || safe->onMaterialPreflight(member, rows, error, audioId);
         });
     juce::DialogWindow::LaunchOptions options;
     options.dialogTitle = strings.text("asset.editTitle") + " — " + member.getFileName()
@@ -1620,7 +1733,7 @@ void AssetManagerComponent::paint(juce::Graphics& g)
             pane.reduced(16), juce::Justification::centred, 4);
         return;
     }
-    const auto selectedAudio = diagnosticSelectedAudio();
+    const auto selectedAudio = selectedMaterialAudio();
     const auto first = treeRowAt(toolbarHeight);
     if (first < 0) return;
     for (int index = first; index < static_cast<int>(treeRows.size()); ++index)
@@ -1679,6 +1792,14 @@ void AssetManagerComponent::paint(juce::Graphics& g)
                     arrow.addTriangle(34.0f, y - 3.0f, 46.0f, y - 3.0f, 40.0f, y + 4.0f);
                 else arrow.addTriangle(37.0f, y - 5.0f, 37.0f, y + 5.0f, 44.0f, y);
                 g.fillPath(arrow);
+            }
+            if(entry.region != -2)
+            {
+                const auto button=previewButtonBounds(entry).toFloat();
+                g.setColour(previewButtonEnabled(entry)?Palette::accentLight:Palette::textMuted.withAlpha(0.35f));
+                g.drawRoundedRectangle(button,3.0f,1.0f);juce::Path play;
+                const auto x=button.getCentreX(),y=button.getCentreY();play.addTriangle(x-3,y-5,x-3,y+5,x+5,y);g.fillPath(play);
+                row.removeFromRight(34);
             }
             row.removeFromLeft(entry.region == -1 ? 50 : 66);
             g.setFont(entry.region == -2 ? 11.0f : 13.0f);

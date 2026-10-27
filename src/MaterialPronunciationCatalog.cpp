@@ -1,10 +1,12 @@
 #include "MaterialPronunciationCatalog.h"
 #include "OttoMaterialIO.h"
 #include "OttoMaterialMigration.h"
+#include "NativeMaterialSelectionPlan.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <limits>
 #include <memory>
 #include <set>
 
@@ -204,6 +206,76 @@ Catalog::Result Catalog::index(const std::vector<Root>& requested, Cancel cancel
         return a.alias < b.alias;
     });
     return result;
+}
+
+bool Catalog::continuousRows(const std::vector<SampleRegionSetting>& rows,const String& leftId,const String& rightId,String& error)
+{
+    error.clear();constexpr double epsilon=1.e-8;
+    const auto a=std::find_if(rows.begin(),rows.end(),[&](const auto& row){return row.materialRegionId==leftId;});
+    const auto b=std::find_if(rows.begin(),rows.end(),[&](const auto& row){return row.materialRegionId==rightId;});
+    if(a==rows.end()||b==rows.end()||a==b||a->materialAudioId.isEmpty()||a->materialAudioId!=b->materialAudioId)
+    {error="Missing or incompatible source-row identity";return false;}
+    if(a->pronunciationKind==PronunciationKind::transition||b->pronunciationKind==PronunciationKind::transition)
+    {error="A transition pronunciation is completely cut, not a source-continuity chain";return false;}
+    if(b->regionStartSeconds<=a->regionStartSeconds+epsilon||b->alignmentSeconds<=a->alignmentSeconds+epsilon)
+    {error="Source row order is not strictly chronological";return false;}
+    double nextStart=std::numeric_limits<double>::infinity();for(const auto& row:rows)if(row.regionStartSeconds>a->regionStartSeconds+epsilon)nextStart=std::min(nextStart,row.regionStartSeconds);
+    if(std::abs(b->regionStartSeconds-nextStart)>epsilon||(a->connectedNextRegionId.isNotEmpty()&&a->connectedNextRegionId!=rightId)
+        ||(b->regionStartSeconds>a->regionEndSeconds+epsilon&&a->connectedNextRegionId!=rightId))
+    {error="The source rows are not an explicitly contiguous ordered chain";return false;}
+    NativeMaterialSelectionPlan proof;return planNativeMaterialSelection(rows,{leftId,rightId},proof,error);
+}
+
+bool Catalog::matchSequences(const std::vector<Entry>& entries,const juce::StringArray& lyrics,
+    std::vector<Sequence>& output,String& error,Cancel cancel)
+{
+    error.clear();std::vector<Sequence> result;if(lyrics.size()<2){output.clear();return true;}
+    constexpr double epsilon=1.e-8;constexpr std::size_t maximumChoices=4096;
+    struct Row{SampleRegionSetting row;std::vector<const Entry*> aliases;};
+    std::map<String,std::map<String,Row>> groups;
+    for(const auto& entry:entries)
+    {
+        if(cancel&&cancel()){error="Pronunciation sequence search cancelled";return false;}
+        const auto groupKey=key(entry.root)+"\n"+key(entry.audio)+"\n"+entry.audioId+"\n"+String(int(entry.format));
+        auto& row=groups[groupKey][entry.regionId];if(row.aliases.empty())row.row=entry.row;row.aliases.push_back(&entry);
+    }
+    for(const auto& [groupId,byId]:groups)
+    {
+        juce::ignoreUnused(groupId);std::vector<const Row*> ordered;std::vector<SampleRegionSetting> fullRows;
+        for(const auto& [id,row]:byId){juce::ignoreUnused(id);ordered.push_back(&row);fullRows.push_back(row.row);}
+        std::stable_sort(ordered.begin(),ordered.end(),[](const auto* a,const auto* b){return a->row.regionStartSeconds<b->row.regionStartSeconds;});
+        const auto continues=[&](const SampleRegionSetting& left,const SampleRegionSetting& right)
+        {
+            String why;return continuousRows(fullRows,left.materialRegionId,right.materialRegionId,why);
+        };
+        for(const auto* first:ordered)for(const auto* alias:first->aliases)
+        {
+            if(!alias->alias.equalsIgnoreCase(lyrics[0].trim()))continue;
+            std::vector<Sequence> prefixes{{{*alias}}};
+            for(int lyric=1;lyric<lyrics.size()&&!prefixes.empty();++lyric)
+            {
+                if(cancel&&cancel()){error="Pronunciation sequence search cancelled";return false;}
+                std::vector<Sequence> next;
+                for(const auto& prefix:prefixes)
+                {
+                    const auto& previous=prefix.members.back();double nextStart=std::numeric_limits<double>::infinity();
+                    for(const auto* row:ordered)if(row->row.regionStartSeconds>previous.row.regionStartSeconds+epsilon)nextStart=std::min(nextStart,row->row.regionStartSeconds);
+                    for(const auto* row:ordered)
+                    {
+                        if(std::abs(row->row.regionStartSeconds-nextStart)>epsilon||!continues(previous.row,row->row))continue;
+                        for(const auto* match:row->aliases)if(match->alias.equalsIgnoreCase(lyrics[lyric].trim()))
+                        {
+                            auto choice=prefix;choice.members.push_back(*match);result.push_back(choice);next.push_back(std::move(choice));
+                            if(result.size()>maximumChoices){error="Too many explicit source-chain choices; reduce the selected score range";return false;}
+                        }
+                    }
+                }
+                prefixes=std::move(next);
+            }
+        }
+    }
+    std::stable_sort(result.begin(),result.end(),[](const auto& a,const auto& b){return a.members.size()>b.members.size();});
+    output=std::move(result);return true;
 }
 
 bool Catalog::resolve(const Entry& selected, Entry& current, String& error,

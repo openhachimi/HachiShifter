@@ -3,6 +3,8 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <vector>
 
+namespace hachi::backend { struct NsfHifiganSourcePart; }
+
 namespace hachi::backend
 {
 struct WorldTimeMapPoint
@@ -14,6 +16,15 @@ struct WorldTimeMapPoint
 class WorldRenderer final
 {
 public:
+    // Analyse each immutable source on its own clock, combine WORLD power spectra
+    // on the group target frame axis, and perform exactly one final synthesis.
+    static juce::AudioBuffer<float> renderAssembly(
+        const std::vector<NsfHifiganSourcePart>& assembly,
+        int targetSamples, double sampleRate, double framePeriodMs,
+        const std::vector<float>& targetMidi,
+        const std::vector<float>& formantSemitones,
+        juce::AudioBuffer<float>* noiseOutput = nullptr);
+
     static juce::AudioBuffer<float> render(
         const juce::AudioBuffer<float>& source,
         int targetSamples,

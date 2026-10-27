@@ -20,8 +20,12 @@ public:
                       juce::PropertiesFile& propertiesToUse, Applied appliedToUse);
     ~SettingsComponent() override;
     void resized() override;
+    void paint(juce::Graphics& g) override { g.fillAll(Palette::panel); }
+    void lookAndFeelChanged() override;
     void selectPage(int page) { tabs.setCurrentTabIndex(page, false); }
     [[nodiscard]] int diagnosticTabCount() const { return tabs.getNumTabs(); }
+    [[nodiscard]] int diagnosticImportedAlgorithmItem() const { return importedAlgorithm.getSelectedId(); }
+    [[nodiscard]] int diagnosticImportedStretchAlgorithmItem() const { return importedStretchAlgorithm.getSelectedId(); }
     [[nodiscard]] int diagnosticInferenceDeviceCount() const
     {
         return inferenceDevice.getNumItems();
@@ -52,6 +56,7 @@ private:
     class FormPage final : public juce::Component
     {
     public:
+        void paint(juce::Graphics& g) override { g.fillAll(Palette::panel); }
         void addRow(juce::Label& label, juce::Component& editor);
         void addWide(juce::Component& component, int height = 28);
         void resized() override;
@@ -91,12 +96,15 @@ private:
     juce::ComboBox dsBackend, dsDevice, dsPreview, dsExport;
     juce::Slider dsAcoustic, dsPitch, dsVariance, dsDepth;
 
-    juce::Label languageLabel, themeLabel, accentLabel, accentLightLabel, noteColourLabel;
-    juce::ComboBox language, theme;
+    juce::Label languageLabel, themeLabel, accentLabel, accentLightLabel, noteColourLabel, noteStyleLabel;
+    juce::ComboBox language, theme, noteStyle;
+    bool themeEdited=false;
     juce::TextEditor accent, accentLight, noteColour;
     juce::ToggleButton showNoteLabels, softwareRendering;
     juce::Label uiScaleLabel;
     juce::Slider uiScale;
+    juce::Label translationLabel, translationReloadLabel, translationStatus;
+    juce::TextButton openTranslations, reloadTranslations;
 
     juce::Label audioDeviceLabel, sampleRateLabel, bufferSizeLabel, currentAudioDevice;
     juce::ComboBox sampleRate, bufferSize;
@@ -119,7 +127,8 @@ private:
                 importedStretchAlgorithmLabel;
     juce::ComboBox melodyneCompose, melodynePitchSource, importedAlgorithm,
                    importedStretchAlgorithm;
-    juce::ToggleButton preserveProjectEdits, locateMediaRecursively;
+    juce::ToggleButton preserveProjectEdits, locateMediaRecursively, autoRegisterTransitions;
+    juce::ToggleButton autoVirtualConnections, autoVirtualPitch, autoMergeConsonants;
 
     juce::TextButton applyButton;
 };

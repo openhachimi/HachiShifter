@@ -122,6 +122,10 @@ enum class PitchAlgorithm
 // path matches the original algorithm; the splice-first path is the HachiShifter
 // variable-mel-hop default and keeps the join blended before formant shifting.
 [[nodiscard]] PitchAlgorithm defaultPitchAlgorithm(const juce::File& modelDirectory = {});
+// Shared Settings/import policy: explicit import.algorithm choices win; model
+// availability never changes the default or silently switches a saved engine.
+[[nodiscard]] PitchAlgorithm defaultImportedPitchAlgorithm(const juce::PropertySet* preferences = nullptr);
+[[nodiscard]] int pitchAlgorithmPickerItem(PitchAlgorithm algorithm);
 
 enum class StretchAlgorithm
 {
@@ -149,6 +153,16 @@ enum class RenderOrder
     processThenSplice,
     stretchSpliceThenPitch
 };
+
+[[nodiscard]] constexpr RenderOrder defaultRenderOrder()
+{
+    return RenderOrder::stretchSpliceThenPitch;
+}
+// Processing-order toolbar IDs, deliberately unrelated to StretchAlgorithm.
+[[nodiscard]] constexpr int renderOrderPickerItem(RenderOrder order, bool mergeContiguous = false)
+{
+    return order == RenderOrder::stretchSpliceThenPitch ? 2 : mergeContiguous ? 3 : 1;
+}
 
 struct PitchPoint
 {
@@ -347,6 +361,12 @@ struct NoteData
     // Explicit source replacement locks the existing musical score while new
     // acoustic F0 is pending. Also provides a native singleton shared curve.
     bool materialTargetPitchLocked = false;
+    // Explicit score-to-material placement: nominal musical bounds are not the
+    // full audible source support. Only this replacement workflow opts in.
+    bool nativeScoreMaterialAligned = false;
+    // New native score bindings transpose measured source detail to the score
+    // centre instead of importing UTAU target curves. Legacy projects opt out.
+    bool nativeSourceTrendTranspose = false;
     // Last complete pronunciation bounds, separate from a split/cropped
     // note's actual source slice. Copied with the reference, not rebound by trims.
     double materialSourceStartSeconds = -1.0, materialSourceEndSeconds = -1.0;
@@ -357,6 +377,8 @@ struct NoteData
     PronunciationKind pronunciationKind = PronunciationKind::normal;
     bool simplifiedConsonant = false;
     bool vowelSplitsExplicit = false; // named authoring boundaries, never analysis epochs
+    std::optional<NativePronunciationEdges> nativePronunciationEdges; // opt-in audible edges only
+    std::optional<NativeTransitionShape> nativeTransition; // source metadata, never an implicit pitch/audio join
     // Passed verbatim as the UTAU resampler's flags argument.  Interpretation
     // belongs to the selected resampler because flag dialects are not uniform.
     // DS phoneme onset overrides; immutable JSON, note-local seconds.
@@ -460,6 +482,11 @@ struct NoteData
     // to that vowel's preutterance rather than becoming an independent note.
     bool melodyneConsonantCandidate = false;
     juce::String melodyneVowelNoteId;
+    // Melodyne's own attackDuration: how long the element is unpitched before
+    // its voice. Real lead-in evidence, kept separate from consonantSeconds
+    // (which the renderer derives from source maps and must stay untouched).
+    double melodyneAttackSeconds = 0.0;
+    juce::String consonantMergeId; // explicit merge intent; preserve independent P/C during import conversion
     float midiNote = 60.0f;
     float sourceMidiCenter = -1.0f;
     // Unlike a hand-created target pitch, this centre/contour was measured
@@ -667,9 +694,9 @@ struct TrackData
     // synthesis merely because a previously selected voicebank is remembered.
     bool nativeNsfAudio = false;
     StretchAlgorithm stretchAlgorithm = StretchAlgorithm::melodyneHybrid;
-    // Kept at processThenSplice so an existing project, and every track that
-    // predates this field, renders exactly as it did before.
-    RenderOrder renderOrder = RenderOrder::processThenSplice;
+    // Missing fields use the same defaults as new tracks; explicitly saved
+    // processing orders remain authoritative when reopening a project.
+    RenderOrder renderOrder = defaultRenderOrder();
     // Optional same-source decode continuity, also valid in process order.
     bool mergeContiguousSource = false;
     std::vector<ClipData> clips;
@@ -753,8 +780,12 @@ struct SharedPitchLineMember
     // Native request overlay only: when its old base did not render a shared
     // line, consumers must retain the old request outside these graph windows.
     bool connectionPitchOnly = false;
+    bool virtualSinglePitch = false; // derived complete target, vibrato already included
     [[nodiscard]] bool owns(double absoluteSeconds) const
     {
+        if(virtualSinglePitch)
+            return absoluteSeconds>=drawFrom-1.e-9&&absoluteSeconds<=drawTo+1.e-9
+                &&std::any_of(nativeHandleTimes.begin(),nativeHandleTimes.end(),[&](double time){return std::abs(time-absoluteSeconds)<1.e-7;});
         for(const auto& window:connectionPitchWindows)
             if(absoluteSeconds>=window.getStart()-1.e-9&&absoluteSeconds<=window.getEnd()+1.e-9)return false;
         if (nativeSharedCurve)
@@ -854,6 +885,10 @@ struct ResolvedConnectionPitchCurve
     juce::String issue;
     double fromSeconds = 0, toSeconds = 0, anchorSeconds = 0;
     std::vector<PitchCurveEditPoint> points; // derived absolute time/MIDI, not stored
+    // Validated group routes may include an unvoiced bridge between endpoints.
+    // Empty retains legacy pair behaviour; no extra persisted source identity.
+    std::vector<juce::String> affectedNoteIds;
+    bool virtualSinglePitch = false; // derived full-group reference, not serialized
 };
 // Graphless sharedPitchLines remains the legacy oracle. Render AND editor must
 // explicitly use this overload to hear/draw forced curves, including other files.
@@ -863,10 +898,17 @@ struct ResolvedConnectionPitchCurve
 [[nodiscard]] std::vector<ResolvedConnectionPitchCurve> resolvedConnectionPitchCurves(
     const TrackData&, const std::vector<NativeConnection>&,
     const juce::String& replacedNoteId = {}, const std::vector<PitchCurveEditPoint>* replacedPoints = nullptr);
+// Common overlay for already validated legacy/group target curves. Does not
+// change source voicing; native request consumers retain their original UV mask.
+[[nodiscard]] SharedPitchLines overlayResolvedConnectionPitchCurves(const TrackData&,
+    SharedPitchLines base,std::vector<ResolvedConnectionPitchCurve> curves,
+    const juce::String& replacedNoteId={},const std::vector<PitchCurveEditPoint>* replacedPoints=nullptr);
 // Absolute graph stroke -> complete absolute graph controls using the SAME
 // exact cubic splice kernel as note strokes. No fake NoteData curve carrier.
 // Intersects the live bridge window; outer graph pitches remain score-attached.
 // False with empty error is a harmless off-window/tiny no-op.
+[[nodiscard]] bool composeResolvedConnectionPitchStroke(const ResolvedConnectionPitchCurve&,
+    const std::vector<PitchCurveEditPoint>&,std::vector<PitchCurveEditPoint>&,juce::String&);
 [[nodiscard]] bool composeConnectionPitchStroke(const TrackData&,
     const std::vector<NativeConnection>&, const juce::String& connectionId,
     const std::vector<PitchCurveEditPoint>& absoluteStroke,
@@ -892,6 +934,72 @@ struct TempoChange
     double bpm = 120.0;
 };
 
+// Opt-in virtual assembly. The exact note identities own source bindings and
+// clocks; the group references them instead of creating a second source model.
+// Legacy nativeConnections remain stored untouched as the reversible fallback.
+struct NativeSplitTransitionEvidence
+{
+    juce::String logicalId,frontNoteId,backNoteId;
+    juce::String sourceObjectIdentity,frontSourceObjectIdentity,backSourceObjectIdentity;
+    juce::String precedingElementIdentity,followingElementIdentity;
+    juce::String frontElementIdentity,backElementIdentity;
+    bool joinsPitches=false,joinsAmplitudes=false,joinsPhases=false;
+    bool transitionIdentified=false;
+};
+struct NativeVirtualHopPitchCurve
+{
+    juce::String leftNoteId,rightNoteId;
+    std::vector<PitchCurveEditPoint> pitchCurve;
+    int pitchCurveEncoding=2;
+    double pitchFromOffsetSeconds=0,pitchToOffsetSeconds=0;
+};
+struct NativeVirtualHandoverWindow
+{
+    juce::String leftNoteId,rightNoteId; // stable adjacent PHYSICAL endpoint IDs
+    double fromOffsetSeconds=0,toOffsetSeconds=0; // relative to canonical auto boundaries
+};
+struct NativeVirtualGroup
+{
+    int version=1;
+    juce::String id,trackId;
+    std::vector<juce::String> orderedNoteIds;
+    bool enabled=true;
+    bool automaticPitch=false;
+    bool automaticallyCreated=false;
+    bool sharedPitch=false; // explicit audio-link mode, still independent physical owners
+    bool coupledMovement=true; // local time-axis warp; explicit false preserves free positioning
+    double pitchDurationSeconds=.1;
+    std::optional<NativeSplitTransitionEvidence> splitTransition; // first proof; legacy single-bridge files
+    std::vector<NativeSplitTransitionEvidence> extraSplitTransitions; // additional bridges in the same route
+    // Hand-edited normalized-time controls. V1 is a linear chord residual;
+    // V2 retains original nonlinear shape as offsets from the first anchor.
+    // Original note/source curves stay independently editable.
+    std::vector<PitchCurveEditPoint> pitchCurve;
+    int pitchCurveEncoding=1; // 1 legacy linear chord residual; 2 exact shape offsets from first anchor
+    double pitchFromOffsetSeconds=0; // from first member's current support end
+    double pitchToOffsetSeconds=0;   // from last member's current support start
+    std::vector<NativeVirtualHopPitchCurve> hopPitchCurves;
+    std::vector<NativeVirtualHandoverWindow> handoverWindows; // absent = unchanged automatic contribution
+};
+
+// Annotation identity only, independent of opt-in virtual audio routing.
+// Physical file is resolved through the exact front/back note owners, so source
+// relocation has one authority and does not leave another stale path here.
+struct NativeLogicalTransition
+{
+    NativeSplitTransitionEvidence evidence;
+    double sourceFromSeconds=0,sourceToSeconds=0,middleSourceSeconds=0;
+    float confidence=0;
+};
+
+struct NativeConsonantMergeEvidence;
+struct NativeConsonantMergeRecord
+{
+    juce::String id,trackId,mergedClipId,mergedNoteId,onsetClipId,onsetNoteId;
+    juce::String sourceSha256,originalStateBase64,mergedFingerprint;
+    int onsetIndex=0,vowelIndex=0;
+};
+
 struct ProjectData
 {
     juce::String name = "Untitled";
@@ -906,6 +1014,9 @@ struct ProjectData
     bool assetManagerVisible = false;
     std::vector<TempoChange> tempoChanges;
     std::vector<NativeConnection> nativeConnections;
+    std::vector<NativeVirtualGroup> nativeVirtualGroups; // absent in legacy/default-off imports
+    std::vector<NativeLogicalTransition> logicalTransitions; // identity only; no new mixer edges
+    std::vector<NativeConsonantMergeRecord> consonantMerges; // immutable exact original fragment archive
     std::vector<TrackData> tracks;
     // Immutable JSON avoids sharing mutable metadata between undo snapshots.
     juce::String hamoodState;
@@ -1086,6 +1197,7 @@ public:
         bool changed = false;
         std::vector<TrackData> tracks; // affected real tracks only, original order
         std::vector<NativeConnection> connections;
+        std::vector<NativeVirtualGroup> virtualGroups;
     };
     // Notes are proposed first, graph commands resolve against that same new
     // score. Any invalid late command rejects ALL edits. One live undo/change.
@@ -1166,6 +1278,9 @@ public:
     // clock; an outer note moves rigidly while its neighbour stretches.
     bool moveNativeNotes(const std::vector<juce::String>& noteIds,
                          double deltaSeconds, float semitones, juce::String* error = nullptr);
+    // Explicit note-local identity only. A source middle is mandatory for a
+    // transition; nullopt restores normal kind. No P/C, clock or library write.
+    bool setNativeNoteTransition(const juce::String& noteId,std::optional<double> middleSourceSeconds,juce::String& error);
     bool trimNativeNoteEdge(const juce::String& noteId, double deltaSeconds, bool leftEdge);
     bool resizeNativeNoteEdge(const juce::String& noteId, double deltaSeconds, bool leftEdge);
     // Align the physical preutterance marker (or score onset) to the nearest
@@ -1197,10 +1312,15 @@ public:
     // Explicitly connect selected notes without destructively merging their
     // editable data. Pairs may cross clips and source-material regions.
     void setNotesConnection(const std::vector<juce::String>& noteIds, bool enabled);
-    // Pitch-only forced connection, NEVER a source join/amplitude splice. Uses
-    // existing nativeConnections directional authority and one undo transaction.
+    // Score-only/voicebank portamento uses its original pitch graph. Native
+    // physical cross-source selections MUST delegate to the virtual group path.
     bool setNotesPortamento(const std::vector<juce::String>& noteIds, bool enabled,
                             juce::String& error, double durationSeconds = 0.1);
+    // Legacy API spelling only: delegates to the SAME virtual group action.
+    // Does not manufacture a compound or write native-overlap legacy edges.
+    // Explicit old force requests opt into glide; disabling switches the group off.
+    bool forceNativeConnection(const std::vector<juce::String>& noteIds, bool enabled,
+                               juce::String& error, double durationSeconds = 0.1);
     // Editable absolute controls from resolvedConnectionPitchCurves. Outer MIDI
     // values stay attached to current note scores; endpoint TIME/curvature and
     // interior MIDI are editable. Mixed PointCurveEdit batches stage real note
@@ -1209,6 +1329,28 @@ public:
         std::vector<PitchCurveEditPoint> absolutePoints, juce::String& error);
     bool setConnectionPitchPoint(const juce::String& connectionId, int pointIndex,
         PitchCurveEditPoint absolutePoint, juce::String& error);
+    // Explicit ordered selection, one undo transaction; no source merge/crop,
+    // no persistent mutation of original crossfades or compatibility graph.
+    juce::String createNativeVirtualConnection(const std::vector<juce::String>& orderedNoteIds,
+        bool automaticPitch,juce::String& error,double durationSeconds=.1,bool automaticallyCreated=false,
+        const NativeSplitTransitionEvidence* splitTransition=nullptr,bool sharedPitch=false);
+    // Common adapter for all legacy/manual/automatic cross-source entrypoints.
+    // Selection is ordered from current source placement, never from its labels.
+    bool setNativeVirtualConnectionForNotes(const std::vector<juce::String>& noteIds,bool enabled,
+        bool automaticPitch,juce::String& error,double durationSeconds=.1,bool automaticallyCreated=false,
+        const NativeSplitTransitionEvidence* splitTransition=nullptr,bool sharedPitch=false);
+    bool setNativeVirtualConnectionEnabled(const juce::String& groupId,bool enabled,juce::String& error);
+    bool setNativeVirtualMovementCoupled(const juce::String& groupId,bool coupled,juce::String& error);
+    bool removeNativeVirtualConnection(const juce::String& groupId,juce::String& error);
+    bool setNativeVirtualPitchCurve(const juce::String& groupId,
+        const std::vector<PitchCurveEditPoint>& absolutePoints,juce::String& error);
+    bool resetNativeVirtualPitchCurve(const juce::String& groupId,juce::String& error);
+    bool setNativeVirtualHandoverWindow(const juce::String& groupId,const juce::String& leftNoteId,
+        const juce::String& rightNoteId,double absoluteFrom,double absoluteTo,juce::String& error);
+    bool resetNativeVirtualHandoverWindow(const juce::String& groupId,const juce::String& leftNoteId,
+        const juce::String& rightNoteId,juce::String& error);
+    juce::String mergeMelodyneConsonant(const NativeConsonantMergeEvidence&,juce::String& error);
+    bool restoreMelodyneConsonant(const juce::String& mergedNoteId,bool discardMergedEdits,juce::String& error);
     bool disconnectNativeAudio(const std::vector<juce::String>& noteIds);
     bool linkNativeAudio(const std::vector<juce::String>& noteIds);
     bool setNativeAudioOverlap(const juce::String& trackId, bool enabled);
@@ -1448,7 +1590,7 @@ public:
     // describes the prospective update, not a committed one.
     [[nodiscard]] MaterialUpdateReport applySourceSettingsWithReport(
         const juce::File& source, const std::vector<SampleRegionSetting>& rows,
-        bool apply = true);
+        bool apply = true, const juce::String& audioVariantScope = {});
     void applySourceSettings(const juce::File& source,
                              const std::vector<SampleRegionSetting>& rows);
     void setNoteMaterialLocalOverride(const juce::String& noteId, bool enabled);
@@ -1483,8 +1625,19 @@ public:
         bool rejected = false, changed = false, pendingAnalysis = false;
         juce::String clipId, sourcePartId;
         MaterialSourceBindingTicket ticket;
+        std::vector<MaterialSourceBindingTicket> tickets;
         juce::StringArray diagnostics;
     };
+    struct MaterialSourceChoice
+    {
+        juce::String noteId;
+        juce::File audio;
+        std::shared_ptr<const std::vector<SampleRegionSetting>> completeRows;
+        juce::String audioId, regionId, alias;
+    };
+    [[nodiscard]] MaterialSourceReplacementReport replaceNotesMaterialSources(
+        const std::vector<MaterialSourceChoice>& choices, std::uint64_t expectedRevision,
+        juce::String& error, bool apply = true);
     // Explicitly replace ONLY this note's physical source, preserving its ID,
     // score time/pitch/expression and track renderer. apply=false is pure
     // preflight; only a committed report's ticket may be queued for analysis.
@@ -1547,13 +1700,14 @@ private:
     // drift apart over what a new note starts life as.  Call with the lock.
     [[nodiscard]] juce::String addNoteLocked(ClipData& destination,
                                              const PlannedNote& planned, float midiNote);
+    static juce::String consonantMergeClipFingerprint(const ClipData&);
     juce::ValueTree toValueTree(const juce::File& projectFile, bool includeDerived = true) const;
     static ProjectData fromValueTree(const juce::ValueTree& tree,
                                      const juce::File& projectFile);
     static juce::String makeId(const char* prefix);
 
     bool attachSourceAnalysisLocked(const juce::File&, const std::vector<NoteData>&,
-                                    const juce::String& guardedFingerprint);
+                                    const juce::String& guardedFingerprint, bool exactSourceTicket = false);
     std::map<juce::String, std::shared_ptr<const std::vector<NoteData>>> materialSourceAnalysisCache;
     mutable juce::CriticalSection lock;
     ProjectData project;

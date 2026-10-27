@@ -1,5 +1,90 @@
 # 实际功能主入口、数据流与架构审计
 
+## 滚动版本与发布格式（204）
+
+`HACHI_DISPLAY_VERSION=dev` 是公开版本权威，主程序/MCP/EXE文字共用；CMake数值tuple0.0.0与项目文件schema不是公开版本，不能混改。JUCE自定义RC只替换VERSIONINFO，仍保留原图标/manifest。Github扁平发布在独立工作树映射现有JUCE源码，保留远端云原生compiler与分包设施；lang是运行依赖，随EXE入包，不允许隐藏内置翻译回退。固定模型资源包独立下载/校验，权重不纳Git。
+
+## 普通先行同步锚与默认值权威（203）
+
+- 普通P来自Melodyne element `anchorPoint`经已有source-time函数投影，不来自齿音、F0有声／无声分类、attackDuration或固定长度。Importer只补现有P字段，显式零与缺锚分开；SampleSettings复用该源P建立C=P，没有第二个P估算器。原时钟／音长／UV／render request保持不变。
+- 引擎与处理顺序缺省统一到ProjectModel默认函数；UI映射复用同一picker helpers。拉伸算法不是处理顺序，不修改默认stretch或显式保存值，读取偏好不写入它。
+- 外部翻译属于EXE同目录`lang`运行依赖。D/G成套部署，实际G盘冷测试作为安装门；不通过C++内置回退掩盖旧目录缺词，不因更新语言文件触及模型目录。
+
+## 旧工程兼容与本次导入选择（202）
+
+- `ProjectModel::load` 在 `fromValueTree` 后仅调用 `restoreLegacyNativeSourceUsages` 恢复缺失身份。已有双端连接flags＋同源＋唯一精确接缝是证据，不能按文件名或位置猜连，显式空字段／解除／现有usage不覆盖。恢复后仍用201共同编辑轴，不创建第二套move实现。
+- `MelodyneTrackSelector` 是从旧匿名轨道选择组件提取的同一个UI，四开关快照跨unsaved确认传入原`optimiseImportedVirtualConnections`，复用prepare→convert→finish，不在呈现选择之前执行这些可选优化，不改变用户默认偏好。
+- typed bridge可先连a→b或b→c再延长为a→b→c。纯衔接音且无普通参考仍需明确提示；部分路由不根据桥源pitch生成自动滑音，canonical唯一参考保持普通端点，完整路由继续同一曲线权威。
+- 先行黄色恢复仅按既有`nativeNoteVisualSpan.p`分割轮廓和包络墨线；没有从名称、attack或颜色猜P，没有改变source时钟/音频。
+
+## 非完全切割永久接缝与虚拟组一次组源（201）
+
+- `NativeNoteTiming::planNativeNoteMove` 与 `NativeCoupledSelectionMove` 是所有非完全切割／虚拟组移动和边缘伸缩的共同编辑轴；没有达到边界后的独立移动 fallback。解除连接是唯一拆开动作，未连接素材不受 native collision blocker 强迫排队。
+- 虚拟组的 render-only assembly 复用现有 `RenderService`、NSF Mel、WORLD spectral analysis 和 AudioEngine cache/mixer：保留各 source 时钟与 UV，在共同目标轴组装一次后使用一条 F0／一次 infer 或 synthesis，成员支持只切片一次，未绑定 DA 不吞掉。不是临时 WAV，也不是新持久 owner。
+- NSF 组装覆盖普通 target／formant／normalize（明确不接 WCS/HiFiShifter、robust、分离 export、UTAU voicebank）；WORLD 组装覆盖不同采样率／非线性 map／gain² power／AP noise／UV gap。所有不支持情形显式 warning，禁止静默 per-source。
+- 源组装与真实鼠标、multi-split、handover、单线 F0及 teio 完整导出专项见 `validation/permanent-seam201/FINAL-REPORT.md`。
+
+## 外部翻译文件唯一权威（200）
+
+- `I18n` 的 Catalog 只由程序旁TSV载入，统一 `text`／`uiText`／旧 `pairText`；内置五语言表已移除。`aliases` 文件元数据承接稳定字面量映射，语言值不再随C++编译，也不依赖中文／英文双语helper回退。
+- 空格只回退文件英文；无有效文件的新进程显示缺键而不是编译译文，坏文件保留最后有效文件目录。单次解析后内存共享读锁查词，非每帧磁盘I/O。新增组件继承当前选定语言，不能每次构造重设OS语言。
+- `I18n::message` 仅在UI边界以文件消息模板翻译已知提示，保留参数／第三方技术数据，不修改后台错误协议、音乐模型或自动轨道命名。
+- 固定振音／包络预设以稳定数据身份存在，显示时取文件译名；不把首次语言翻译缓存到静态对象，不翻译用户自定义名称。设置重载继续复用原通知路径。
+- CMake的翻译目标仅复制外部规范TSV；维护工具只审计JSON／验证目录，不再生成C++语言回退。文件唯一来源、五语真实界面及完整音频不变均有实际专项，见 [说明](translation-file.md)。
+
+## GUI198（已恢复，本地待验收）
+
+- 编辑栏单行规划只在 `MainComponent::resized` 一处决定内联／溢出；“更多…”菜单转发到原控件对象（按钮 triggerClick、组合框 setSelectedId、文本框弹窗后 setText+onReturnKey），没有平行回调。
+- 重叠整理不新增 Model 写者：保留＝`setNativeAudioOverlap(true)`，裁剪＝`trimNativeNoteEdge`，连接＝`linkNativeAudio`（虚拟组／非完全切割唯一入口）。标记仅视图状态。
+- Melodyne 先行只改注释几何（P／C／段），渲染请求不变；渲染能力提示把 melodyne 来源快照视作原生几何。
+- OTTO 编辑器 0.1 ms 是显示约定；比较“文本是否改动”用同一格式函数，未改动不回写，避免量化原数据。
+
+## 虚拟连接收尾已完成
+
+用户已验收指定 teio.hjpx 的 NSF／先拼接后合成三版，确认自动滑音提升效果。最后四项操作收尾全部验证，12专项通过、三份完整NSF输出SHA与已验收文件完全一致；不恢复GUI198，不擅自安装／上传。历史未验收描述不再作为当前状态。
+
+- 普通虚拟链邻接运动只使用现有 `NativeNoteTiming::planNativeNoteMove` 的共同编辑轴，再投影各源原时钟；临时投影不提交复合owner，结果恢复独立owner身份。`coupledMovement=false` 为显式自由模式；分离／交叉不造源，不豁免无关声部，多音符owner明确防误改。
+- 源贡献窗以稳定物理端点ID＋canonical支持内相对偏移保存；`prepareNativeVirtualHandoverWindow` 同时给UI预览与Model单事务，原 scalar contribution／fadeEnvelope 消费，不能新建混音器。左右柄、Esc、单窗复位；移动失支持保留数据并报警。
+- 同高Bezier绝对控制柄经单位高度参考送回原V2 cubic／de Casteljau编码，不新增DSP或采样折线。右键音符类型只改项目身份和显式中间源分界，不猜P/C／不写素材库；既有半桥／手调局部曲线受保护。
+
+## 当前虚拟链／共享连续音高实施
+
+- 用户确认任意成员跨源链与共享连续音高模式；新跨源音频链接仍只提交 Model 虚拟组，不恢复旧复合 owner writer。
+- `NativeVirtualSharedPitch.h` 仅创建临时选中源投影，复用既有 `sharedPitchLines`，不复制整工程或无关轨道媒体；原源文件／owner／note ID 与时钟保留。UI 缓存、预览及 render target 共用该权威。
+- `nativeVirtualMemberContribution` 为任意链标量实时消费，不分配 vector、不截断到4成员；作者增益与连接权重保持独立。
+- 共享节点、已有链延伸、多逻辑两半桥、精确 V2 非线性曲线、专用鼠标工具及 peer 波形依赖／路由加权峰值现已接入，专项见 [命令索引](AI_SOURCE_INDEX.md)；仍不是实际桌面与真实演唱听觉验收。
+- 长链局部手调保存在组内 `hopPitchCurves`，以左右端点 ID 派生稳定编辑身份；`nativeVirtualPitchHops` 是规划／Model／UI 的同一个逻辑交接投影，`prepareNativeVirtualPitchCurve` 是整组／局部同一 V2 准备权威。禁止另建源 owner、重排旧链或用首尾全局曲线覆盖中间音符。
+- 共享底线和局部手调按底→覆盖顺序消费既有 resolved overlay。窗口冲突只暂停冲突音高段，保留成员／曲线数据与真实源贡献，报警并阻止静默导出；新重叠编辑原子拒绝。
+
+## 更新197：衔接音类型、自动识别和源走势
+
+- 衔接音是 source annotation 身份加一个内部边界；左右 fade／overlap 继续由 `NativePronunciationEdges`／AudioEngine 原有路径处理，不增第二混音器。typed transition 阻断 partial source continuity 与 native-overlap join，独立文件和长文件切片共用同一 source clock。
+- Melodyne 自动识别只改变可回写登记的身份元数据；检测不按文件名猜，导入的 clock、F0、contour、gain、fade 和 request fingerprint 保持。注册 fingerprint 归一化纯 annotation，真实 teio adoption／cold reopen／三阶段 CPU PCM gate 仍一致。
+- 新 native score binding 只在无明确用户 pitch edit 时消费同次 GAME／FCPE 源事实，保留趋势并作中心移调；旧工程和手工目标不被重写。MIDI 复用 UST/native selection，不另建素材 writer。
+
+## 更新195：源边界、乐谱 P 与视觉分工
+
+- 已登记连续源的切割取 incoming source begin，经当前共同时钟投影；P 是实际音符的对拍点，不是切点。音频边缘和波形所有权采用该边界，不新增持久 seam 数值或第二音频混合器。无精确变体／后继／时钟证据不猜线。
+- NativeMaterialContinuity 派生视图支持和切点，PianoRoll 在展开前缓存；每所有者共享时钟，不在 paint 复制整工程。mld／rep 只是视觉偏好，不存到音乐撤销或产生另一套 sourceTimeMap。
+- 完整发音身份 transition 与内部过渡 segment role 分开；前者统一无先行、整块绿，后者不决定整音色。先行黄和实际紫按 P 分界，不按 C 分界。
+- 选中颜色从同一暗基色增亮，透明度不按选中变化，以免浅色主题出现越选越暗；不再随焦点给其他重叠音符额外降亮度。详见 [195说明](native-material-appearance-195.md)。
+
+## 更新193：乐谱替换与现场物理交叠（本地待验收）
+
+- 发音索引／精确身份重读只归 Catalog；Main 持有可取消、带修订保护的暂存选择会话，最终调用同一批量 ProjectModel 提交。单音乐谱替换委托该提交；普通旧物理源替换维持原适配器。不另写第二套登记、分析或音频生成服务。
+- 完整源支持与乐谱 P 的单调时钟只归 NativeSourceReplacementPlan。目标先行与源边缘语义分开，原始 O 字段保留，不把目标 O 当源标注覆盖；缺失参数不能凭默认值宣称原文件明确给定。`nativeScoreMaterialAligned` 显式区分新时钟，旧工程默认不启用。
+- native-overlap 必须有真实父级结构、独立子源和实际交叠证明。模型、视图缓存和音频均复用同一证明；不能在展开后的绘制／渲染片段上仅凭类型字符串激活滑音。视图只缓存小型派生边界／滑音，不在 paint 复制整工程。音频的该类滑音及缓存摘要使用物理原轨，其余旧路径保持原计算。
+- `preserveFullSourcePitch` 显式保留同次 FCPE 的整文件事实，避免 GAME 随机语义 rest 覆盖抹掉已登记源行的 F0。默认直接分析／MCP仍不启用，Main 文件任务为可能合并的精确源票据保留事实；普通导入仍消费原语义音符。精确替换只由 `completeMaterialSourceAnalysis` 完成，通用 trim 回调即使同哈希也不能抢占等待绑定；增量重绑通过同一缓存重新应用事实，无第二次 NN 或新提交权威。
+- 候选预览复用 Main 的源文件范围传输，关闭／提交／进入下一个候选取消迟到预览并停止原音，不恢复歌曲播放。最终代码和入口详见 [本轮说明](native-score-replacement-193.md)；接口生成结果仍不是运行或用户验收证明。
+
+## 更新192：已验证的动作权威与边界（0.25）
+
+- 日语 `infer(mode)` 显式分配 ASR／TIFA 阶段。仅识别只能产生文本提案，不借 `ready` 标志伪造可发布标注；对齐只读当前确切录音的手工序列。GUI、批处理和诊断复用同一服务，不新增第二套推理器。
+- 发布仍用 `OttoMaterialIO` 原子写入。实际提交后先释放 Main 门闩，再把同一干净来源编辑器刷新到新精确变体的 Session；`ModelessWindows` 键与内容一起校验迁移。普通重开、快速编辑和本次刷新使用同一 Main 前检／完成动作，带 Session 稳定变体 ID（空行也不丢 ID）。
+- `applySourceSettingsWithReport` 的可选 scope 限制到同一变体；未绑定和其他变体不参与范围猜测／未解析标记。混合所有者的未知时钟重写仍拒绝。Source 行的后继并非项目实际使用关系，带 scope 的裁剪绑定保留后者。
+- `NativeMaterialSelectionPlan` 为实际放入划分完整支持与不重复所有权；同源录音和精确变体、源顺序和锚点都是必要证据。既有 `NativeSourceEdgePlan`／AudioEngine 继续负责实际外沿／统一增益，不为重叠引入新音频混合器或虚拟桥。
+- 实际按钮、确认框正负、冷保存、普通重开、真实拖放和正常 PCM 测试已运行；旧绑定专项仍有上一交付也失败的三个旧断言，详见随包 annotation-save-modes。旧评估和以下历史文字不替代本轮证据。
+
 ## 当前整合任务（0.25，尚未整体验收）
 
 以下历史更新不是新素材编辑规则的权威；当前进度见 [实现状态](native-material-implementation.md) 和 [源码索引](AI_SOURCE_INDEX.md)。
@@ -9,18 +94,18 @@
 - `ProjectModel::setPointCurves` 的共享规划器同时供提交与 `previewPointCurves` 使用；音符及显式连接图可原子混合编辑，一次撤销。连接曲线只存在连接图，不复制进音符。
 - `AudioEngine::projectTrackNotePitch` 共用既有宿主音高规划：逐音符基础曲线、名义自动过渡、最后显式连接窗口。UI 与实际 UTAU 数据包读同一结果；原生文件渲染策略独立保留。显式 `pitchSupportAuthored` 仅由实际越界编辑设置，不按来源或旧控制点形状推断，也不随视图开关改变。
 - 同一个 `MaterialAnnotationSession` 按保存目的地分流源文件发布与当前音符回调；局部保存必须在会话层阻止源发布，不能只拦截某一个 Save 按钮。目前目的地回调专项已通过，完整项目局部适配及入口整合仍待验收。
-- 实际测试结果和未通过项须分开报告。模型状态 ready 不证明此次分析使用了该模型；需记录实际 worker 后端及回退警告。当前停止条件是完成非自动注音功能后等待用户验收；ASR／TIFA 自动注音不在本轮实施范围。公开版本仍为 0.25、WCSNDM 仍为 0.0803。
+- 实际测试结果和未通过项须分开报告。模型状态 ready 不证明此次分析使用了该模型；需记录实际 worker 后端及回退警告。阶段一已获用户验收；2026-10-22 后授权社区 CSV 和原生 ASR／TIFA。`MainCommunityDatasetImport` 与 `MainJapaneseAutoAnnotation` 使用同一宿主管理 worker／发布门闩，复用 OTTO 原子写入；推理、音节提案和实际发布分离。`NativeSourceEdgePlan` 是可选源外沿的唯一当前拓扑规划器，真实混音仍用 AudioEngine 共同增益；未带 profile 的旧工程不启用。文件／发音试听共用 raw audition，不另建播放器。具体边界见 japanese-annotation.md。公开版本仍为 0.25、WCSNDM 仍为 0.0803。
 
 ### 新模块与事务边界（2026-10-22，仍在集成）
 
-- [ProjectModel.h](../juce/src/ProjectModel.h) 的 `TrackType` 明确区分 Hachi／UTAU／DiffSinger；`effectiveTrackType` 兼容旧工程，新建／UST 导入缺省 Hachi。轨道类型、伴奏与输出引擎是不同维度；[MainComponent.cpp](../juce/src/MainComponent.cpp) 只在既有编辑器上切换类型界面，不能靠选择另一个轨道提交旧轨未确认文本。`cancelPendingEditingForTrackChange` 是无模型写入的放弃入口。
-- [UtauRenderer.h](../juce/src/backend/UtauRenderer.h) 的 `RequestedVoicebankFamily` 是请求契约，`resolveRequestedVoicebankFamily` 是调度／工作线程的共同家族检查。禁止把错误家族的银行交给另一个渲染器来掩盖失败。家族拒绝专项通过不等于真实 DiffSinger 模型正向神经测试通过。
-- [UstxImporter.h](../juce/src/backend/UstxImporter.h) 只负责严格 YAML 格式边界，进入既有 `UstProject` 和公共工程映射，不新增平行谱面模型／渲染器。保留不支持字段及警告不代表完整 OpenUTAU 保真。
-- [OttoMaterialIO.h](../juce/src/OttoMaterialIO.h) 的音频 ID 是“注音登记变体”身份，不是物理文件身份。同路径可以多 ID；必须显式传所选 ID，缺少 ID 的歧义查找拒绝。模型／目录／拖放都应保持这层身份，不能靠文件名或行序重绑定。
-- [CommunityDatasetIO.h](../juce/src/CommunityDatasetIO.h) 是社区 CSV 读取、显式分组、P/C 确认、规划与冲突保护发布的唯一业务权威。[CommunityDatasetImportDialog.h](../juce/src/CommunityDatasetImportDialog.h) 只是导入选择向导，不是第三个注音编辑器；任务由宿主管理的 worker 执行，发布前由宿主取得修订门闩并调用既有预检。新向导当前宿主模拟 GUI 测试在运行、未报告通过，生产 Main 接线也未验收；已通过的是服务与合成数据集真实渲染链。
-- [ProjectMaterialRegistration.h](../juce/src/ProjectMaterialRegistration.h) 规划／暂存／发布文件，[ProjectMaterialRegistrationFacts.h](../juce/src/ProjectMaterialRegistrationFacts.h) 只在用户确认携带摆放解释后提供事实；默认拒绝，不由音符数或 F0 帧猜音节。复制一次物理录音，按独立变体生成稳定 ID。`ProjectModel::adoptRegisteredMaterialBindings` 只改引用与绑定，一次撤销，保留音乐、源时钟和原始分区；`registrationMusicSourceFingerprint` 是这种保留的校验，不能替代实际导出音频比较。
+- [ProjectModel.h](../src/ProjectModel.h) 的 `TrackType` 明确区分 Hachi／UTAU／DiffSinger；`effectiveTrackType` 兼容旧工程，新建／UST 导入缺省 Hachi。轨道类型、伴奏与输出引擎是不同维度；[MainComponent.cpp](../src/MainComponent.cpp) 只在既有编辑器上切换类型界面，不能靠选择另一个轨道提交旧轨未确认文本。`cancelPendingEditingForTrackChange` 是无模型写入的放弃入口。
+- [UtauRenderer.h](../src/backend/UtauRenderer.h) 的 `RequestedVoicebankFamily` 是请求契约，`resolveRequestedVoicebankFamily` 是调度／工作线程的共同家族检查。禁止把错误家族的银行交给另一个渲染器来掩盖失败。家族拒绝专项通过不等于真实 DiffSinger 模型正向神经测试通过。
+- [UstxImporter.h](../src/backend/UstxImporter.h) 只负责严格 YAML 格式边界，进入既有 `UstProject` 和公共工程映射，不新增平行谱面模型／渲染器。保留不支持字段及警告不代表完整 OpenUTAU 保真。
+- [OttoMaterialIO.h](../src/OttoMaterialIO.h) 的音频 ID 是“注音登记变体”身份，不是物理文件身份。同路径可以多 ID；必须显式传所选 ID，缺少 ID 的歧义查找拒绝。模型／目录／拖放都应保持这层身份，不能靠文件名或行序重绑定。
+- [CommunityDatasetIO.h](../src/CommunityDatasetIO.h) 是社区 CSV 读取、显式分组、P/C 确认、规划与冲突保护发布的唯一业务权威。[CommunityDatasetImportDialog.h](../src/CommunityDatasetImportDialog.h) 只是导入选择向导，不是第三个注音编辑器；任务由宿主管理的 worker 执行，发布前由宿主取得修订门闩并调用既有预检。新向导当前宿主模拟 GUI 测试在运行、未报告通过，生产 Main 接线也未验收；已通过的是服务与合成数据集真实渲染链。
+- [ProjectMaterialRegistration.h](../src/ProjectMaterialRegistration.h) 规划／暂存／发布文件，[ProjectMaterialRegistrationFacts.h](../src/ProjectMaterialRegistrationFacts.h) 只在用户确认携带摆放解释后提供事实；默认拒绝，不由音符数或 F0 帧猜音节。复制一次物理录音，按独立变体生成稳定 ID。`ProjectModel::adoptRegisteredMaterialBindings` 只改引用与绑定，一次撤销，保留音乐、源时钟和原始分区；`registrationMusicSourceFingerprint` 是这种保留的校验，不能替代实际导出音频比较。
 - 登记事务边界不是分布式原子提交：先预检修订与来源指纹，再发布租约、模型收纳；收纳成功即 `retainAfterAdoption()`，之后偏好登记失败仅警告／重试，不允许析构回滚删除项目已采用的录音。未收纳的暂存目录才能按所有权凭据安全清理。
-- 局部编辑以 [MaterialAnnotationSession.h](../juce/src/MaterialAnnotationSession.h) 的 `EditScope::thisNote`／`NoteScopeBinding` 及模型局部应用／恢复接口为权威，必须同时检查稳定 ID、修订与源指纹；源范围、局部基线 `-1` 哨兵及第三方调音字段不得自行归一化。28b 已验证基线哨兵保留／指纹修正及真实 teio 登记三阶段实际 PCM 一致（[23 项输出](<G:/hjs-tc/tmp/teio-reg28/stdout.txt>)），但不代表局部两个生产入口或 Main 登记控制器已全面验收。
+- 局部编辑以 [MaterialAnnotationSession.h](../src/MaterialAnnotationSession.h) 的 `EditScope::thisNote`／`NoteScopeBinding` 及模型局部应用／恢复接口为权威，必须同时检查稳定 ID、修订与源指纹；源范围、局部基线 `-1` 哨兵及第三方调音字段不得自行归一化。28b 已验证基线哨兵保留／指纹修正及真实 teio 登记三阶段实际 PCM 一致（[23 项输出](<G:/hjs-tc/tmp/teio-reg28/stdout.txt>)），但不代表局部两个生产入口或 Main 登记控制器已全面验收。
 - View 菜单的 `ui.pitchScope`／`ui.showOverlap` 只影响编辑范围或显示，不做音乐撤销或重渲染。重叠显示缺省关闭，只有音符内黄色交叠线，无整高竖带；素材选择器仍由右键显式打开一个目标，与显示开关独立。
 
 最新已运行与待运行事项分别见 [实现状态](native-material-implementation.md)，命令和模块见 [逐文件索引](AI_SOURCE_INDEX.md)。接口声明清单和源码指纹待可变头文件稳定后重生成；本次不以静态清单作为运行通过证据。
@@ -127,7 +212,7 @@
 
 ## 功能到主入口的对应
 
-以下 `PM` 表示 [ProjectModel](../juce/src/ProjectModel.h)，`AE` 表示 [AudioEngine](../juce/src/AudioEngine.h)。每行是一项业务能力；“主入口”是当前实际存在且应优先复用的实现，不是已经完成接口收敛的承诺。为避免重复目录，详细字段、重载和辅助查询集中在接口清单。
+以下 `PM` 表示 [ProjectModel](../src/ProjectModel.h)，`AE` 表示 [AudioEngine](../src/AudioEngine.h)。每行是一项业务能力；“主入口”是当前实际存在且应优先复用的实现，不是已经完成接口收敛的承诺。为避免重复目录，详细字段、重载和辅助查询集中在接口清单。
 
 ### 工程、交换格式与轨道
 
@@ -284,7 +369,7 @@
 | DS 单点恢复 | `PM::restoreDiffSingerPitchPoint` | 修订、点位置 → 还原预测参考 |
 | DS 合成 | `DiffSingerRenderer::render` | UtauRenderRequest → C++/Python 桥 → PCM；没有必要再建一套通用 RPC 层 |
 
-DS Python 桥的实际操作是 `inspect / phonemize / timing / pitch / parameters / render`，见 [bridge.py](../juce/engines/diffsinger/bridge.py#L427)。同一个 `invoke` 是进程适配边界，操作枚举有业务区别，不能因“只有一个接口”而隐藏这些区别。
+DS Python 桥的实际操作是 `inspect / phonemize / timing / pitch / parameters / render`，见 [bridge.py](../engines/diffsinger/bridge.py#L427)。同一个 `invoke` 是进程适配边界，操作枚举有业务区别，不能因“只有一个接口”而隐藏这些区别。
 
 ### 分析、播放、导出、素材与自动化
 
@@ -389,7 +474,7 @@ DS -> UtauRenderRequest -> JSON request -> Python worker
 
 ### A01 · P1 · 音频回调等待工程重建使用的同一把锁
 
-证据：[AudioEngine.cpp:1853](../juce/src/AudioEngine.cpp#L1853) 的 `syncProject` 持有 `ScopedWriteLock(renderLock)` 调用整个 `rebuildLoadedClips`；[2787](../juce/src/AudioEngine.cpp#L2787) 的实时回调获取 `ScopedReadLock`。重建内包含排序、共享曲线、文件 reader 创建、缓存键构造及任务组织。读锁是等待型，不是实时安全的无等待读取。
+证据：[AudioEngine.cpp:1853](../src/AudioEngine.cpp#L1853) 的 `syncProject` 持有 `ScopedWriteLock(renderLock)` 调用整个 `rebuildLoadedClips`；[2787](../src/AudioEngine.cpp#L2787) 的实时回调获取 `ScopedReadLock`。重建内包含排序、共享曲线、文件 reader 创建、缓存键构造及任务组织。读锁是等待型，不是实时安全的无等待读取。
 
 最小改法：在非音频线程构建下一份播放计划和 reader/PCM 引用，准备好后短暂发布；回调只持有本轮不可变播放计划。旧计划和大 buffer 的释放也放在非音频线程，避免“用了 shared_ptr 就认为实时安全”。不在回调里加 sleep、重试、超时兜底。
 
@@ -397,7 +482,7 @@ DS -> UtauRenderRequest -> JSON request -> Python worker
 
 ### A02 · P1 · 实时路径仍有磁盘读取和动态分配
 
-证据：[AudioEngine.cpp:2826](../juce/src/AudioEngine.cpp#L2826) 素材试听 `setSize + reader->read`；[2858](../juce/src/AudioEngine.cpp#L2858) 每块创建重叠归一用 unordered_map/vector 并 assign；[3001](../juce/src/AudioEngine.cpp#L3001) 普通源播放也 `scratch.setSize + reader->read`。已有 capacity 可能让部分 setSize 不分配，但容器构造和 I/O 仍在回调中。
+证据：[AudioEngine.cpp:2826](../src/AudioEngine.cpp#L2826) 素材试听 `setSize + reader->read`；[2858](../src/AudioEngine.cpp#L2858) 每块创建重叠归一用 unordered_map/vector 并 assign；[3001](../src/AudioEngine.cpp#L3001) 普通源播放也 `scratch.setSize + reader->read`。已有 capacity 可能让部分 setSize 不分配，但容器构造和 I/O 仍在回调中。
 
 最小改法：准备阶段按设备 block 上限预分配混音 scratch；以已知轨道索引替代每块字符串哈希表；普通源播放加后台预读，回调只消费已就绪样本。WAV 导出可以继续离线读取，不必把实时限制强加给离线路径。
 
@@ -405,9 +490,9 @@ DS -> UtauRenderRequest -> JSON request -> Python worker
 
 ### A03 · P1 · 一次变更多份整工程快照，通知不区分影响范围
 
-证据：[ProjectModel.cpp:1071](../juce/src/ProjectModel.cpp#L1071) 返回 ProjectData 值；[MainComponent.cpp:3723](../juce/src/MainComponent.cpp#L3723)、[PianoRollComponent.cpp:4984](../juce/src/PianoRollComponent.cpp#L4984)、[TimelineComponent.cpp:213](../juce/src/TimelineComponent.cpp#L213)、[TrackListComponent.cpp:112](../juce/src/TrackListComponent.cpp#L112) 分别读取。Main 内部刷新控件还会调用其他 snapshot。不是每次鼠标移动都一定发生，但每个被提交并广播的工程变更会进入这些路径。
+证据：[ProjectModel.cpp:1071](../src/ProjectModel.cpp#L1071) 返回 ProjectData 值；[MainComponent.cpp:3723](../src/MainComponent.cpp#L3723)、[PianoRollComponent.cpp:4984](../src/PianoRollComponent.cpp#L4984)、[TimelineComponent.cpp:213](../src/TimelineComponent.cpp#L213)、[TrackListComponent.cpp:112](../src/TrackListComponent.cpp#L112) 分别读取。Main 内部刷新控件还会调用其他 snapshot。不是每次鼠标移动都一定发生，但每个被提交并广播的工程变更会进入这些路径。
 
-证据：[AudioEngine.cpp:2010](../juce/src/AudioEngine.cpp#L2010) 在存在音频窗口或 parts 时另拷贝工程；[ClipParts.h:17](../juce/src/ClipParts.h#L17) 再复制 parts、分发 notes、改写坐标。轨道名称和显示开关也走同一工程通知，缓存可避免重推理，但无法避免前面的同步工作。
+证据：[AudioEngine.cpp:2010](../src/AudioEngine.cpp#L2010) 在存在音频窗口或 parts 时另拷贝工程；[ClipParts.h:17](../src/ClipParts.h#L17) 再复制 parts、分发 notes、改写坐标。轨道名称和显示开关也走同一工程通知，缓存可避免重推理，但无法避免前面的同步工作。
 
 最小改法：每修订发布一份只读快照，视图共用；变更附带受影响 ID 和简单的 metadata/geometry/mix/render/source 分类。在现有 sync 路径做选择性更新，不另造多个消息总线。正式编辑用局部草稿，不能把共享快照改成多个消费者都可写。
 
@@ -415,15 +500,15 @@ DS -> UtauRenderRequest -> JSON request -> Python worker
 
 ### A04 · P2 · 全工程撤销成本与重复 no-op 提交
 
-证据：[ProjectModel.cpp:1083](../juce/src/ProjectModel.cpp#L1083) 每次 `pushUndoLocked` 复制完整工程；上限 [ProjectModel.h:1277](../juce/src/ProjectModel.h#L1277) 为 24，不是无限增长。密集源 F0／多曲线随之重复保存。某些 setter 无变化检查，如 [setTrackVolume:2652](../juce/src/ProjectModel.cpp#L2652) 在查 ID 前先 pushUndo；[setNoteModulation:4900](../juce/src/ProjectModel.cpp#L4900) 找到对象便提交相同值也会产生修订。
+证据：[ProjectModel.cpp:1083](../src/ProjectModel.cpp#L1083) 每次 `pushUndoLocked` 复制完整工程；上限 [ProjectModel.h:1277](../src/ProjectModel.h#L1277) 为 24，不是无限增长。密集源 F0／多曲线随之重复保存。某些 setter 无变化检查，如 [setTrackVolume:2652](../src/ProjectModel.cpp#L2652) 在查 ID 前先 pushUndo；[setNoteModulation:4900](../src/ProjectModel.cpp#L4900) 找到对象便提交相同值也会产生修订。
 
 最小改法：先统一“找到对象且规范化后的值确实不同才提交”；保留批量一次撤销。下一步只把大、不可变源分析块共享，再按实际瓶颈考虑局部轨道／区域历史。不要第一步重写整套通用命令／事件溯源框架，也不要为省内存取消撤销。
 
 ### A05 · P1/P2 · 缓存键重复序列化整轨依赖
 
-证据：[AudioEngine.cpp:824](../juce/src/AudioEngine.cpp#L824) 每个音源 clip 的 `renderKey` 都遍历轨道所有 clip/notes 并写入完整音符渲染字段；[906](../juce/src/AudioEngine.cpp#L906) 返回的是序列化字节构成的 string，不是固定长度摘要。设 C 为区域数，S 为全轨这些字段字节数，该段建键工作约 O(C×S)，并在缓存 key 中持有这些字节。
+证据：[AudioEngine.cpp:824](../src/AudioEngine.cpp#L824) 每个音源 clip 的 `renderKey` 都遍历轨道所有 clip/notes 并写入完整音符渲染字段；[906](../src/AudioEngine.cpp#L906) 返回的是序列化字节构成的 string，不是固定长度摘要。设 C 为区域数，S 为全轨这些字段字节数，该段建键工作约 O(C×S)，并在缓存 key 中持有这些字节。
 
-原生路径 [writeNativePitchContext:785](../juce/src/AudioEngine.cpp#L785) 与 [nativeClipWaveformHash:1726](../juce/src/AudioEngine.cpp#L1726) 又做共享上下文／字段遍历；音频键和波形键应共享依赖描述，但不能简单判定两种键完全等价。
+原生路径 [writeNativePitchContext:785](../src/AudioEngine.cpp#L785) 与 [nativeClipWaveformHash:1726](../src/AudioEngine.cpp#L1726) 又做共享上下文／字段遍历；音频键和波形键应共享依赖描述，但不能简单判定两种键完全等价。
 
 最小改法：一次更新先计算每个音符／共享组／语句的声学摘要，clip 键组合源版本、编辑摘要和必要上下文摘要。跨区共享音高、CVVC、DS 整句上下文仍须计入；不能为了缓存命中只保留 clip 自身字段。仅把整个长字符串最终 hash 一次只能省存储，不能消除每 clip 重复遍历。
 
@@ -431,7 +516,7 @@ DS -> UtauRenderRequest -> JSON request -> Python worker
 
 ### A06 · P2 · 目标采样器按“每帧扫所有音符”工作
 
-证据：[AudioEngine.cpp:186](../juce/src/AudioEngine.cpp#L186) 分配 5 ms 密集曲线；[197](../juce/src/AudioEngine.cpp#L197) 外层 frame、内层 clip.notes 搜索，基础定位为 O(F×N)，连接邻居另有遍历。无音高间隔仍要扫描；这是前端请求生成，后端块缓存命中也不能省掉全部成本。
+证据：[AudioEngine.cpp:186](../src/AudioEngine.cpp#L186) 分配 5 ms 密集曲线；[197](../src/AudioEngine.cpp#L197) 外层 frame、内层 clip.notes 搜索，基础定位为 O(F×N)，连接邻居另有遍历。无音高间隔仍要扫描；这是前端请求生成，后端块缓存命中也不能省掉全部成本。
 
 最小改法：为已排序不重叠音符使用游标；允许重叠时使用活动区间列表并保留当前覆盖优先规则。必要的密集 F0 留到渲染准备阶段生成，UI 继续用稀疏编辑点。不要用同一算法强行处理不重叠和多声部重叠。
 
@@ -439,19 +524,19 @@ DS -> UtauRenderRequest -> JSON request -> Python worker
 
 ### A07 · P2 · 合成整句随后复制成各区域 buffer
 
-证据：[AudioEngine.cpp:2083](../juce/src/AudioEngine.cpp#L2083) `sliceInto` 给每个目标重新分配 buffer、copyFrom、扫描可听边界并计算峰值。整句声学上下文必要，但每片段都持有重复 PCM 不一定必要。
+证据：[AudioEngine.cpp:2083](../src/AudioEngine.cpp#L2083) `sliceInto` 给每个目标重新分配 buffer、copyFrom、扫描可听边界并计算峰值。整句声学上下文必要，但每片段都持有重复 PCM 不一定必要。
 
 最小改法：区域持有共享整句 PCM + 样本起点／长度，边界和峰值按 slice 求；后处理会改写样本时才物化副本。不要把这一优化误写成“取消整句渲染”，否则破坏拼接和相位连续性。统计峰值生成次数和相同 PCM 的实际持有字节数。
 
 ### A08 · P2 · Live MCP 的小操作也经过整工程事务草稿
 
-证据：[MainComponentMcp.cpp:637](../juce/src/MainComponentMcp.cpp#L637) 创建 draft 并 replace(snapshot)，再做 contentFingerprint；[688](../juce/src/MainComponentMcp.cpp#L688) 每条命令又 snapshot 校验目标；[728](../juce/src/MainComponentMcp.cpp#L728) 批量允许 128 命令；[747](../juce/src/MainComponentMcp.cpp#L747) 比较指纹，再 snapshot 回写。草稿 ProjectModel 的普通 setter 也会走全量撤销，仅正式文档最终一次撤销不等于草稿无成本。
+证据：[MainComponentMcp.cpp:637](../src/MainComponentMcp.cpp#L637) 创建 draft 并 replace(snapshot)，再做 contentFingerprint；[688](../src/MainComponentMcp.cpp#L688) 每条命令又 snapshot 校验目标；[728](../src/MainComponentMcp.cpp#L728) 批量允许 128 命令；[747](../src/MainComponentMcp.cpp#L747) 比较指纹，再 snapshot 回写。草稿 ProjectModel 的普通 setter 也会走全量撤销，仅正式文档最终一次撤销不等于草稿无成本。
 
 最小改法：直接只读查询用同一共享快照；短小写命令在消息线程校验修订后走已有模型动作；长操作捕获最小输入并提交结果。原子 batch 保留事务语义，但草稿阶段禁用内部历史、一次验证 ID 集、最后提交一次。不要另写一份与 GUI 不同的编辑算法。
 
 ### A09 · P2/P3 · 单项／批量与多字段 setter 不一致
 
-已正确复用的例子：[transposeNote:3707](../juce/src/ProjectModel.cpp#L3707) 调用 transposeNotes，`setNoteUtauFlagCurve` 调用批量曲线入口。未统一例子：[setNoteLabel:5239](../juce/src/ProjectModel.cpp#L5239) 与 setNoteLabels、[setNoteUtauFlags:5261](../juce/src/ProjectModel.cpp#L5261) 与 setNotesUtauFlags 有独立遍历／提交；removeNote(s)、removeClip(s) 也应逐项核对差异后收敛。
+已正确复用的例子：[transposeNote:3707](../src/ProjectModel.cpp#L3707) 调用 transposeNotes，`setNoteUtauFlagCurve` 调用批量曲线入口。未统一例子：[setNoteLabel:5239](../src/ProjectModel.cpp#L5239) 与 setNoteLabels、[setNoteUtauFlags:5261](../src/ProjectModel.cpp#L5261) 与 setNotesUtauFlags 有独立遍历／提交；removeNote(s)、removeClip(s) 也应逐项核对差异后收敛。
 
 最小改法：每个动作保留一份批量实现，单项只包装；相关的多字段一次用户操作在同一事务中提交。`set_track`／`set_note` 是协议聚合入口，不能因 schema 是一个调用就假定内部只有一次扫描／撤销。不同作用域（全工程、轨道默认、音符覆盖）不直接合并。
 
@@ -480,11 +565,11 @@ DS -> UtauRenderRequest -> JSON request -> Python worker
 
 ## 回退与兼容收敛
 
-实际代码 [AnalysisService.cpp:234](../juce/src/backend/AnalysisService.cpp#L234) 在 GAME 无结果时会走 NativeAnalyzer，包括模型缺失和 GAME 返回空音符。该策略存在后端／warning 输出，不能描述为一定静默；但“合法空结果”和“模型失败”共用条件值得明确。
+实际代码 [AnalysisService.cpp:234](../src/backend/AnalysisService.cpp#L234) 在 GAME 无结果时会走 NativeAnalyzer，包括模型缺失和 GAME 返回空音符。该策略存在后端／warning 输出，不能描述为一定静默；但“合法空结果”和“模型失败”共用条件值得明确。
 
 建议让分析结果明确区分 success-with-notes、success-empty、unavailable、failed、cancelled；自动模式才按一个明确策略选可用分析器，显式选择失败就返回错误。不要 GAME→FCPE→native→再造占位音高这种多层补猜。
 
-当前 [RenderService.cpp:915](../juce/src/backend/RenderService.cpp#L915) NSF 缺模型直接返回错误，LLSM2 失败也拒绝替换；末尾还保留 `nsf-hifigan-fallback` 等文案，并不能据字符串证明实际走过该路径。应以分支可达性清理历史文案。
+当前 [RenderService.cpp:915](../src/backend/RenderService.cpp#L915) NSF 缺模型直接返回错误，LLSM2 失败也拒绝替换；末尾还保留 `nsf-hifigan-fallback` 等文案，并不能据字符串证明实际走过该路径。应以分支可达性清理历史文案。
 
 `AE::resolveUtauResampler` 对不存在的配置路径选择随包 WCSNDM，是便携迁移策略。若要严格遵循“不兜底”：区分“未配置，可用默认”与“用户显式路径失效，报错”；不要一刀切移除随包默认，导致正常完整包无法首次使用。
 

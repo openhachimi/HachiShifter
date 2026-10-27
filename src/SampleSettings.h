@@ -51,6 +51,8 @@ struct SampleRegionSetting
     // Only explicitly named manual vowel cuts are authoring regions. Pitch
     // analysis/project-note epochs must never populate this intent implicitly.
     bool vowelSplitsExplicit = false;
+    std::optional<NativePronunciationEdges> nativePronunciationEdges;
+    std::optional<NativeTransitionShape> nativeTransition;
 };
 
 struct VoicebankOtoEntry
@@ -116,7 +118,8 @@ public:
     // Convert the already-parsed Melodyne project into native HJM annotations
     // and bind the resulting segments back to its native notes.  This is the
     // single conversion service used by GUI and headless imports.
-    static bool convertMelodyneProject(ProjectData& project, juce::StringArray& warnings);
+    static bool convertMelodyneProject(ProjectData& project, juce::StringArray& warnings,
+                                       bool autoRegisterTransitions = true,bool publishAnnotations = true);
     static bool importOto(const juce::File& oto, const juce::File& audio,
                           double audioDuration, std::vector<SampleRegionSetting>& rows,
                           juce::String& error);

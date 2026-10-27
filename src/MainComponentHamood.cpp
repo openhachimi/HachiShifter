@@ -3,13 +3,56 @@
 #include "HamoodProject.h"
 #include "HamoodTimelinePanel.h"
 #include <iostream>
+#include <cmath>
 #include <set>
 
 namespace hachi
 {
 namespace
 {
-juce::String tr(const char* text){return juce::String::fromUTF8(text);}
+juce::String tr(const char* text){return I18n::uiText(text);}
+// UI-only formatting: backend names and descriptions also feed model data / JSON.
+juce::String displayKey(int key)
+{
+    static const char* names[]{"C","C# / Db","D","D# / Eb","E","F","F# / Gb","G","G# / Ab","A","A# / Bb","B"};
+    return juce::String(names[(key%12+12)%12])+tr(key>=12?" 自然小调":" 大调");
+}
+juce::String displayVoice(int steps)
+{
+    const char* interval=std::abs(steps)==2?"三度":std::abs(steps)==3?"四度":std::abs(steps)==4?"五度":std::abs(steps)==5?"六度":"八度";
+    return tr(steps<0?"下方{interval}":"上方{interval}").replace("{interval}",tr(interval));
+}
+juce::String displayPlan(const hamood::Plan& plan)
+{
+    if(plan.error.isNotEmpty())return I18n::message(plan.error);
+    juce::String text=tr("源音符：")+juce::String((int)plan.notes.size())+tr("  ·  新声部：")+juce::String(plan.notes.empty()?0:(int)plan.notes[0].targets.size())+"\n";
+    if(plan.keyMode!="manual")text+=tr("调性分析上下文：整条源轨 ")+juce::String(plan.analysisNotes)+tr(" 个音符（候选分数不是概率）\n");
+    if(plan.mixedTonality)text+=tr("检测到多个持续调性区域；单一调性只代表整体匹配，建议分段或手动确认。\n");
+    for(const auto& section:plan.passages)
+    {
+        text+=tr("第 ")+juce::String(section.startBar)+"–"+juce::String(section.endBar)+tr(" 小节 | ")
+            +juce::String(section.start,2)+"–"+juce::String(section.end,2)+" s  "+displayKey(section.key)
+            +(section.margin<.08?tr("（证据不足或存在歧义，结合上下文选择）"):juce::String())+"\n";
+        if(!section.candidates.empty())
+        {
+            text+=tr("  候选：");
+            for(size_t i=0;i<section.candidates.size();++i)text+=(i?" / ":"")+displayKey(section.candidates[i].first)+" "+juce::String(section.candidates[i].second,2);
+            text+="\n";
+        }
+    }
+    if(plan.chromaticNotes>0)text+=tr("包含调外音：")+juce::String(plan.chromaticNotes)+tr("；按最近音级保留升降变化。\n");
+    text+=tr("\n时间 / 歌词 / 原音 → 和声\n");
+    int count=0;
+    for(const auto& note:plan.notes)
+    {
+        if(count++==120){text+=tr("…其余音符将一并生成。\n");break;}
+        text+=juce::String(note.start,2)+" s  "+note.lyric+"  "+juce::MidiMessage::getMidiNoteName((int)std::lround(note.pitch),true,true,4)+" → ";
+        for(size_t i=0;i<note.targets.size();++i)
+            text+=(i?" / ":"")+juce::MidiMessage::getMidiNoteName((int)std::lround(note.targets[i]),true,true,4);
+        text+="\n";
+    }
+    return text;
+}
 class HamoodPanel final : public juce::Component, private juce::ListBoxModel
 {
 public:
@@ -65,7 +108,7 @@ public:
         removeSection.onClick=[this]{const auto row=sectionList.getSelectedRow();if(row>=0&&row<(int)manualSections.size()){manualSections.erase(manualSections.begin()+row);sectionList.deselectAllRows();sectionList.updateContent();refresh();}};
         for(int steps:{2,-2,3,-3,4,-4,5,-5,7,-7})
         {
-            auto button=std::make_unique<juce::ToggleButton>(hamood::voiceName(steps));
+            auto button=std::make_unique<juce::ToggleButton>(displayVoice(steps));
             button->setToggleState(steps==2,juce::dontSendNotification);button->onClick=[this]{refresh();};
             addAndMakeVisible(*button);voices.emplace_back(steps,std::move(button));
         }
@@ -108,12 +151,12 @@ public:
         for(juce::Component* c:std::initializer_list<juce::Component*>{&manualHint,&startLabel,&countLabel,&rangeLabel,&startBar,&barCount,&addSection,&updateSection,&removeSection,&sectionList})c->setVisible(manual);
         sectionConfirmed.setVisible(manual);adoptPrediction.setEnabled(!manual);
         updateRange();resized();
-        const auto options=readOptions();const auto plan=hamood::analyse(data,options);preview.setText(plan.description(),false);generate.setEnabled(plan.error.isEmpty());
+        const auto options=readOptions();const auto plan=hamood::analyse(data,options);preview.setText(displayPlan(plan),false);generate.setEnabled(plan.error.isEmpty());
         if(save)
         {
             auto next=juce::JSON::parse(hamoodstate::encode(state));hamoodstate::settings(next,options,manualSections);hamoodstate::predictions(data,next,plan);
             juce::String error;
-            if(!hamoodstate::validate(next,error)){preview.setText(tr("本次无效修改未保存：")+error+"\n"+plan.description(),false);return;}
+            if(!hamoodstate::validate(next,error)){preview.setText(tr("本次无效修改未保存：")+error+"\n"+displayPlan(plan),false);return;}
             const auto encoded=hamoodstate::encode(next);
             if(persist&&!persist(encoded)){preview.setText(tr("工程已变化，请重新打开 HAMOOD。"),false);generate.setEnabled(false);return;}
             state=std::move(next);data.hamoodState=encoded;
@@ -136,7 +179,7 @@ public:
         if(row<0||row>=(int)manualSections.size())return;
         if(selected)g.fillAll(Palette::selection);
         const auto& s=manualSections[(size_t)row];g.setColour(selected?Palette::contrastingText(Palette::selection):Palette::text);
-        g.drawText(tr("第 ")+juce::String(s.startBar)+" – "+juce::String(s.endBar)+tr(" 小节   |   ")+hamood::keyName(s.tonic+(s.minor?12:0))+tr(s.confirmed?"   已确认":"   待确认"),8,0,width-16,height,juce::Justification::centredLeft);
+        g.drawText(tr("第 ")+juce::String(s.startBar)+" – "+juce::String(s.endBar)+tr(" 小节   |   ")+displayKey(s.tonic+(s.minor?12:0))+tr(s.confirmed?"   已确认":"   待确认"),8,0,width-16,height,juce::Justification::centredLeft);
     }
     void selectedRowsChanged(int row) override
     {

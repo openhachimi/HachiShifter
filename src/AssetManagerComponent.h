@@ -22,6 +22,7 @@ class OtoWaveformEditorComponent;
 // Folder actions live in one menu; precise editing reuses the old OTO editor.
 class AssetManagerComponent final : public juce::Component,
                                     public juce::FileDragAndDropTarget,
+                                    public juce::TooltipClient,
                                     private juce::ScrollBar::Listener
 {
 public:
@@ -44,15 +45,26 @@ public:
     };
     std::function<void(const MaterialSelection&)> onLoadMaterialSelection;
     std::function<void(const juce::File&)> onLoadAudio;
+    // Raw source only. end < 0 requests the whole physical recording.
+    std::function<void(const juce::File&,double start,double end)> onPreviewSource;
+    // 198: tree selection is reported so the editor can highlight project uses.
+    std::function<void(const juce::File& audio,const juce::String& audioId,const juce::StringArray& regionIds)> onMaterialSelectionChanged;
+    // Forget cached manifests AND file lists of the folder holding this path.
+    void refreshMaterialFolder(const juce::File& rootOrMember);
+    // Open editors on this source: reload when clean, warn when dirty.
+    void notifyExternalMaterialChange(const juce::File& source);
+    // Select one exact pronunciation row and scroll it into view.
+    bool selectPronunciationForReveal(const juce::File& audio, const juce::String& audioId, const juce::String& regionId);
     std::function<void(const juce::File&, const juce::StringArray&)> onLoadPronunciations;
     std::function<void(const juce::File&)> onUseMaterialFolder;
     // Host owns the existing async dataset wizard/publication service.
     // Empty root requests a chooser; a root context supplies that exact folder.
     std::function<void(const juce::File& initialRoot)> onRequestCommunityDatasetImport;
+    std::function<void(const juce::File& root)> onRequestJapaneseAutoAnnotation;
     std::function<void(OtoWaveformEditorComponent&)> onConfigureMaterialEditor;
     // Synchronous preflight and completion for the shared material editor.
-    std::function<bool(const juce::File&, const std::vector<SampleRegionSetting>&, juce::String&)> onMaterialPreflight;
-    std::function<void(const juce::File&, const std::vector<SampleRegionSetting>&)> onMaterialSaved;
+    std::function<bool(const juce::File&, const std::vector<SampleRegionSetting>&, juce::String&, const juce::String&)> onMaterialPreflight;
+    std::function<void(const juce::File&, const std::vector<SampleRegionSetting>&, const juce::String&)> onMaterialSaved;
     [[nodiscard]] int otoImportKind(const juce::File& audioOrFolder = {}) const;
     // Compatibility seam only: format selection is automatic, never persisted.
     void setOtoImportKind(const juce::File& folder, int kind);
@@ -73,6 +85,7 @@ public:
     [[nodiscard]] juce::File dragFileFor(const juce::File& member);
     bool keyPressed(const juce::KeyPress& key) override;
     void paint(juce::Graphics& g) override;
+    juce::String getTooltip() override;
     void resized() override;
     void lookAndFeelChanged() override;
     void mouseDown(const juce::MouseEvent& event) override;
@@ -91,7 +104,9 @@ public:
     [[nodiscard]] juce::StringArray diagnosticMembersOf(int folderIndex) const;
     [[nodiscard]] juce::StringArray diagnosticProjectVoicebanks() const;
     [[nodiscard]] int diagnosticTreeRowCount() const { return static_cast<int>(treeRows.size()); }
-    [[nodiscard]] juce::File diagnosticSelectedAudio() const;
+    juce::Rectangle<int> diagnosticPreviewButtonBounds(const juce::File&,const juce::String& audioId = {},const juce::String& regionId = {}) const;
+    [[nodiscard]] juce::File selectedMaterialAudio() const;
+    [[nodiscard]] juce::File diagnosticSelectedAudio() const { return selectedMaterialAudio(); }
     juce::TextEditor& diagnosticSearchEditor() { return searchEditor; }
     [[nodiscard]] bool diagnosticSearchPending() const { return searchScanPending; }
     [[nodiscard]] juce::StringArray diagnosticSearchLabels() const;
@@ -103,9 +118,14 @@ public:
     [[nodiscard]] juce::StringArray diagnosticPronunciationLabels(const juce::File& audio,
                                                                       const juce::String& audioVariantId = {});
     [[nodiscard]] juce::StringArray diagnosticRegistrationIds(const juce::File& audio);
-    bool diagnosticSelectRegistration(const juce::File&, const juce::String& audioVariantId = {});
+    bool selectMaterialRegistration(const juce::File&,const juce::String& exactAudioId);
+    bool ownsMaterialEditor(const OtoWaveformEditorComponent*) const;
+    bool retargetCleanMaterialEditor(OtoWaveformEditorComponent&,const juce::File& manifest,const juce::String& exactAudioId,juce::String& error);
+    bool diagnosticSelectRegistration(const juce::File& file,const juce::String& audioVariantId = {}) { return selectMaterialRegistration(file,audioVariantId); }
+
     [[nodiscard]] juce::var diagnosticTreeSnapshot() const;
-    [[nodiscard]] juce::String diagnosticSelectedVariantId() const { return selectedAudioVariantId; }
+    [[nodiscard]] juce::String selectedMaterialVariantId() const { return selectedAudioVariantId; }
+    [[nodiscard]] juce::String diagnosticSelectedVariantId() const { return selectedMaterialVariantId(); }
     [[nodiscard]] int diagnosticManifestLoadCount() const { return manifestLoadCount; }
     [[nodiscard]] bool diagnosticAnnotationReadPending() const
     {
@@ -113,8 +133,11 @@ public:
         return false;
     }
     [[nodiscard]] int diagnosticRegisterFolder(const juce::File& folder);
-    // Exact same menu item/dispatch as both production folder menus.
+    // Exact same CSV item/dispatch as the single production import menu action.
     [[nodiscard]] juce::PopupMenu diagnosticCommunityDatasetImportMenu() const;
+    [[nodiscard]] juce::PopupMenu diagnosticJapaneseAutoAnnotationMenu() const;
+    bool diagnosticRequestJapaneseAutoAnnotation(const juce::File& root) { return requestJapaneseAutoAnnotation(root); }
+
     bool diagnosticRequestCommunityDatasetImport(const juce::File& initialRoot = {})
     { return requestCommunityDatasetImport(initialRoot); }
     // Copy audio into a folder without inventing annotations, as a drop would.
@@ -159,7 +182,14 @@ private:
         std::map<juce::String, std::uint64_t> audioRequests;
     };
     void ensureOtoRows(const juce::File& audio);
+    juce::Rectangle<int> previewButtonBounds(const TreeRow&) const;
+    bool previewButtonEnabled(const TreeRow&) const;
+    void previewTreeRow(const TreeRow&);
     static constexpr int communityDatasetImportAction = 20;
+    static constexpr int japaneseAutoAnnotationAction = 21;
+    void addJapaneseAutoAnnotationAction(juce::PopupMenu&) const;
+    bool requestJapaneseAutoAnnotation(const juce::File& root);
+
     void addCommunityDatasetImportAction(juce::PopupMenu&) const;
     bool requestCommunityDatasetImport(const juce::File& initialRoot);
     void showFolderActions();

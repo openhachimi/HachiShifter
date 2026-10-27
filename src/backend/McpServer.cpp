@@ -1,4 +1,5 @@
 #include "McpServer.h"
+#include "../MelodyneImportOptimization.h"
 #include "LegacyTextCodec.h"
 #include "MelodyneProvider.h"
 #include "AudioFileReader.h"
@@ -465,6 +466,10 @@ juce::var McpServer::diagnosticTools()
                       .description = "The file to open: .hjpx, .hspx, .mpd, .mid or a recording.  "
                                      "A recording is analysed as it comes in.",
                       .required = true },
+                    { .name="auto_merge_consonants", .type="boolean", .description="MPD only. Same-source sibilant merge with durable restore. Default false." },
+                    { .name="auto_virtual_connections", .type="boolean", .description="MPD only. Discover cross-source virtual routes. Default false." },
+                    { .name="auto_virtual_pitch", .type="boolean", .description="MPD only. Generate local glides on newly created routes. Default false." },
+                    { .name="auto_register_transitions", .type="boolean", .description="MPD annotation policy. Default true; does not enable audio optimization." },
                 })),
             makeTool("project_save", "Save current project as HJPX / 保存工程", {
                 { .name = "path", .type = "string",
@@ -523,7 +528,15 @@ juce::var McpServer::diagnosticTools()
                                      "document holds, or read it again here.  reanalyze, "
                                      "reanalyse and game_fcpe mean the same as game+fcpe.",
                       .choices = { "keep", "native", "game+fcpe" } },
+                    { .name="auto_merge_consonants", .type="boolean", .description="MPD only. Same-source sibilant merge with durable restore. Default false." },
+                    { .name="auto_virtual_connections", .type="boolean", .description="MPD only. Discover cross-source virtual routes. Default false." },
+                    { .name="auto_virtual_pitch", .type="boolean", .description="MPD only. Generate local glides on newly created routes. Default false." },
+                    { .name="auto_register_transitions", .type="boolean", .description="MPD annotation policy. Default true; does not enable audio optimization." },
                 })),
+            makeTool("restore_merged_consonant", "Restore archived original consonant/vowel fragments through the common Model authority", {
+                { .name="note_id", .type="string", .description="Merged note ID", .required=true },
+                { .name="discard_merged_edits", .type="boolean", .description="Explicitly discard edits made after merging. Default false." },
+            }),
             makeTool("set_tempo", "Set BPM and time signature / 设置速度与拍号", {
                 { .name = "bpm", .type = "number",
                   .description = "Beats a minute, 20 to 400.  Default 120." },
@@ -1038,11 +1051,15 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
         const juce::File file(string(args, "path"));
         if (file.hasFileExtension("mpd"))
         {
+            MelodyneImportOptimizationOptions optimization;
+            if(!readMelodyneImportOptimizationOptions(args,optimization,error))return toolResult(error,true);
             if (auto imported = MelodyneImporter::importProject(file, error))
             {
-                juce::StringArray annotationWarnings;
+                juce::StringArray annotationWarnings=prepareMelodyneImportOptimization(imported->project,imported->continuousSourceJoins,optimization).skipped;
+                if(!imported->missingFiles.isEmpty())annotationWarnings.add("Missing source recordings: "+imported->missingFiles.joinIntoString(" | "));
                 SampleSettings::convertMelodyneProject(imported->project,
-                                                       annotationWarnings);
+                                                       annotationWarnings,optimization.registerTransitions,false);
+                annotationWarnings.addArray(finishMelodyneImportOptimization(imported->project,imported->continuousSourceJoins,optimization).skipped);
                 project.resetDocument(std::move(imported->project));
                 return toolResult(summary(project.snapshot())
                     + (annotationWarnings.isEmpty() ? juce::String()
@@ -1128,6 +1145,8 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
     }
     else if (name == "import_melodyne")
     {
+        MelodyneImportOptimizationOptions optimization;
+        if(!readMelodyneImportOptimizationOptions(args,optimization,error))return toolResult(error,true);
         MelodyneImportOptions options;
         options.recursiveMediaSearch = static_cast<bool>(
             args.getProperty("recursive_media", true));
@@ -1145,15 +1164,23 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
                 (void) AnalysisService::reanalyseProjectSourcePitch(
                     imported->project, analysisConfig(args), pitchError);
             }
-            juce::StringArray annotationWarnings;
+            juce::StringArray annotationWarnings=prepareMelodyneImportOptimization(imported->project,imported->continuousSourceJoins,optimization).skipped;
+                if(!imported->missingFiles.isEmpty())annotationWarnings.add("Missing source recordings: "+imported->missingFiles.joinIntoString(" | "));
             SampleSettings::convertMelodyneProject(imported->project,
-                                                   annotationWarnings);
-            project.resetDocument(std::move(imported->project));
+                                                   annotationWarnings,optimization.registerTransitions,false);
+            annotationWarnings.addArray(finishMelodyneImportOptimization(imported->project,imported->continuousSourceJoins,optimization).skipped);
+                project.resetDocument(std::move(imported->project));
             return toolResult(summary(project.snapshot())
                 + (annotationWarnings.isEmpty() ? juce::String()
                     : "; annotation_warnings="
                         + annotationWarnings.joinIntoString(" | ")));
         }
+    }
+    else if(name=="restore_merged_consonant")
+    {
+        const auto discard=args.getProperty("discard_merged_edits",false);
+        if(!discard.isBool())return toolResult("discard_merged_edits must be a boolean",true);
+        if(project.restoreMelodyneConsonant(string(args,"note_id"),bool(discard),error))return toolResult("Original consonant fragments restored");
     }
     else if (name == "set_tempo")
     {
@@ -1971,6 +1998,20 @@ juce::var McpServer::projectJson() const
         nativeConnections.push_back(std::move(value));
     }
     set(root, "native_connections", array(std::move(nativeConnections)));
+    std::vector<juce::var> virtualGroups;
+    for(const auto& group:data.nativeVirtualGroups)
+    {
+        auto value=object();set(value,"id",group.id);set(value,"track_id",group.trackId);set(value,"enabled",group.enabled);
+        set(value,"automatic_pitch",group.automaticPitch);set(value,"shared_pitch",group.sharedPitch);set(value,"manual_hop_curve_count",int(group.hopPitchCurves.size()));set(value,"coupled_movement",group.coupledMovement);
+        set(value,"split_bridge_count",int(group.extraSplitTransitions.size())+(group.splitTransition?1:0));
+        std::vector<juce::var> members;for(const auto& id:group.orderedNoteIds)members.emplace_back(id);
+        set(value,"ordered_note_ids",array(std::move(members)));virtualGroups.push_back(std::move(value));
+    }
+    set(root,"native_virtual_groups",array(std::move(virtualGroups)));
+    std::vector<juce::var> archives;
+    for(const auto& record:data.consonantMerges)
+    {auto value=object();set(value,"id",record.id);set(value,"track_id",record.trackId);set(value,"merged_note_id",record.mergedNoteId);archives.push_back(std::move(value));}
+    set(root,"consonant_merge_archives",array(std::move(archives)));
     std::vector<juce::var> tracks;
     for (const auto& track : data.tracks)
     {

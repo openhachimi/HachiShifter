@@ -19,7 +19,7 @@
 
 ### A. 修正旧采样接口，并建立音源预检
 
-`juce/engines/diffsinger/bridge.py:71` 固定设置 `steps=20`、`speedup=50`，直接把配置的 `max_depth` 转成输入所需数据类型。旧式整数 depth 的量纲应进行换算。
+`engines/diffsinger/bridge.py:71` 固定设置 `steps=20`、`speedup=50`，直接把配置的 `max_depth` 转成输入所需数据类型。旧式整数 depth 的量纲应进行换算。
 
 使用真实 `Model.run` 和模拟 ONNX session 检查：当 `max_depth=0.5` 且输入为 int64 时，现实现传入 `depth=0, speedup=50`；按上游 20 步逻辑应为 `depth=500, speedup=25`。这是输入构造问题的复现，未用旧式真实音源测量其听感影响；不能据此断言已验证的 Umidaji 受到影响。[上游采样换算实现](https://github.com/openutau/OpenUtau/blob/master/OpenUtau.Core/DiffSinger/DiffSingerRenderer.cs)
 

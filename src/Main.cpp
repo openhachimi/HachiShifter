@@ -44,6 +44,77 @@
 #include "tests/MainProjectRegistrationUiSmoke.h"
 #include "tests/OtoProvenanceSmoke.h"
 #include "tests/ClassicNoteScopeSmoke.h"
+#include "tests/JapaneseAutoAnnotationSmoke.h"
+#include "tests/JapaneseInferenceModeSmoke.h"
+#include "tests/JapaneseInferenceDialogSmoke.h"
+#include "tests/NativeSourceReopenScopeSmoke.h"
+#include "tests/JapaneseAnnotationSafetySmoke.h"
+#include "tests/NativeSourceEdgePlanSmoke.h"
+#include "tests/NativeSourceEdgeMixerSmoke.h"
+#include "tests/NativeSourceSliceEdgeSmoke.h"
+#include "tests/NativePronunciationEdgeEditSmoke.h"
+#include "tests/NativeEdgeProfileGuiSmoke.h"
+#include "tests/NativeForceConnectionSmoke.h"
+#include "tests/NativeNoteClickInteractionSmoke.h"
+#include "tests/NativeMaterialAppearanceSmoke.h"
+#include "tests/NativeMidiMaterialSmoke.h"
+#include "tests/NativeTransitionShapeSmoke.h"
+#include "tests/NativeVirtualConnectionPlanSmoke.h"
+#include "tests/NativeVirtualGroupModelSmoke.h"
+#include "tests/NativeVirtualEntryPointSmoke.h"
+#include "tests/NativeVirtualMixerSmoke.h"
+#include "tests/NativeVirtualPitchPlanSmoke.h"
+#include "tests/NativeVirtualPitchRequestSmoke.h"
+#include "tests/NativeVirtualMoveSmoke.h"
+#include "tests/NativeVirtualPitchEditSmoke.h"
+#include "tests/NativeVirtualAutoConnectSmoke.h"
+#include "tests/NativeSplitTransitionPlanSmoke.h"
+#include "tests/NativeSplitTransitionMixerSmoke.h"
+#include "tests/NativeSplitTransitionDetectionSmoke.h"
+#include "tests/NativeLogicalTransitionRegistrationSmoke.h"
+#include "tests/NativeVirtualConnectionUiSmoke.h"
+#include "tests/NativeConsonantMergePlanSmoke.h"
+#include "tests/NativeConsonantMergeModelSmoke.h"
+#include "tests/NativeConsonantMergeDetectionSmoke.h"
+#include "tests/NativePartialCutMoveSmoke.h"
+#include "tests/NativeRealProjectPartialCutDrag.h"
+#include "tests/NativePartialCutDragGestureSmoke.h"
+#include "tests/NativeVirtualGlideAudioSmoke.h"
+#include "tests/NativeVirtualExportParitySmoke.h"
+#include "tests/NativeVirtualWaveformHashSmoke.h"
+#include "tests/NativeVirtualChainSharedSmoke.h"
+#include "tests/NativeVirtualSharedPitchGestureSmoke.h"
+#include "tests/NativeVirtualUnavailableGroupSmoke.h"
+#include "tests/NativeVirtualChainExtensionSmoke.h"
+#include "tests/NativeVirtualMultiSplitSmoke.h"
+#include "MelodyneImportOptimization.h"
+#include "tests/MelodyneOptimizationEntrySmoke.h"
+#include "tests/NativeVirtualSameFileSkipSmoke.h"
+#include "tests/NativeVirtualNonlinearCurveSmoke.h"
+#include "tests/NativeVirtualCurveToolSmoke.h"
+#include "tests/NativeVirtualPeerWaveformSmoke.h"
+#include "tests/NativeVirtualHopCurveSmoke.h"
+#include "tests/NativeRealMultiSplitAudioSmoke.h"
+#include "tests/TeioFullVirtualRender.h"
+#include "tests/SavedNsfThreeModeRender.h"
+#include "tests/NativeNoteTransitionMenuSmoke.h"
+#include "tests/NativeVirtualCoupledMoveSmoke.h"
+#include "tests/NativeVirtualFlatBezierSmoke.h"
+#include "tests/NativeVirtualHandoverWindowSmoke.h"
+#include "tests/NativeVirtualHandoverGestureSmoke.h"
+#include "tests/NativeVirtualSingleLineSmoke.h"
+#include "tests/NativePermanentSeamSmoke.h"
+#include "tests/LegacyNativeUsageSmoke.h"
+#include "tests/TransitionPairAndImportOptionsSmoke.h"
+#include "tests/FocusedDefaultsSmoke.h"
+#include "tests/NativeMelodyneYellowSmoke.h"
+#include "tests/NativeSourceAssemblySmoke.h"
+#include "tests/WorldSourceAssemblySmoke.h"
+#include "tests/NativeSourceTrendPitchSmoke.h"
+#include "tests/NativeTransitionDetectionSmoke.h"
+#include "tests/TranslationFileSmoke.h"
+#include "tests/MelodyneTimingCompatibilitySmoke.h"
+#include "tests/NativeScoreMaterialReplacementSmoke.h"
 #include "tests/CommunityDatasetMenuSmoke.h"
 #include "tests/MaterialVariantSmoke.h"
 #include "tests/TrackEditingInterfacesUiSmoke.h"
@@ -184,6 +255,8 @@ public:
     {
         startupLog("Application: initialise " + getApplicationVersion());
         auto arguments = juce::StringArray::fromTokens(commandLine, true);
+        if(!arguments.isEmpty()&&arguments[0]=="--version")
+        {std::cout<<getApplicationVersion()<<std::endl;juce::MessageManager::callAsync([]{quit();});return;}
         if (arguments.size() >= 2 && (arguments[0] == "--migrate-otto-folder"
             || arguments[0] == "--export-otto-folder"))
         {
@@ -279,6 +352,425 @@ public:
         {
             setApplicationReturnValue(ustxImporterSmoke(juce::File(arguments[1].unquoted())) ? 0 : 4);
             juce::MessageManager::callAsync([this] { quit(); }); return;
+        }
+        if(arguments.size()>=4&&arguments[0]=="--smoke-japanese-inference-dialog")
+        {
+            runJapaneseInferenceDialogSmoke(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()),juce::File(arguments[3].unquoted()),[this](bool ok)
+            {setApplicationReturnValue(ok?0:4);juce::MessageManager::callAsync([this]{quit();});});return;
+        }
+        if(arguments.size()>=4&&arguments[0]=="--smoke-japanese-inference-modes")
+        {
+            setApplicationReturnValue(runJapaneseInferenceModeSmoke(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()),juce::File(arguments[3].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-source-reopen-scope")
+        {
+            auto component=std::make_unique<MainComponent>();
+            setApplicationReturnValue(runNativeSourceReopenScopeSmoke(*component,juce::File(arguments[1].unquoted()))?0:4);
+            component.reset();juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-material-overlap")
+        {
+            auto component=std::make_unique<MainComponent>();
+            setApplicationReturnValue(component->diagnosticNativeMaterialOverlapUi(juce::File(arguments[1].unquoted()))?0:4);
+            component.reset();juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-edge-profile-gui")
+        {
+            setApplicationReturnValue(runNativeEdgeProfileGuiSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-pronunciation-edge-edit")
+        {
+            setApplicationReturnValue(runNativePronunciationEdgeEditSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-source-slice-edges")
+        {
+            setApplicationReturnValue(runNativeSourceSliceEdgeSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=3&&arguments[0]=="--smoke-native-source-assembly")
+        {
+            setApplicationReturnValue(hachi::tests::runNativeSourceAssemblySmoke(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-world-source-assembly")
+        {
+            setApplicationReturnValue(hachi::tests::runWorldSourceAssemblySmoke(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-focused-defaults")
+        {setApplicationReturnValue(runFocusedDefaultsSmoke(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=2&&arguments[0]=="--smoke-transition-pair-import-options")
+        {setApplicationReturnValue(runTransitionPairAndImportOptionsSmoke(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=3&&arguments[0]=="--smoke-legacy-native-usage")
+        {setApplicationReturnValue(runLegacyNativeUsageSmoke(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=3&&arguments[0]=="--smoke-native-melodyne-yellow")
+        {setApplicationReturnValue(runNativeMelodyneYellowSmoke(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-permanent-seam")
+        {
+            setApplicationReturnValue(runNativePermanentSeamSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-single-line")
+        {
+            setApplicationReturnValue(runNativeVirtualSingleLineSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-handover-window")
+        {
+            setApplicationReturnValue(runNativeVirtualHandoverWindowSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-handover-gesture")
+        {
+            setApplicationReturnValue(runNativeVirtualHandoverGestureSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-flat-bezier")
+        {
+            setApplicationReturnValue(runNativeVirtualFlatBezierSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-coupled-move")
+        {
+            setApplicationReturnValue(runNativeVirtualCoupledMoveSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-note-transition-menu")
+        {
+            setApplicationReturnValue(runNativeNoteTransitionMenuSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=4&&arguments[0]=="--render-saved-nsf-three")
+        {
+            setApplicationReturnValue(renderSavedNsfThreeModes(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()),juce::File(arguments[3].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--profile-teio-request-fingerprint")
+        {
+            juce::String error;backend::MelodyneImportOptions options;options.recursiveMediaSearch=false;
+            auto imported=backend::MelodyneImporter::importProject(juce::File(arguments[1].unquoted()),error,{},options);
+            if(imported)
+            {
+                for(auto& track:imported->project.tracks){track.pitchAlgorithm=PitchAlgorithm::nsfHifigan;track.nativeNsfAudio=true;track.trackType=TrackType::hachi;track.stretchAlgorithm=StretchAlgorithm::melodyneHybrid;track.renderOrder=RenderOrder::stretchSpliceThenPitch;track.compose=true;}
+                const auto start=juce::Time::getMillisecondCounterHiRes();std::cout<<"fingerprint="<<teioRegistrationAudioDetail::requestFingerprint(imported->project)<<" total_ms="<<(juce::Time::getMillisecondCounterHiRes()-start)<<std::endl;
+            }
+            else std::cerr<<error<<std::endl;
+            setApplicationReturnValue(imported?0:4);juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=4&&arguments[0]=="--render-teio-full-virtual")
+        {
+            const bool mode=arguments[3]=="on",baseline=arguments[3]=="baseline",disabled=arguments[3]=="disabled";const bool valid=mode||baseline||disabled||arguments[3]=="off";
+            setApplicationReturnValue(valid&&renderTeioFullVirtualProject(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()),mode,!baseline,disabled)?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=3&&arguments[0]=="--smoke-main-real-multi-bridge-window")
+        {
+            auto component=std::make_unique<MainComponent>();
+            setApplicationReturnValue(component->diagnosticRealMultiBridgeWindow(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()))?0:4);
+            component.reset();juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=3&&arguments[0]=="--smoke-native-real-multi-split-audio")
+        {
+            setApplicationReturnValue(runNativeRealMultiSplitAudioSmoke(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-hop-curve")
+        {
+            setApplicationReturnValue(runNativeVirtualHopCurveSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-peer-waveform")
+        {
+            setApplicationReturnValue(runNativeVirtualPeerWaveformSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-curve-tool")
+        {
+            setApplicationReturnValue(runNativeVirtualCurveToolSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-nonlinear-curve")
+        {
+            setApplicationReturnValue(runNativeVirtualNonlinearCurveSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-same-file-skip")
+        {
+            setApplicationReturnValue(runNativeVirtualSameFileSkipSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-melodyne-optimization-entry")
+        {
+            setApplicationReturnValue(runMelodyneOptimizationEntrySmoke(juce::File(arguments[1].unquoted()),arguments.size()>=3?juce::File(arguments[2].unquoted()):juce::File{})?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-multi-split")
+        {
+            setApplicationReturnValue(runNativeVirtualMultiSplitSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-chain-extension")
+        {
+            setApplicationReturnValue(runNativeVirtualChainExtensionSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-unavailable-group")
+        {
+            setApplicationReturnValue(runNativeVirtualUnavailableGroupSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-shared-pitch-gesture")
+        {
+            setApplicationReturnValue(runNativeVirtualSharedPitchGestureSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-chain-shared")
+        {
+            setApplicationReturnValue(runNativeVirtualChainSharedSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-waveform-hash")
+        {
+            setApplicationReturnValue(runNativeVirtualWaveformHashSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-export-parity")
+        {
+            setApplicationReturnValue(runNativeVirtualExportParitySmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-glide-audio")
+        {
+            setApplicationReturnValue(runNativeVirtualGlideAudioSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-partial-cut-drag-gesture")
+        {
+            setApplicationReturnValue(runNativePartialCutDragGestureSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=3&&arguments[0]=="--real-partial-cut-drag")
+        {
+            const auto drag=arguments.size()>=4?arguments[3].getDoubleValue():.12;
+            const auto semitones=arguments.size()>=5?arguments[4].getIntValue():0;
+            setApplicationReturnValue(runNativeRealProjectPartialCutDrag(
+                juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()),drag,semitones)?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-partial-cut-move")
+        {
+            setApplicationReturnValue(runNativePartialCutMoveSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-consonant-merge-detection")
+        {
+            setApplicationReturnValue(runNativeConsonantMergeDetectionSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-consonant-merge-model")
+        {
+            setApplicationReturnValue(runNativeConsonantMergeModelSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-consonant-merge-plan")
+        {
+            setApplicationReturnValue(runNativeConsonantMergePlanSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-connection-ui")
+        {
+            setApplicationReturnValue(runNativeVirtualConnectionUiSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-logical-transition-registration")
+        {
+            setApplicationReturnValue(runNativeLogicalTransitionRegistrationSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-split-transition-detection")
+        {
+            setApplicationReturnValue(runNativeSplitTransitionDetectionSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-split-transition-mixer")
+        {
+            setApplicationReturnValue(runNativeSplitTransitionMixerSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-split-transition-plan")
+        {
+            setApplicationReturnValue(runNativeSplitTransitionPlanSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-auto")
+        {
+            setApplicationReturnValue(runNativeVirtualAutoConnectSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-pitch-edit")
+        {
+            setApplicationReturnValue(runNativeVirtualPitchEditSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-move")
+        {
+            setApplicationReturnValue(runNativeVirtualMoveSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-pitch-request")
+        {
+            setApplicationReturnValue(runNativeVirtualPitchRequestSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-pitch-plan")
+        {
+            setApplicationReturnValue(runNativeVirtualPitchPlanSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-mixer")
+        {
+            setApplicationReturnValue(runNativeVirtualMixerSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-entrypoints")
+        {
+            setApplicationReturnValue(runNativeVirtualEntryPointSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-model")
+        {
+            setApplicationReturnValue(runNativeVirtualGroupModelSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-plan")
+        {
+            setApplicationReturnValue(runNativeVirtualConnectionPlanSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-source-edge-mixer")
+        {
+            setApplicationReturnValue(runNativeSourceEdgeMixerSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=3&&arguments[0]=="--smoke-native-score-replacement-ui")
+        {
+            auto component=std::make_unique<MainComponent>();
+            setApplicationReturnValue(component->diagnosticNativeScoreReplacementUi(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()))?0:4);
+            component.reset();juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-score-material-replacement")
+        {
+            setApplicationReturnValue(runNativeScoreMaterialReplacementSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-translation-no-file")
+        {
+            setApplicationReturnValue(runTranslationNoFileSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-translation-file")
+        {
+            setApplicationReturnValue(runTranslationFileSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=1&&arguments[0]=="--export-translations")
+        {
+            // Writes bin/lang/translations.tsv (or the given path) for hand editing.
+            juce::String error;const auto file=arguments.size()>1?juce::File(arguments[1].unquoted()):I18n::translationFile();
+            const auto exported=I18n::exportTranslations(file,error);
+            std::cout<<(exported?"exported=":"error=")<<(exported?file.getFullPathName():error)<<std::endl;
+            setApplicationReturnValue(exported?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=4&&arguments[0]=="--smoke-teio-transition-registration")
+        {
+            setApplicationReturnValue(runTeioProjectMaterialRegistrationAudioGate(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()),juce::File(arguments[3].unquoted()),true)?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-transition-detection")
+        {
+            setApplicationReturnValue(runNativeTransitionDetectionSmoke(juce::File(arguments[1].unquoted()),arguments.size()>2?juce::File(arguments[2].unquoted()):juce::File{})?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-source-trend")
+        {
+            setApplicationReturnValue(runNativeSourceTrendPitchSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-transition-shape")
+        {
+            setApplicationReturnValue(runNativeTransitionShapeSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-midi-material")
+        {
+            setApplicationReturnValue(runNativeMidiMaterialSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-material-appearance")
+        {
+            setApplicationReturnValue(runNativeMaterialAppearanceSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-note-clicks")
+        {
+            setApplicationReturnValue(runNativeNoteClickInteractionSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-force-connection-ui")
+        {
+            auto component=std::make_unique<MainComponent>();
+            setApplicationReturnValue(component->diagnosticNativeForceConnectionUi(juce::File(arguments[1].unquoted()))?0:4);
+            component.reset();juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-force-connection")
+        {
+            setApplicationReturnValue(runNativeForceConnectionSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=3&&arguments[0]=="--smoke-melodyne-timing")
+        {
+            const auto legacy=arguments.size()>3?juce::File(arguments[3].unquoted()):juce::File{};
+            setApplicationReturnValue(runMelodyneTimingCompatibilitySmoke(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()),legacy)?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-source-edge-plan")
+        {
+            setApplicationReturnValue(runNativeSourceEdgePlanSmoke(juce::File(arguments[1].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-source-preview-ui")
+        {
+            auto component=std::make_unique<MainComponent>();
+            setApplicationReturnValue(component->diagnosticSourcePreviewUi(juce::File(arguments[1].unquoted()))?0:4);
+            component.reset();juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=4&&arguments[0]=="--smoke-main-japanese-annotation")
+        {
+            auto* component=new MainComponent();
+            component->diagnosticJapaneseAutoAnnotationUi(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()),juce::File(arguments[3].unquoted()),[this,component](bool ok)
+            {setApplicationReturnValue(ok?0:4);juce::MessageManager::callAsync([this,component]{delete component;quit();});});
+            return;
+        }
+        if(arguments.size()>=4&&arguments[0]=="--smoke-japanese-annotation-safety")
+        {
+            setApplicationReturnValue(runJapaneseAnnotationSafetySmoke(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()),juce::File(arguments[3].unquoted()))?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if (arguments.size() >= 3 && arguments[0] == "--smoke-japanese-auto-annotation")
+        {
+            const auto corrected=arguments.size()>4?juce::StringArray::fromTokens(arguments[4].unquoted()," ",""):juce::StringArray{};
+            setApplicationReturnValue(runJapaneseAutoAnnotationSmoke(juce::File(arguments[1].unquoted()),
+                juce::File(arguments[2].unquoted()),arguments.size()>3?juce::File(arguments[3].unquoted()):juce::File{},corrected)?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if (arguments.size() >= 2 && arguments[0] == "--smoke-main-community-import")
+        {
+            auto* component=new MainComponent();
+            component->diagnosticCommunityDatasetImportUi(juce::File(arguments[1].unquoted()),[this,component](bool ok)
+            {setApplicationReturnValue(ok?0:4);juce::MessageManager::callAsync([this,component]{delete component;quit();});});
+            return;
         }
         if (arguments.size() >= 3 && arguments[0] == "--smoke-community-import-gui")
         {
@@ -8643,6 +9135,26 @@ public:
             juce::MessageManager::callAsync([this] { quit(); });
             return;
         }
+        if (arguments.size() >= 2 && arguments[0] == "--smoke-file-only-translation-ui")
+        {
+            MainComponent component;const auto ok=component.diagnosticFileOnlyTranslationUi(juce::File(arguments[1].unquoted()));
+            setApplicationReturnValue(ok?0:4);juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if (arguments.size() >= 2 && arguments[0] == "--smoke-gui198-layout")
+        {
+            I18n::clearMissingTranslationKeys();
+            MainComponent component; juce::String report;
+            const auto folder = juce::File(arguments[1].unquoted());
+            const auto ok = component.diagnosticGui198Layout(folder, report);
+            const auto missing=I18n::missingTranslationKeys();
+            folder.getChildFile("missing-translation-keys.txt").replaceWithText(missing.joinIntoString("\n"));
+            report << "file_only_missing_translation_keys=" << missing.size() << "\n";
+            folder.getChildFile("verification.txt").replaceWithText(report);
+            std::cout << report << "gui198_layout=" << ok << std::endl;
+            setApplicationReturnValue(ok ? 0 : 4);
+            juce::MessageManager::callAsync([this] { quit(); });
+            return;
+        }
         if (arguments.size() >= 2 && arguments[0] == "--smoke-integrated-ui")
         {
             MainComponent component;
@@ -13706,11 +14218,11 @@ public:
                     c.expect("beside_others_it_lands_on_the_projects_beats",
                              notes.size() == 2 && near(notes[0].startSeconds, 0.0)
                              && near(notes[1].startSeconds, 1.0) && near(notes[1].durationSeconds, 1.0)
-                             && notes[0].label.isEmpty());
+                             && notes[0].label=="-");
                     c.expect("and_keeps_the_projects_tempo",
                              near(after.bpm, 120.0) && after.tempoChanges.empty() && after.numerator == 4);
                     c.expect("and_is_made_the_way_a_new_track_is",
-                             track != nullptr && track->compose && track->pitchAlgorithm == PitchAlgorithm::utau
+                             track != nullptr && track->compose && track->trackType == TrackType::hachi
                              && after.tracks.size() == 2 && after.tracks.back().id == id);
                     juce::String refused;
                     const auto none = model->addMidiTrack(c.twoParts, 0, refused);
@@ -19754,7 +20266,7 @@ public:
                 const auto layout = window.diagnosticEnvelopePresetLayout();
                 auto toolbarOffersEvery = layout.items.size() == static_cast<int>(presets.size());
                 for(std::size_t index=0;toolbarOffersEvery && index<presets.size();++index)
-                    toolbarOffersEvery=layout.items[static_cast<int>(index)]==presets[index].name;
+                    toolbarOffersEvery=layout.items[static_cast<int>(index)]==I18n::uiText(presets[index].name.toRawUTF8());
                 const auto toolbarFits=toolbarOffersEvery && layout.picker.getWidth()==110
                     && layout.picker.getRight()<=layout.rightControlsStart
                     && layout.viewMenu.isEmpty() && window.diagnosticHasEditorViewItems();
@@ -20576,10 +21088,106 @@ public:
             juce::MessageManager::callAsync([this] { quit(); });
             return;
         }
+        if(arguments.size()>=3&&arguments[0]=="--import-mpd")
+        {
+            MelodyneImportOptimizationOptions optimization;backend::MelodyneImportOptions options;options.recursiveMediaSearch=false;
+            juce::String error;bool valid=true;
+            for(int i=3;i<arguments.size();++i)
+            {
+                const auto flag=arguments[i].trim();if(flag.isEmpty())continue;
+                if(flag=="--auto-merge-consonants")optimization.mergeConsonants=true;
+                else if(flag=="--auto-virtual-connections")optimization.virtualConnections=true;
+                else if(flag=="--auto-virtual-pitch")optimization.virtualPitch=true;
+                else if(flag=="--no-register-transitions")optimization.registerTransitions=false;
+                else if(flag=="--recursive-media")options.recursiveMediaSearch=true;
+                else{valid=false;error="Unknown import option: "+flag;break;}
+            }
+            const juce::File output(arguments[2].unquoted());
+            if(!output.hasFileExtension("hjpx")||output.exists()){valid=false;error="Choose a new .hjpx destination; existing files are never overwritten";}
+            bool saved=false;
+            if(valid)if(auto imported=backend::MelodyneImporter::importProject(juce::File(arguments[1].unquoted()),error,{},options))
+            {
+                if(!imported->missingFiles.isEmpty())
+                {
+                    std::cout<<"import_saved=0 error=Missing source recordings: "<<imported->missingFiles.joinIntoString(" | ")<<std::endl;
+                    setApplicationReturnValue(4);juce::MessageManager::callAsync([this]{quit();});return;
+                }
+                const auto merge=prepareMelodyneImportOptimization(imported->project,imported->continuousSourceJoins,optimization);
+                juce::StringArray warnings=merge.skipped;
+                SampleSettings::convertMelodyneProject(imported->project,warnings,optimization.registerTransitions,false);
+                const auto routes=finishMelodyneImportOptimization(imported->project,imported->continuousSourceJoins,optimization);
+                warnings.addArray(routes.skipped);ProjectModel model;model.resetDocument(imported->project);
+                saved=model.save(output,error);
+                std::cout<<"merged_consonants="<<merge.merged<<" route_actions="<<routes.created<<" virtual_groups="<<imported->project.nativeVirtualGroups.size()<<" warnings="<<warnings.size()<<std::endl;
+            }
+            std::cout<<"import_saved="<<saved<<" error="<<error<<std::endl;setApplicationReturnValue(saved?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=3&&arguments[0]=="--inspect-mpd-split-transitions")
+        {
+            juce::String error;backend::MelodyneImportOptions options;options.recursiveMediaSearch=false;
+            auto imported=backend::MelodyneImporter::importProject(juce::File(arguments[1].unquoted()),error,{},options);
+            bool written=false;
+            if(imported)
+            {
+                const auto candidates=detectMelodyneSplitTransitions(imported->project,imported->continuousSourceJoins);
+                auto* report=new juce::DynamicObject;report->setProperty("readOnly",true);report->setProperty("retainedSourceJoins",int(imported->continuousSourceJoins.size()));
+                report->setProperty("candidateCount",int(candidates.size()));report->setProperty("missingFiles",imported->missingFiles.joinIntoString("\n"));juce::Array<juce::var> rows;
+                for(const auto& candidate:candidates)
+                {
+                    auto* row=new juce::DynamicObject;row->setProperty("logicalId",candidate.evidence.logicalId);row->setProperty("members",juce::StringArray(candidate.orderedNoteIds.data(),int(candidate.orderedNoteIds.size())).joinIntoString(" -> "));
+                    row->setProperty("middleSourceSeconds",candidate.middleSourceSeconds);row->setProperty("confidence",candidate.confidence);
+                    juce::Array<juce::var> sources;
+                    for(const auto& track:imported->project.tracks)
+                    {
+                        NativeSplitTransitionPlan plan;juce::String issue;
+                        if(!planNativeSplitTransition(track,candidate.orderedNoteIds.front(),candidate.evidence,candidate.orderedNoteIds.back(),plan,issue))continue;
+                        for(const auto& member:plan.physical)
+                        {auto* source=new juce::DynamicObject;source->setProperty("noteId",member.noteId);source->setProperty("file",member.source.getFullPathName());source->setProperty("targetFrom",member.from);source->setProperty("targetTo",member.to);sources.add(juce::var(source));}
+                        row->setProperty("middleTargetSeconds",plan.middleTargetSeconds);break;
+                    }
+                    row->setProperty("physicalSources",juce::var(sources));rows.add(juce::var(row));
+                }
+                report->setProperty("candidates",juce::var(rows));
+                std::set<juce::String> protectedHalves;for(const auto& bridge:candidates){protectedHalves.insert(bridge.evidence.frontNoteId);protectedHalves.insert(bridge.evidence.backNoteId);}
+                const auto consonants=detectMelodyneConsonantMerges(imported->project,imported->continuousSourceJoins,protectedHalves);juce::Array<juce::var> consonantRows;
+                for(const auto& consonant:consonants)
+                {
+                    NativeConsonantMergePlan plan;juce::String issue;if(!planNativeConsonantMerge(imported->project,consonant.evidence,plan,issue))continue;
+                    auto* row=new juce::DynamicObject;row->setProperty("onsetNoteId",plan.onsetNoteId);row->setProperty("vowelNoteId",plan.vowelNoteId);
+                    row->setProperty("file",plan.merged.sourceFile.getFullPathName());row->setProperty("targetFrom",plan.merged.startSeconds);
+                    row->setProperty("targetP",plan.merged.startSeconds+nativeNotePreutteranceTarget(plan.merged.notes[0],plan.merged));
+                    row->setProperty("sourceP",plan.preutteranceSourceSeconds);row->setProperty("sourceC",plan.consonantEndSourceSeconds);row->setProperty("confidence",consonant.confidence);consonantRows.add(juce::var(row));
+                }
+                report->setProperty("consonantCandidateCount",consonantRows.size());report->setProperty("consonantCandidates",juce::var(consonantRows));
+                std::map<juce::String,int> gates;
+                for(const auto& join:imported->continuousSourceJoins)
+                {NativeConsonantMergePlan plan;juce::String why;const bool eligible=planNativeConsonantMerge(imported->project,{join,true},plan,why);++gates[eligible?juce::String("Passed structural planning; acoustic evidence checked separately"):why];}
+                auto* gateCounts=new juce::DynamicObject;for(const auto& [reason,count]:gates)gateCounts->setProperty(juce::Identifier(reason),count);
+                report->setProperty("consonantStructuralGateCounts",juce::var(gateCounts));
+                // Model-only opt-in preview: no annotation conversion, no NN,
+                // no media copies and no writes to the imported project.
+                auto optimized=imported->project;const auto routeReport=autoConnectNativeVirtualImport(optimized,{true,true},imported->continuousSourceJoins);
+                report->setProperty("automaticRouteActions",routeReport.created);report->setProperty("automaticGroupCount",int(optimized.nativeVirtualGroups.size()));
+                report->setProperty("automaticRouteIssues",routeReport.skipped.joinIntoString("\n"));juce::Array<juce::var> proofCounts;
+                for(const auto& group:optimized.nativeVirtualGroups)proofCounts.add(int(nativeVirtualSplitProofs(group).size()));
+                report->setProperty("automaticGroupSplitProofCounts",juce::var(proofCounts));
+                written=juce::File(arguments[2].unquoted()).replaceWithText(juce::JSON::toString(juce::var(report),false));
+            }
+            std::cout<<"split_inspection_written="<<written<<" error="<<error<<std::endl;setApplicationReturnValue(written?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=3&&arguments[0]=="--inspect-mpd-joins")
+        {
+            juce::String error;const auto facts=backend::MelodyneImporter::inspectJoinGraph(juce::File(arguments[1].unquoted()),error);
+            const bool written=error.isEmpty()&&facts.isObject()&&juce::File(arguments[2].unquoted()).replaceWithText(juce::JSON::toString(facts,true));
+            std::cout<<"join_diagnostic_written="<<written<<" error="<<error<<std::endl;setApplicationReturnValue(written?0:4);
+            juce::MessageManager::callAsync([this]{quit();});return;
+        }
         if (arguments.size() >= 2 && arguments[0] == "--inspect-mpd")
         {
             juce::String error;
-            const auto imported = backend::MelodyneImporter::importProject(juce::File(arguments[1]), error);
+            const auto imported = backend::MelodyneImporter::importProject(juce::File(arguments[1].unquoted()), error);
             if (!imported)
             {
                 std::cerr << "error=" << error << std::endl;
@@ -20651,7 +21259,12 @@ public:
             juce::MessageManager::callAsync([this] { quit(); });
             return;
         }
+        // The external TSV is the ONLY translation source. Bad/missing files
+        // are reported visibly; no embedded language table can hide the fault.
+        startupTranslationReport = I18n::loadTranslations();
         mainWindow = std::make_unique<MainWindow>(getApplicationName());
+        if (!startupTranslationReport.problems.isEmpty())
+            mainWindow->showStatus("lang/translations.tsv: " + startupTranslationReport.problems.joinIntoString("  |  "));
         if (!arguments.isEmpty())
             // Unquoted like every other path taken from the command line:
             // a quoted argument keeps its quotes here, and the file simply
@@ -20668,6 +21281,12 @@ public:
         backend::DiffSingerRenderer::shutdown();
         backend::NsfHifiganRenderer::shutdown();
         backend::UtauRenderer::shutdownHfDaemon();
+        const auto audit=juce::SystemStats::getEnvironmentVariable("HACHI_TRANSLATION_AUDIT_FILE",{});
+        if(audit.isNotEmpty())
+        {
+            juce::Array<juce::var> keys;for(const auto& key:I18n::missingTranslationKeys())keys.add(key);
+            juce::File(audit).replaceWithText(juce::JSON::toString(juce::var(keys),true));
+        }
     }
 
     void systemRequestedQuit() override
@@ -20696,9 +21315,13 @@ private:
             startupLog("MainWindow: setResizable begin");
             setResizable(true, false);
             startupLog("MainWindow: setResizeLimits begin");
-            setResizeLimits(900, 560, 8192, 8192);
+            // GUI198: 1280x760 physical at OS125% x app1.25 is ~819x486 logical;
+            // the single-row edit bar/compact transport are verified down here.
+            setResizeLimits(760, 460, 8192, 8192);
             startupLog("MainWindow: centreWithSize begin");
             centreWithSize(1280, 760);
+            if (auto* editor = dynamic_cast<MainComponent*>(getContentComponent()))
+                editor->restoreWindowPlacement(*this);
             startupLog("MainWindow: addToDesktop begin");
             addToDesktop(getDesktopWindowStyleFlags());
             startupLog("MainWindow: native peer created");
@@ -20713,7 +21336,8 @@ private:
 
         void closeButtonPressed() override
         {
-            juce::JUCEApplication::getInstance()->systemRequestedQuit();
+            if (auto* editor = dynamic_cast<MainComponent*>(getContentComponent()))
+                editor->saveWindowPlacement(*this);            juce::JUCEApplication::getInstance()->systemRequestedQuit();
         }
 
         void openFile(const juce::File& file)
@@ -20729,6 +21353,11 @@ private:
             if (auto* component=dynamic_cast<MainComponent*>(getContentComponent())) component->startProjectRecovery();
         }
 
+        void showStatus(const juce::String& text)
+        {
+            if (auto* component = dynamic_cast<MainComponent*>(getContentComponent())) component->showStatusText(text);
+        }
+
         void requestClose(std::function<void()> approved)
         {
             if (auto* component = dynamic_cast<MainComponent*>(getContentComponent()))
@@ -20739,6 +21368,7 @@ private:
     };
 
     std::unique_ptr<MainWindow> mainWindow;
+    I18n::LoadReport startupTranslationReport;
     std::unique_ptr<backend::RenderService> cliRenderService;
     std::unique_ptr<AudioEngine> cliAudioEngine;
 };

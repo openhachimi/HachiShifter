@@ -1,6 +1,6 @@
 # Folder-level native `otto.ini`, phase 1
 
-Implementation: [OttoMaterialIO.h](../juce/src/OttoMaterialIO.h), [OttoMaterialIO.cpp](../juce/src/OttoMaterialIO.cpp). This is **not** classic UTAU `oto.ini`. There is no whole-file OTO export or GUI in this module.
+Implementation: [OttoMaterialIO.h](../src/OttoMaterialIO.h), [OttoMaterialIO.cpp](../src/OttoMaterialIO.cpp). This is **not** classic UTAU `oto.ini`. There is no whole-file OTO export or GUI in this module.
 
 ## Version 1
 
@@ -31,7 +31,7 @@ Optional `|next:<pronunciation-id>` and `|flags:<comma-separated flags>` may fol
 
 ### Shared pronunciation timing
 
-[PronunciationTiming](../juce/src/PronunciationTiming.h) is the single interpretation of offset, preutterance P, consonant end C and source end used by native/OTO editor views. P and C are absolute source positions internally; the compact tuple retains the classic relative durations. Signed overlap remains a relative offset from source start and is never silently clamped. With simplified consonants enabled, moving P moves C by the same amount, preserving the nonnegative derived C-P distance; editing that distance explicitly moves C. Disabling the constraint leaves the current marker positions intact.
+[PronunciationTiming](../src/PronunciationTiming.h) is the single interpretation of offset, preutterance P, consonant end C and source end used by native/OTO editor views. P and C are absolute source positions internally; the compact tuple retains the classic relative durations. Signed overlap remains a relative offset from source start and is never silently clamped. With simplified consonants enabled, moving P moves C by the same amount, preserving the nonnegative derived C-P distance; editing that distance explicitly moves C. Disabling the constraint leaves the current marker positions intact.
 
 Consonants and all material before P are protected from time stretching. Existing internal vowel subdivisions and weights remain available; only elastic vowel intervals after the protected region absorb duration changes. Impossible contractions reject rather than compressing consonants or dropping audio. Kind is not a replacement for these source zones: the old `vowel`/`consonant` dropdown must not classify a whole syllable.
 

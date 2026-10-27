@@ -2,6 +2,10 @@
 #include "backend/UstText.h"
 #include "SampleSettings.h"
 #include "OttoMaterialIO.h"
+#include "NativeNoteTiming.h"
+#include "NativeTransitionDetection.h"
+#include "NativeLogicalTransitionSource.h"
+#include "NativeAudioOverlap.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <algorithm>
 #include <array>
@@ -275,8 +279,9 @@ std::vector<NativeSegment> SampleSettings::nativeSegmentsFor(
 }
 
 bool SampleSettings::convertMelodyneProject(ProjectData& project,
-                                            juce::StringArray& warnings)
+                                            juce::StringArray& warnings,bool autoRegisterTransitions,bool publishAnnotations)
 {
+    const auto transitionCandidates=autoRegisterTransitions?detectMelodyneTransitions(project):std::vector<NativeTransitionCandidate>{};
     auto converted = false;
     std::map<juce::String, std::vector<SampleRegionSetting>> materialRows;
     for (auto& track : project.tracks)
@@ -285,26 +290,11 @@ bool SampleSettings::convertMelodyneProject(ProjectData& project,
             if (!clip.sourceFile.existsAsFile() || clip.notes.empty()) continue;
             std::vector<SampleRegionSetting> rows;
             rows.reserve(clip.notes.size());
-            const auto sourceAtTarget = [&clip](double target)
-            {
-                if (clip.sourceTimeMap.empty())
-                    return clip.sourceOffsetSeconds + target * clip.sourceDurationSeconds
-                        / std::max(1.0e-9, clip.durationSeconds);
-                const auto& map = clip.sourceTimeMap;
-                if (target <= map.front().targetSeconds)
-                    return clip.sourceOffsetSeconds + map.front().sourceSeconds;
-                for (std::size_t index = 1; index < map.size(); ++index)
-                {
-                    if (target > map[index].targetSeconds) continue;
-                    const auto width = map[index].targetSeconds
-                        - map[index - 1].targetSeconds;
-                    const auto amount = width > 1.0e-9
-                        ? (target - map[index - 1].targetSeconds) / width : 0.0;
-                    return clip.sourceOffsetSeconds + map[index - 1].sourceSeconds
-                        + (map[index].sourceSeconds - map[index - 1].sourceSeconds) * amount;
-                }
-                return clip.sourceOffsetSeconds + map.back().sourceSeconds;
-            };
+            // Capture the heard source clock BEFORE changing any display timing.
+            // Explicit Melodyne attack/time-function knots stay authoritative.
+            const auto originalClock = nativeClipClock(clip);
+            const auto sourceAtTarget = [&clip,&originalClock](double target)
+            { return clip.sourceOffsetSeconds + nativeSourceTimeAt(originalClock,target); };
 
             for (auto& note : clip.notes)
             {
@@ -319,8 +309,17 @@ bool SampleSettings::convertMelodyneProject(ProjectData& project,
                 row.regionEndSeconds = std::min(clip.sourceOffsetSeconds + clip.sourceDurationSeconds,
                     sourceAtTarget(note.startSeconds + note.durationSeconds));
                 if (row.regionEndSeconds <= row.regionStartSeconds) continue;
-                row.alignmentSeconds = std::clamp(
-                    sourceAtTarget(note.startSeconds + note.consonantSeconds),
+                const bool hasCarriedP=note.utauPreutteranceOverrideEnabled
+                    ||std::abs(note.utauPreutteranceSeconds)>1.e-12||!note.nativeSegments.empty();
+                const auto effectiveBefore=nativeNoteSourceTiming(note,clip,originalClock);
+                const bool mergedConsonant=note.consonantMergeId.isNotEmpty()&&std::any_of(project.consonantMerges.begin(),project.consonantMerges.end(),[&](const auto& r){return r.id==note.consonantMergeId&&r.mergedNoteId==note.id;});
+                // Importer carries the explicit Melodyne anchorPoint through
+                // its real source warp. Preserve that SOURCE P (or authored P),
+                // independently of voicing/sibilants/attackDuration. If no anchor
+                // survived import, there is no evidence for a later P: do not
+                // invent one from stable F0 or an arbitrary duration fraction.
+                row.alignmentSeconds = std::clamp(hasCarriedP?effectiveBefore.alignmentSeconds
+                    :sourceAtTarget(note.startSeconds),
                     row.regionStartSeconds, row.regionEndSeconds);
                 // The internal boundary is alignment/preutterance, not OTO's
                 // fixed-region end. Estimate a separate vowel centre from the
@@ -360,6 +359,11 @@ bool SampleSettings::convertMelodyneProject(ProjectData& project,
                     NativeSegmentRole::consonant, false);
                 appendSegment(row.alignmentSeconds, centre, NativeSegmentRole::vowel, false);
                 appendSegment(centre, row.regionEndSeconds, NativeSegmentRole::vowel, true);
+                if(mergedConsonant)
+                {
+                    row.fixedDurationSeconds=effectiveBefore.fixedDurationSeconds;row.segments=effectiveBefore.segments;
+                    juce::String problem;if(!applyPronunciationTiming(row,pronunciationTimingFor(row),problem))warnings.add(problem);
+                }
                 rows.push_back(std::move(row));
 
                 note.label = "-";
@@ -374,7 +378,16 @@ bool SampleSettings::convertMelodyneProject(ProjectData& project,
                 note.utauConsonantVelocity = static_cast<int>(std::lround(100.0
                     + 100.0 * std::log2(std::max(1.0e-6f, note.attackSpeed))));
                 note.utauPreutteranceOverrideEnabled = true;
-                note.utauPreutteranceSeconds = note.consonantSeconds;
+                // P (source offset from this note's own support) is the row's
+                // alignment: carried explicit source P stays exact. Missing
+                // synchronization metadata stays at support onset. Material keeps C=P
+                // (193 rule), mapped through the captured heard clock.
+                if(!mergedConsonant)
+                {
+                    note.utauPreutteranceSeconds = std::max(0.0,rows.back().alignmentSeconds-rows.back().regionStartSeconds);
+                    note.consonantSeconds = juce::jlimit(0.0,note.durationSeconds,
+                        nativeTargetTimeAt(originalClock,rows.back().alignmentSeconds-clip.sourceOffsetSeconds)-note.startSeconds);
+                }
                 note.utauOverlapOverrideEnabled = false;
                 note.utauOverlapSeconds = 0.0;
             }
@@ -441,6 +454,41 @@ bool SampleSettings::convertMelodyneProject(ProjectData& project,
                     std::abs(nucleus.overlapSeconds) > 1.0e-9;
                 vowelNote.utauOverlapSeconds = nucleus.overlapSeconds;
             }
+            // Source-editor defaults use the SAME physical P marker, not the
+            // estimated vowel centre used by the retained legacy source snapshot.
+            // Keep note.nativeSegments/contours/envelopes exactly as built above.
+            if(rows.size()==clip.notes.size())for(std::size_t i=0;i<rows.size();++i)
+            {
+                auto& row=rows[i];auto& note=clip.notes[i];
+                if(row.regionEndSeconds<=row.regionStartSeconds)continue;
+                const bool mergedConsonant=note.consonantMergeId.isNotEmpty()&&std::any_of(project.consonantMerges.begin(),project.consonantMerges.end(),[&](const auto& r){return r.id==note.consonantMergeId&&r.mergedNoteId==note.id;});
+                if(!mergedConsonant)row.fixedDurationSeconds=row.alignmentSeconds-row.regionStartSeconds;
+                const auto base=note.materialSourceStartSeconds>=0?note.materialSourceStartSeconds
+                    :note.nativeSourceStartSeconds>=0?note.nativeSourceStartSeconds:row.regionStartSeconds;
+                note.utauPreutteranceOverrideEnabled=true;
+                note.utauPreutteranceSeconds=row.alignmentSeconds-base;
+                const auto effective=nativeNoteSourceTiming(note,clip,originalClock);
+                const auto targetP=nativeTargetTimeAt(originalClock,effective.alignmentSeconds-clip.sourceOffsetSeconds);
+                const auto consonant=juce::jlimit(0.0,note.durationSeconds,targetP-note.startSeconds);
+                if(!mergedConsonant)
+                {
+                    if(consonant!=note.consonantSeconds&&clip.sourceTimeMap.empty())clip.sourceTimeMap=originalClock;
+                    note.consonantSeconds=consonant;
+                }
+                const auto transition=std::find_if(transitionCandidates.begin(),transitionCandidates.end(),[&](const auto& candidate){return candidate.noteId==note.id;});
+                if(transition!=transitionCandidates.end())
+                {
+                    // SOURCE registration after freezing the carried render
+                    // snapshot. Do not activate new edge gains on that snapshot.
+                    row.pronunciationKind=PronunciationKind::transition;row.nativeTransition=transition->shape;row.confidence=transition->confidence;
+                    juce::String problem;if(applyPronunciationTiming(row,pronunciationTimingFor(row),problem))
+                    {
+                        NativePronunciationEdges edges;if(defaultNativeTransitionEdges(row,edges,problem))row.nativePronunciationEdges=edges;
+                        note.pronunciationKind=PronunciationKind::transition;note.nativeTransition=transition->shape;
+                    }
+                    else warnings.add(problem);
+                }
+            }
             rows.erase(std::remove_if(rows.begin(), rows.end(),
                 [](const auto& row)
                 {
@@ -474,6 +522,12 @@ bool SampleSettings::convertMelodyneProject(ProjectData& project,
                 project.nativeConnections.push_back(std::move(connection));
             }
         }
+    // Melodyne commonly stores overlapping elements. They are authored audio,
+    // not editing collisions: keep them editable instead of blocking moves or
+    // letting a later toggle crop them. Editing policy only; no render input.
+    for(auto& track:project.tracks)if(nativeAudioOverlapCount(track)>0)track.allowNativeAudioOverlap=true;
+    coalesceNativeLogicalTransitionSourceRows(project,materialRows,warnings);
+    if(!publishAnnotations)return !materialRows.empty(); // same projection, no material-library writes
     for (const auto& [path, rows] : materialRows)
     {
         juce::String error;

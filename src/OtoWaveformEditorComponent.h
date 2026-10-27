@@ -52,6 +52,29 @@ public:
     bool restoreLocal(juce::String& error);
     EditScope editScope() const;
     bool diagnosticScopeDirty() const { return materialSession && materialSession->dirty(); }
+    std::function<void(const juce::File& audio,const juce::File& manifest)> onRequestJapaneseAutoAnnotation;
+    bool hasMaterialNoteContext() const { return materialSession&&materialSession->hasNoteScope(); }
+    juce::String materialAudioVariantId() const { return materialSession?materialSession->audioVariantId():juce::String{}; }
+    bool retargetCleanSourceVariant(const juce::File& manifest,const juce::String& exactAudioId,juce::String& error);
+    void setMaterialSourcePublicationCallbacks(std::function<void(const std::vector<SampleRegionSetting>&)> saved,
+        std::function<bool(const std::vector<SampleRegionSetting>&,juce::String&)> preflight);
+    juce::File materialSourceAudio() const { return materialSession ? materialSession->sourceAudio() : juce::File{}; }
+    bool hasUnpublishedMaterialEdits() const;
+    // 198: another writer published this source. Clean source editors reload
+    // the same exact variant; dirty ones keep the draft and show a notice.
+    void notifyExternalSourceChange();
+    void diagnosticEdgeFields(bool enabled,const juce::String& entryMs,const juce::String& exitMs,bool notify = true);
+    bool diagnosticCommitEdgeFields(juce::String& error);
+    // GUI198 fade handles on the waveform (editor-local coordinates).
+    std::optional<juce::Point<float>> diagnosticWaveformEdgeHandle(bool entry) const;
+    void diagnosticDragWaveformEdge(bool entry, juce::Point<float> to);
+    juce::String diagnosticEdgeEntryText() const;
+    bool diagnosticEdgeControlsEnabled() const;
+    juce::var diagnosticEdgeFieldState() const;
+    void diagnosticEdgeHistory(bool undo);
+
+    bool requestJapaneseAutoAnnotation(); // same overview button handler; never saves/discards implicitly
+
     void setPublicationValidator(std::function<bool(
         const std::vector<SampleRegionSetting>&, juce::String&)> validator);
     bool selectMaterialPronunciation(const juce::String& regionId, bool detail = false);
@@ -113,6 +136,13 @@ public:
         std::function<juce::AudioDeviceManager*()> devices;
         // Asked before every start; false and nothing plays.
         std::function<bool()> beforeStart;
+        // Production host reuses AudioEngine's raw audition transport. Standalone
+        // component checks retain the existing SourcePreview fallback below.
+        std::function<bool(const juce::File&,double,double)> startRange;
+        std::function<void()> stopRange;
+        std::function<bool()> rangePlaying;
+        std::function<double()> rangePosition;
+
     };
     // Without a host the recording still plays, into nothing: that is how the
     // checks pull it and listen to what a device would have been sent.
@@ -136,7 +166,7 @@ public:
     {
         return playButton.getButtonText();
     }
-    [[nodiscard]] bool diagnosticPreviewPlaying() const { return preview != nullptr; }
+    [[nodiscard]] bool diagnosticPreviewPlaying() const { return preview != nullptr || (hostPreview && playbackHost.rangePlaying && playbackHost.rangePlaying()); }
     [[nodiscard]] bool diagnosticPreviewAttached() const { return previewDevices != nullptr; }
     [[nodiscard]] std::optional<double> diagnosticPlayheadMs() const
     {
@@ -389,7 +419,17 @@ private:
         juce::String classes;
         bool lockOuterRange = false;
         bool nativeDetail = false;
+        bool transitionDetail = false;
         std::vector<NativeSegment> nativeSegments;
+        // GUI198: optional audible edge windows drawn as fade ramps; the inner
+        // ends (entry end / exit start) are draggable and feed the same edge
+        // fields + validation as typing (onEdgeDragged).
+        std::optional<NativePronunciationEdges> edges;
+        bool edgesEditable = false;
+        std::function<void(bool entry, double sourceMs)> onEdgeDragged;
+        int edgeDragging = 0; // 1 entry end, 2 exit start
+        [[nodiscard]] int edgeHandleNear(juce::Point<float>) const;
+        [[nodiscard]] std::optional<juce::Point<float>> diagnosticEdgeHandle(bool entry) const;
         void setTimingMode(bool withRegions, bool withClasses) { jie = withRegions; mou = withClasses; repaint(); }
         void diagnosticDragNativeBoundary(int index, double seconds);
     private:
@@ -419,6 +459,7 @@ private:
     // same boundary, so showing both put two draggable lines on one position.
     std::vector<std::size_t> visibleParameters() const
     {
+        if(materialSession&&materialDetail&&materialDetailDraft.pronunciationKind==PronunciationKind::transition)return {0,2};
         if (!jie) return { 0, 1, 2, 3, 4 };
         // One boundary editor fewer per region fewer: three regions have two
         // inner boundaries, two regions have one.
@@ -478,6 +519,18 @@ private:
     juce::Label materialSegmentLabel, materialGapLabel, materialKindLabel;
     juce::ToggleButton materialSimplifiedConsonant;
     juce::TextEditor materialConsonantGap;
+    juce::Label materialTransitionLabel;
+    juce::TextEditor materialTransitionBoundary;
+    void commitMaterialTransitionBoundary();
+    juce::ToggleButton materialEdgeEnabled;
+    juce::Label materialEdgeEntryLabel,materialEdgeExitLabel,materialEdgeSummary;
+    juce::TextEditor materialEdgeEntry,materialEdgeExit;
+    bool materialEdgeBaselineEnabled=false;
+    juce::String materialEdgeEntryBaseline,materialEdgeExitBaseline;
+    bool materialEdgeFieldsChanged() const;
+    void refreshMaterialEdgeControls(bool force = false);
+    void materialEdgeEdited();
+
     juce::TextButton materialSplitSegment, materialMergeSegment;
     juce::Label materialVowelNameLabel, materialVowelWeightLabel, materialSplitLeftLabel, materialSplitRightLabel;
     juce::TextEditor materialVowelName, materialVowelWeight, materialSplitLeftName, materialSplitRightName;
@@ -551,6 +604,9 @@ private:
     // handed to the host's device as a callback of its own, beside the song's
     // rather than instead of it: the song's position, and the view that
     // follows it, stay where they were.
+    std::optional<std::pair<double,double>> sourcePreviewRange() const;
+    bool hostPreview = false;
+    double previewStartSeconds = 0;
     class SourcePreview;
     PlaybackHost playbackHost;
     std::unique_ptr<SourcePreview> preview;

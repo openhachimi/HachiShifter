@@ -1,6 +1,6 @@
 # Windows cloud build and portable packages
 
-The `dev` branch source is imported from the requested `r/HachiShifter-0.2.6-dev/source` delivery, not the newer unfinished working tree. The contents of its `juce/` directory are now the repository root. `tools/`, `docs/`, build scripts and required notices are retained. No README is supplied; the repository owner maintains it separately. Public application version stays **0.25**, WCSNDM stays **0.0803**.
+The `dev` branch is the rolling development source through update 204 (2026-10-27), published in the existing flattened format: root `CMakeLists.txt`, `src/`, `engines/`, `resources/`, `third_party/`, `tools/` and `docs/`. Existing cloud-native compiler patches and split package delivery are retained. No README is supplied; the repository owner maintains it separately. Public application/version-resource text is **dev**. CMake and Windows use the legal internal numeric tuple **0.0.0**; this is not a release label. WCSNDM remains **0.0803**.
 
 ## Build
 
@@ -14,7 +14,7 @@ From a VS x64 developer shell:
 
 The workflow runs on pushes to `dev` and supports manual dispatch. It produces:
 
-- `HachiShifterNext-windows-x64-app`: executable, native runtime DLLs, VC CRT, existing engine scripts/dictionaries, portable Python dependencies and notices; no large analysis/synthesis weights or optional English G2P checkpoint.
+- `HachiShifterNext-windows-x64-app`: executable, **external `lang/translations.tsv`**, native runtime DLLs, VC CRT, engine scripts/dictionaries, portable Python dependencies and notices; no large analysis/synthesis weights or optional English G2P checkpoint. Packaging checks the dev executable metadata and required five-language import-option entries.
 - `HachiShifterNext-windows-x64-with-models`: the same built application plus the owner-approved checksum-pinned resource bundle. This includes GAME medium, FCPE, NSF-HiFiGAN, the native float32 HNSEP graph, English G2P, and the requested ASR/TIFA resources, dictionaries/configuration and licenses.
 
 Each artifact contains a ZIP and its SHA256. Preserve the portable directory layout; do not move only the executable. The app-only package requires model files to be supplied before neural features can be used. Neither package supplies user voicebanks, personal audio/projects, commercial Melodyne, or independently installed third-party engines.
@@ -23,7 +23,7 @@ Each artifact contains a ZIP and its SHA256. Preserve the portable directory lay
 
 `.github/model-resources.json` pins the owner's model-resource Release URL and archive SHA256. The ZIP has `resource-manifest.json`, with per-file size/SHA/source/license. Packaging verifies every listed resource and required group. Model weights are not Git blobs. The repository owner explicitly authorized distribution of the provided models; that authorization does not invent or replace the upstream licenses.
 
-**The requested older `r` source does not contain the newer Japanese ASR/TIFA feature code.** Including these requested resources does not enable a feature absent from that source baseline. They are packaged for the requested resource layout/future compatibility, not presented as a new feature in the older executable.
+The current development tree contains Japanese annotation/ASR/TIFA implementation code. Resource availability, upstream model compatibility and actual inference quality are separate from source inclusion; this version-label/publication change does not claim fresh ASR/TIFA runtime validation. The resource archive URL and checksums remain the existing owner-approved pinned bundle, not a newly relabeled or silently replaced set of weights.
 
 GAME/TIFA weights and other resources have their own terms, including non-commercial/share-alike conditions where documented. Local ASR weight provenance does not grant an unspecified open-source license. See all bundle notices before redistributing. Native HNSEP is exported offline from the pinned official checkpoint/wrapper; it is not an incompatible graph renamed to satisfy a path.
 

@@ -201,6 +201,8 @@ V residual(const SampleRegionSetting& r)
 #undef ADD
     if (r.role != defaults.role) put(o, "role", int(r.role));
     if (r.confidence != defaults.confidence) put(o, "confidence", double(r.confidence));
+    if (r.nativePronunciationEdges) put(o,"nativePronunciationEdges",nativePronunciationEdgesValue(*r.nativePronunciationEdges));
+    if (r.nativeTransition) put(o,"nativeTransition",nativeTransitionShapeValue(*r.nativeTransition));
     if (!r.segments.empty())
     {
         // Core carries role/end only. Emit full segment records only when those
@@ -269,12 +271,20 @@ bool getRole(const V& o, NativeSegmentRole& role, S& e)
 }
 bool applyResidual(const V& o, SampleRegionSetting& r, S& e)
 {
-    std::set<S> keys { "melodyneData", "hjmVersion", "role", "provenance", "confidence", "segments", "amplitudeEnvelope", "nativeUnpitched" };
+    std::set<S> keys { "melodyneData", "hjmVersion", "role", "provenance", "confidence", "segments", "amplitudeEnvelope", "nativeUnpitched", "nativePronunciationEdges", "nativeTransition" };
 #define KEY(n) keys.insert(#n);
     ROW_NUMBERS(KEY)
     CORE_NUMBERS(KEY)
 #undef KEY
     if (!keysOnly(o, keys, e)) return false;
+    if(o.hasProperty("nativePronunciationEdges"))
+    {
+        NativePronunciationEdges profile;
+        if(!nativePronunciationEdgesFromValue(o["nativePronunciationEdges"],profile,e))return false;
+        r.nativePronunciationEdges=std::move(profile);
+    }
+    if(o.hasProperty("nativeTransition"))
+    {NativeTransitionShape shape;if(!nativeTransitionShapeFromValue(o["nativeTransition"],shape,e))return false;r.nativeTransition=std::move(shape);}
 #define EXACT(n) { double exact = r.n; if (!getNum(o, #n, exact, e)) return false; if (std::abs(exact - r.n) > 1.0e-9) return fail(e, "Metadata contradicts core: " #n); r.n = exact; }
     CORE_NUMBERS(EXACT)
 #undef EXACT
@@ -548,6 +558,11 @@ bool OttoMaterialIO::validate(const Document& d, S& e)
                 || !std::isfinite(r.alignmentSeconds) || r.alignmentSeconds < r.regionStartSeconds - 1.0e-9 || r.alignmentSeconds > r.regionEndSeconds + 1.0e-9
                 || !std::isfinite(r.overlapSeconds))
                 return fail(e, "Invalid pronunciation range/timing: " + r.materialRegionId);
+            if(r.nativePronunciationEdges&&!validateNativePronunciationEdges(*r.nativePronunciationEdges,r.regionStartSeconds,r.regionEndSeconds,e))return false;
+            if(r.nativeTransition&&!validateNativeTransitionShape(*r.nativeTransition,r.regionStartSeconds,r.regionEndSeconds,e))return false;
+            if(r.pronunciationKind==PronunciationKind::transition&&r.nativeTransition&&r.nativePronunciationEdges
+                &&(r.nativePronunciationEdges->entryToSourceSeconds>r.nativeTransition->boundarySourceSeconds||r.nativePronunciationEdges->exitFromSourceSeconds<r.nativeTransition->boundarySourceSeconds))
+                return fail(e,"Transition edge windows cross its middle boundary");
             if (int(r.pronunciationKind) < 0 || int(r.pronunciationKind) > int(PronunciationKind::breath))
                 return fail(e, "Invalid pronunciation identity kind: " + r.materialRegionId);
             if (r.simplifiedConsonant

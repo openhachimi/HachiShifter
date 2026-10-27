@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include <memory>
 
 #include "OrtExecution.h"
 #include "UtauRenderer.h"
@@ -59,6 +60,23 @@ struct NsfHifiganEdgeGuard
     float neighborEndF0 = 0.0f;
 };
 
+// Transient source assembly. PCM remains on the original source clock; only
+// the existing Mel time-map analysis stretches it. Times are group-local.
+// Gain includes author clip/note envelopes and virtual contribution exactly once.
+struct NsfHifiganSourcePart
+{
+    std::shared_ptr<const juce::AudioBuffer<float>> source;
+    double sampleRate = 0.0;
+    double supportFrom = 0.0, supportTo = 0.0;
+    std::vector<NsfHifiganTimeMapPoint> timeMap;
+    std::function<float(double)> gainAt;
+    std::function<float(double)> sourceMidiAt;
+    // Per-source authored formant control, sampled on the shared target clock.
+    std::function<float(double)> formantAt;
+};
+using NsfHifiganSourceAssembly = std::vector<NsfHifiganSourcePart>;
+inline constexpr int nativeSourceAssemblyVersion = 1;
+
 class NsfHifiganRenderer final
 {
 public:
@@ -84,7 +102,8 @@ public:
         // Native chunk reuse is independent of the optional H/N protection.
         bool incrementalNativeRender = false,
         // Required only by the non-U WCSNDM parameter stretch option.
-        const std::vector<float>& sourceMidi = {});
+        const std::vector<float>& sourceMidi = {},
+        const NsfHifiganSourceAssembly* sourceAssembly = nullptr);
 };
 
 // UTAU voicebank synthesis on the one NSF-HiFiGAN renderer (no separate

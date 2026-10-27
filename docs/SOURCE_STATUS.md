@@ -1,49 +1,31 @@
-# 当前源码同步状态
+# Rolling development source status
 
-日期：2026-10-10。公开版本：0.2.4。功能基线：更新 143。外置 WCSNDM：0.0803。
+Date: 2026-10-27. Public label: **dev**. Numeric CMake/Windows tuple: **0.0.0**. WCSNDM: **0.0803**.
 
-## 本次更新
+This dev update continues `e2e9c7be829d23881eab15d82bbd94d49ed335a2` in the existing flat source layout. It synchronizes the current development implementation through update 204 rather than restoring the old nested `juce/` snapshot. The repository owner's independent README policy is unchanged.
 
-同步目标为团队仓库 `openhachimi/HachiShifter` 的 `next` 分支，上一份源码基线为更新 108（提交 `994656985032237774402ae1b7b175ce74f0ebf1`）。本次收录更新 109—143，保留既有提交、第三方许可与历史辅助文件。功能概览见 [仓库首页](../README.md)，各次实现与验证见 [更新记录](updates.md)。
+## Included work
 
-| 变化范围 | 更新记录 |
-| --- | --- |
-| 工具排列、自由裁剪和 AI 导航 | 109—111 |
-| 标准 UTAU 中文 CVVC、空轨算法切换、高级混合/贝塞尔与原生响度包络 | 112—117 |
-| 单音/批量拉直、文案、粘连音高/包络、裁剪向源文件扩展、合并分割点与长音时钟 | 118—126 |
-| 录音导入性能、独立音高主体与最小过渡、HiFiShifter Mel 拉伸、清音/噪声保护 | 127—131 |
-| 双击按工具分流、普通端点拖动、平滑开关与可选气声显示 | 132—136 |
-| 局部渲染/过期任务取消、谐波/噪声开关、颤音、气声判定 | 137—140 |
-| 可编辑无音高片段、真实 F0 显示范围、人工曲线圆点显示 | 141—143 |
+- Native material/OTTO editing and registration, source-aware note/clip operations and current UI work.
+- Virtual connections: permanent seam edit authority, one displayed/request target F0 and NSF/WORLD source assembly on supported paths.
+- Legacy HJPX source-use identity restoration using existing explicit physical connection evidence.
+- Melodyne import option controls and source-time alignment from the real element `anchorPoint`, not sibilants or voiced onset.
+- File-only five-language translation catalog (1509 rows), packaged alongside the executable.
+- NSF-HiFiGAN and splice-before-synthesis processing-order defaults; saved explicit choices and the independent stretch-algorithm default are retained.
+- Existing cloud Windows build and separate application-only/model-bundle artifacts, now with dev version checks and mandatory external translations.
 
-## 已完成的功能验证
+## Validation scope
 
-以下为本次同步前已完成的更新 143 验证，原报告与测试产物保留在本机；源码包包含相应测试代码，不包含用户录音或生成结果。
+The current working-source dev executable was compiled locally; runtime version and Windows FileVersion/ProductVersion report `dev`. Track-type and engine-view CI gates plus focused defaults, import options, connected editing, single F0, shared pitch and translation-file/no-file regressions passed. Prior update 203 additionally verified real MPD anchor pixel/unit/request equality and bit-exact complete WORLD/NSF audio outputs. Those reports are historical local evidence, not a claim that every source feature or third-party model was retested for this version-only publication.
 
-| 开发构建专项 | 通过检查数 |
-| --- | ---: |
-| 无实测音高处的显示与人为圆点曲线 | 32 |
-| 气声虚线与显示范围 | 29 |
-| 无音高片段的编辑与删除 | 35 |
-| 源音高与原生音频映射 | 69 |
-| 粘连音高及端点 | 49 |
-| 裁剪与源范围恢复 | 41 |
-| 原生颤音 | 12 |
-| 原始素材音高还原 | 22 |
-| 双击批量拉直和工具区分 | 21 |
-| 合计 | **310** |
+The exact flattened source is configured/built separately before publication. The GitHub Actions run triggered by the push is an independent cloud result; see its actual status rather than treating these source notes as a successful cloud package report.
 
-日常配布另通过显示、气声和真实录音无音高编辑 3 组、96 项检查。开发版与配布 EXE 的 SHA-256 相同：`38f48edc084aee28a8cfefeef538b289fbcf6781a052d48d4d186099350642d2`。这个值用于追溯已验证构建，EXE 不在源码包内。
+## Known boundaries
 
-## 源码整理验证
+Virtual source assembly currently rejects unsupported WCS/HiFiShifter/robust-pitch/separated-component/voicebank combinations rather than silently reverting to per-source pitch transformation. User data, model provenance/licensing and compatible external engines remain independent concerns. See the [update history](updates.md), [architecture](AI_INTERFACE_ARCHITECTURE.md) and [cloud packaging guide](cloud-build.md).
 
-本次仅增加和整理文档、生成源码快照与清单，未改动合成或编辑代码。发布前检查：
+## Distribution and provenance
 
-- 快照内各维护源文件与当前实际源码逐文件核对 SHA-256 和大小；新增的未跟踪源文件一并收录。
-- 检查本地 C++ 引用与 CMake 的源码/资源路径，保留构建自动应用的 JUCE 补丁。
-- 对收录的 Python 源码进行语法编译检查；检查归档 CRC、文件列表及逐文件哈希。
-- 核对版本仍为 0.2.4、清单基线为 143、第三方许可齐全；排除 Git 元数据、个人运行配置、模型、用户素材及生成产物。
+Only source, required scripts/dictionaries, documentation, notices and necessary artwork are Git content. No user projects/media/settings, build caches, executables, DLLs or model weights are added. The old tracked optional English G2P checkpoint is removed from this source revision; the existing approved resource bundle still supplies it for the with-models package. Git history is not rewritten. Model resource URL/hash and upstream licenses are preserved.
 
-检查结果及数量以根目录 `SOURCE-MANIFEST.json` 的 `packaging_validation` 为准。上传后 GitHub Windows 工作流会执行新的无模型构建；已有本地验证不能代替该工作流结果，也不代表其他开发机的大型模型已配置。
-
-中文 CVVC、气声/清音判定、局部推理复用和其他兼容性边界仍以各功能说明为准；同步源码不会增加新模型。
+This commit is authored and committed as `funnymdzz <funnymdzz@gmail.com>` under the owner's explicit request. Only `dev` is updated; no force push or main/r modification is used.

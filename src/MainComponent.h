@@ -25,6 +25,7 @@ namespace hachi
 {
 class OtoWaveformEditorComponent;
 struct MaterialPronunciationCandidate;
+struct MelodyneImportOptimizationOptions;
 
 class EditorViewport final : public juce::Viewport
 {
@@ -341,6 +342,24 @@ public:
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
+    void mouseDoubleClick(const juce::MouseEvent& event) override;
+    // Startup notices (e.g. translation file problems) stay readable: the
+    // render-progress timer respects the same hold used for DiffSinger status.
+    void showStatusText(const juce::String& text, double holdMilliseconds = 20000.0)
+    { statusLabel.setText(text, juce::dontSendNotification); statusLabel.setTooltip(text); diffSingerStatusUntil = juce::Time::getMillisecondCounterHiRes() + holdMilliseconds; }
+    // Main-window placement is a view preference, never project state.
+    void restoreWindowPlacement(juce::DocumentWindow& window);
+    void saveWindowPlacement(juce::DocumentWindow& window);
+    void setTrackSettingsVisible(bool visible);
+    [[nodiscard]] bool trackSettingsShown() const { return trackSettingsVisible; }
+    [[nodiscard]] juce::Rectangle<int> diagnosticPianoBounds() const { return pianoViewport.getBounds(); }
+    [[nodiscard]] juce::Rectangle<int> diagnosticTrackAreaBounds() const { return timelineViewport.getBounds(); }
+    [[nodiscard]] juce::StringArray diagnosticOverflowItems() const;
+    [[nodiscard]] int diagnosticEditBarRows() const { return editBarRows; }
+    // GUI198 layout gate: languages x themes x sizes at the current app scale.
+    bool diagnosticGui198Layout(const juce::File& directory, juce::String& report);
+    bool diagnosticFileOnlyTranslationUi(const juce::File& directory);
+    [[nodiscard]] bool diagnosticRegistrationInfoBarShown() const { return registrationInfoBar.isVisible(); }
     void openExternalFile(const juce::File& file);
     void requestClose(std::function<void()> approved);
     void startProjectRecovery();
@@ -417,6 +436,14 @@ public:
     bool diagnosticMaterialSourceReplacementUi(const juce::File& output, const juce::File& nsfModel);
     bool diagnosticMaterialVariantHandoffUi(const juce::File& output);
     bool diagnosticProjectRegistrationUi(const juce::File& output);
+    bool diagnosticSourcePreviewUi(const juce::File& output);
+    bool diagnosticNativeMaterialOverlapUi(const juce::File& output);
+    bool diagnosticNativeScoreReplacementUi(const juce::File& output, const juce::File& nsfModel);
+    bool diagnosticRealMultiBridgeWindow(const juce::File& projectFile,const juce::File& output);
+    bool diagnosticNativeForceConnectionUi(const juce::File& output);
+    void diagnosticCommunityDatasetImportUi(const juce::File& output, std::function<void(bool)> finished);
+    void diagnosticJapaneseAutoAnnotationUi(const juce::File& output, const juce::File& modelRoot,
+        const juce::File& recording, std::function<void(bool)> finished);
     [[nodiscard]] bool diagnosticRenderOrderPicker();
     [[nodiscard]] bool diagnosticIntegratedLayout(const juce::File& directory);
     [[nodiscard]] bool diagnosticScrollZoom(const juce::File& directory);
@@ -565,7 +592,8 @@ private:
     enum class MaterialInputAction { insert, replace };
     struct MaterialInputSession;
     void showMaterialPronunciationInput(MaterialInputAction action = MaterialInputAction::insert,
-        const juce::String& targetNoteId = {}, const juce::String& initialQuery = {});
+        const juce::String& targetNoteId = {}, const juce::String& initialQuery = {},
+        const std::vector<juce::String>& sequenceNoteIds = {});
     void presentMaterialPronunciationInput(const std::shared_ptr<MaterialInputSession>&);
     void chooseMaterialPronunciation(const std::shared_ptr<MaterialInputSession>&, const MaterialPronunciationCandidate&);
     void finishMaterialPronunciationInput(bool accepted, const juce::String& error = {});
@@ -576,12 +604,13 @@ private:
     juce::Component* materialPronunciationObserved = nullptr;
     std::shared_ptr<MaterialInputSession> materialInputSession;
     std::uint64_t materialInputSerial = 0;
+    int materialPickerRefreshCount = 0; // GUI198: open picker re-indexed after material changes
     std::set<juce::String> materialAliasResumes;
     void openSelectedMaterialEditor(bool quick, const juce::String& noteId = {});
     void openMaterialEditor(const juce::File& source, const juce::File& manifest, bool quick,
                             const juce::String& pronunciationId = {}, const juce::String& audioVariantId = {});
-    bool preflightMaterialPublication(const juce::File&, const std::vector<SampleRegionSetting>&, juce::String&);
-    void materialPublicationCompleted(const juce::File&, const std::vector<SampleRegionSetting>&);
+    bool preflightMaterialPublication(const juce::File&, const std::vector<SampleRegionSetting>&, juce::String&, const juce::String& audioVariantScope = {});
+    void materialPublicationCompleted(const juce::File&, const std::vector<SampleRegionSetting>&, const juce::String& audioVariantScope = {});
     void importMaterialPronunciations(const juce::File& file, const juce::File& manifest,
         const juce::StringArray& regionIds, double startSeconds, const juce::String& trackId,
         const juce::String& chosenAlias = {}, const juce::String& audioVariantId = {});
@@ -631,6 +660,30 @@ private:
     void confirmDestructive(const juce::String& title, std::function<void()> action);
     void loadMelodyneFile(const juce::File& file);
     void presentMelodyneComposeSelection(backend::MelodyneImportResult imported);
+    void optimiseImportedVirtualConnections(ProjectData& imported,const std::vector<NativeSplitTransitionEvidence>& sourceJoins,
+                                             const MelodyneImportOptimizationOptions* selectedOptions = nullptr);
+    struct JapaneseAutoAnnotationState;
+    std::shared_ptr<JapaneseAutoAnnotationState> japaneseAutoAnnotationState;
+    ModelessWindows japaneseAutoAnnotationWindows;
+    void showJapaneseAutoAnnotation(const juce::File& root, const juce::File& currentAudio = {}, OtoWaveformEditorComponent* origin = nullptr);
+    void cancelJapaneseAutoAnnotation();
+    std::function<void(std::function<void()>)> ownedAnnotationExecutor();
+    void drainAnnotationWorker();
+    bool startSourcePreview(juce::Component* owner,const juce::File&,double start,double end);
+    void stopSourcePreview(juce::Component* owner = nullptr);
+    bool sourcePreviewActive = false, sourcePreviewOfflineForTest = false;
+    juce::Component::SafePointer<juce::Component> sourcePreviewOwner;
+    double sourcePreviewPreviousPosition = 0;
+    juce::File sourcePreviewPreviousAudition;
+
+    bool setAnnotationPublicationGate(const juce::String& owner, bool acquiring);
+    bool annotationPublicationGateHeldBy(const juce::String& owner) const;
+    struct CommunityDatasetImportState;
+    std::shared_ptr<CommunityDatasetImportState> communityDatasetImportState;
+    ModelessWindows communityDatasetImportWindows;
+    void showCommunityDatasetImport(const juce::File& initialRoot = {});
+    void cancelCommunityDatasetImport();
+    bool communityDatasetImportBlocksProjectEdits() const;
     struct ProjectRegistrationOperation;
     std::shared_ptr<ProjectRegistrationOperation> projectRegistrationOperation;
     std::unique_ptr<juce::FileChooser> projectRegistrationChooser;
@@ -641,7 +694,16 @@ private:
     std::function<void(std::function<void(const juce::File&)>)> projectRegistrationFolderPickerForTest;
     std::function<bool(const juce::File&,juce::String&)> projectRegistrationRootWriterForTest;
     void cancelProjectMaterialRegistration();
-    void offerMaterialFolderForImport(const ProjectData& imported);
+    void offerMaterialFolderForImport(const ProjectData& imported, bool explicitRequest = false);
+    // 198 single material-change fan-out. Every successful annotation write
+    // reports here; it refreshes manager nodes, open editors, project bindings
+    // (via the existing applySourceSettingsWithReport) and the roll.
+    void materialSourcesChanged(const juce::StringArray& sourcesOrRoots, bool rebindProject);
+    void revealNoteMaterial(const juce::String& noteId);
+    void highlightMaterialUses(const juce::File& audio, const juce::String& audioId, const juce::StringArray& regionIds);
+    void checkExternalManifestChanges(bool rebindProject = true);
+    std::map<juce::String, juce::Time> manifestStamps;
+    bool windowWasActive = true;
     void chooseProjectMaterialRegistrationDestination(const std::shared_ptr<ProjectRegistrationOperation>&);
     void stageProjectMaterialRegistration(const std::shared_ptr<ProjectRegistrationOperation>&, const juce::File&);
     void publishProjectMaterialRegistration(const std::shared_ptr<ProjectRegistrationOperation>&);
@@ -868,5 +930,33 @@ private:
     int panelSplitterDragScreenY = 0;
     float panelSplitterDragRatio = 0.60f;
     float panelSplitRatio = 0.60f;
+    // 198: the arrangement height follows its track count until the user
+    // drags the splitter; that explicit ratio is then remembered.
+    bool panelSplitManual = false;
+    int displayedTrackCount = 1;
+    juce::Label positionLabel;
+    ProjectData tempoView; // tempo/metre only; never tracks
+    void updatePositionLabel();
+    void refreshWindowTitle();
+    juce::String shownWindowTitle;
+    // One-row edit bar: actions that do not fit are reachable from "More".
+    juce::TextButton moreActionsButton, trackSettingsButton;
+    std::vector<juce::Component*> overflowComponents;
+    std::vector<juce::Component*> hiddenEditBarComponents; // optional labels dropped from the single row
+    std::vector<juce::Component*> placedEditBarComponents;
+    int editBarRows = 1;
+    void showMoreActionsMenu();
+    juce::TextButton zoomOutHButton, zoomInHButton, zoomOutVButton, zoomInVButton, zoomFitButton;
+    // Right dock shared with the material manager.
+    juce::Component trackSettingsPanel;
+    juce::Label trackSettingsHeading;
+    juce::TextButton dockAssetsTab, dockTrackTab;
+    bool trackSettingsVisible = false;
+    bool dockShowsTrack = false;
+    void layoutTrackSettingsPanel();
+    // Non-modal offer replacing the automatic registration dialog on open.
+    juce::Component registrationInfoBar;
+    juce::Label registrationInfoText;
+    juce::TextButton registrationInfoRegister, registrationInfoLater, registrationInfoNever;
 };
 }

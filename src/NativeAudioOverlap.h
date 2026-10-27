@@ -1,6 +1,7 @@
 #pragma once
 #include "NativeAudioLink.h"
 #include "NativeAudioTrim.h"
+#include <set>
 namespace hachi
 {
 struct NativeAudioWindow { juce::String owner; double start=0,end=0; };
@@ -16,7 +17,31 @@ inline std::vector<NativeAudioWindow> nativeAudioWindows(const TrackData& track)
     }
     return result;
 }
-inline double nativeCollisionScale(const std::vector<NativeAudioWindow>& before,const std::vector<NativeAudioWindow>& after)
+// Count of physically overlapping audio-window pairs (different owners). Used
+// only for UI/editing policy, never to change render requests.
+inline int nativeAudioOverlapCount(const TrackData& track)
+{
+    auto windows=nativeAudioWindows(track);
+    std::sort(windows.begin(),windows.end(),[](const auto& a,const auto& b){return a.start<b.start;});
+    int count=0;
+    for(std::size_t i=0;i<windows.size();++i)for(std::size_t j=i+1;j<windows.size()&&windows[j].start<windows[i].end-1.e-7;++j)
+        ++count;
+    return count;
+}
+using NativeOwnerOverlapExemptions=std::set<std::pair<juce::String,juce::String>>;
+inline NativeOwnerOverlapExemptions nativeVirtualOverlapExemptions(const TrackData& track,const std::vector<NativeVirtualGroup>* groups)
+{
+    NativeOwnerOverlapExemptions exempt;if(!groups)return exempt;
+    for(const auto& group:*groups)if(group.trackId==track.id)
+    {
+        std::set<juce::String> owners;
+        for(const auto& clip:track.clips)
+            if(!clip.notes.empty()&&std::all_of(clip.notes.begin(),clip.notes.end(),[&](const auto& note){return std::find(group.orderedNoteIds.begin(),group.orderedNoteIds.end(),note.id)!=group.orderedNoteIds.end();}))owners.insert(clip.id);
+        for(const auto& a:owners)for(const auto& b:owners)if(a!=b)exempt.emplace(a,b);
+    }
+    return exempt;
+}
+inline double nativeCollisionScale(const std::vector<NativeAudioWindow>& before,const std::vector<NativeAudioWindow>& after,const NativeOwnerOverlapExemptions* exempt=nullptr)
 {
     if(before.size()!=after.size())return 0;
     double scale=1;
@@ -25,7 +50,7 @@ inline double nativeCollisionScale(const std::vector<NativeAudioWindow>& before,
         if(std::abs(before[i].start-after[i].start)<1.e-9&&std::abs(before[i].end-after[i].end)<1.e-9)continue;
         for(std::size_t j=0;j<before.size();++j)
         {
-            if(i==j)continue;
+            if(i==j||(exempt&&exempt->count({before[i].owner,before[j].owner})))continue;
             const auto constrain=[&](double gap,double nextGap){if(gap>=-1.e-7&&nextGap< -1.e-9)
                 scale=std::min(scale,std::max(0.0,gap)/(gap-nextGap));};
             if(before[i].end<=before[j].start+1.e-7)constrain(before[j].start-before[i].end,after[j].start-after[i].end);
@@ -35,12 +60,12 @@ inline double nativeCollisionScale(const std::vector<NativeAudioWindow>& before,
     return juce::jlimit(0.0,1.0,scale);
 }
 inline double constrainedNativeNoteDelta(const TrackData& track,const std::vector<juce::String>& ids,double delta,
-                                         NativeNoteTimeEdit edit=NativeNoteTimeEdit::move)
+                                         NativeNoteTimeEdit edit=NativeNoteTimeEdit::move,const std::vector<NativeVirtualGroup>* groups=nullptr)
 {
-    if(track.allowNativeAudioOverlap||!trackShowsAllNativeRegions(track)||std::abs(delta)<1.e-9)return delta;
-    auto candidate=track;
-    for(auto& clip:candidate.clips)if(auto plan=planNativeNoteMove(clip,ids,delta,0,edit))clip=std::move(plan->clip);
-    return delta*nativeCollisionScale(nativeAudioWindows(track),nativeAudioWindows(candidate));
+    // Native sources may overlap freely when they are not connected. Shared
+    // source / virtual seams are constrained by the common positive clock,
+    // never by treating a neighbour's old rectangle as an immovable obstacle.
+    juce::ignoreUnused(track,ids,edit,groups);return delta;
 }
 inline double constrainedNativeClipDelta(const TrackData& track,const std::vector<juce::String>& ids,double delta)
 {

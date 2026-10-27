@@ -3,9 +3,11 @@
 #include "../ProjectMaterialRegistrationFacts.h"
 #include "../MaterialPronunciationCatalog.h"
 #include "../AudioEngine.h"
+#include "../NativeTransitionDetection.h"
 #include "../backend/NsfHifiganRenderer.h"
 #include <map>
 #include <set>
+#include <tuple>
 
 namespace hachi
 {
@@ -22,7 +24,11 @@ inline juce::String requestFingerprint(const ProjectData& project)
         for (std::size_t ci = 0; ci < track.clips.size(); ++ci)
         {
             const auto& clip = track.clips[ci]; bytes.writeString(clip.id);
+            const bool trace=juce::SystemStats::getEnvironmentVariable("HACHI_PROFILE_REQUEST_FINGERPRINT",{}).isNotEmpty();
+            const auto started=juce::Time::getMillisecondCounterHiRes();
+            if(trace)std::cout<<"fingerprint clip="<<ci<<" file="<<clip.sourceFile.getFileName()<<" request BEGIN"<<std::endl;
             const auto request = AudioEngine::diagnosticNativeRequest(clip, track);
+            if(trace)std::cout<<"fingerprint clip="<<ci<<" request END ms="<<(juce::Time::getMillisecondCounterHiRes()-started)<<" target BEGIN"<<std::endl;
             // Deliberately exclude ONLY physical sourceFile reference. No request
             // clock/contour/gain/synthesis setting is fitted, changed or omitted.
             bytes.writeDouble(request.sourceOffsetSeconds); bytes.writeDouble(request.sourceDurationSeconds);
@@ -42,6 +48,7 @@ inline juce::String requestFingerprint(const ProjectData& project)
             bytes.writeFloat(request.neighborEdgeF0Start); bytes.writeFloat(request.neighborEdgeF0End);
             bytes.writeBool(request.isGlideMerged); bytes.writeInt(int(request.exportComponent));
             curve(AudioEngine::diagnosticNativeTargetMidi(project, int(ti), int(ci)));
+            if(trace)std::cout<<"fingerprint clip="<<ci<<" target END total_ms="<<(juce::Time::getMillisecondCounterHiRes()-started)<<std::endl;
         }
     }
     return juce::SHA256(bytes.getData(), bytes.getDataSize()).toHexString();
@@ -62,7 +69,7 @@ inline std::map<juce::String, juce::String> modelHashes(const juce::File& folder
 // by the user; this is not automatic phonetic annotation. Original project track
 // modes/order/tempo/solo/noise/NSF/amplitude settings are NEVER overridden here.
 inline bool runTeioProjectMaterialRegistrationAudioGate(const juce::File& originalProject,
-    const juce::File& outputPrefix, const juce::File& nsfModel)
+    const juce::File& outputPrefix, const juce::File& nsfModel,bool autoTransitions=false)
 {
     using namespace teioRegistrationAudioDetail;
     using F = ProjectMaterialRegistrationFacts;
@@ -106,7 +113,13 @@ inline bool runTeioProjectMaterialRegistrationAudioGate(const juce::File& origin
     ProjectModel inspected;
     check("original_project_read_only_load", inspected.load(originalProject, error) && error.isEmpty(), error);
     if (!ok) return finish();
-    const auto original = inspected.snapshot();
+    auto original = inspected.snapshot();
+    if(autoTransitions)
+    {
+        const auto before=requestFingerprint(original);const auto candidates=detectMelodyneTransitions(original);
+        report->setProperty("autoTransitionCandidates",int(candidates.size()));report->setProperty("autoTransitionsAnnotated",annotateMelodyneTransitions(original,candidates));
+        check("transition_identity_annotation_preserves_exact_native_request",requestFingerprint(original)==before);
+    }
     const auto facts = F::derive(original, F::Policy::ConfirmedCarriedPlacements);
     check("confirmed_carried_facts_no_inferred_phonetics", facts.ready, facts.diagnostics.joinIntoString("\n"));
     if (!ok) return finish();
@@ -138,6 +151,12 @@ inline bool runTeioProjectMaterialRegistrationAudioGate(const juce::File& origin
         juce::StringArray old;
         ~RestoreRoots() { SampleSettings::setMaterialRoots(old); }
     } restore {previousRoots};
+    using Registration=ProjectMaterialRegistration;
+    using BindingKey=std::tuple<juce::String,juce::String,juce::String,juce::String>;
+    const auto key=[](const Registration::Locator& where){return BindingKey{where.trackId,where.parentClipId,where.sourcePartId,where.noteId};};
+    std::unique_ptr<Registration::Plan> expectedPlan;
+    std::map<BindingKey,const Registration::Binding*> expectedBindings;
+    std::size_t expectedCatalogEntries=0;
     int phase = 0;
     const RegistrationRealRender renderer = [&](const ProjectData& data, const juce::File& file, juce::String& renderError)
     {
@@ -159,15 +178,28 @@ inline bool runTeioProjectMaterialRegistrationAudioGate(const juce::File& origin
             for (const auto& audio : document.audio) physicalPaths.insert(audio.relativePath.toLowerCase());
             report->setProperty("copiedPhysicalRecordings", int(physicalPaths.size()));
             report->setProperty("publishedAnnotationVariants", int(document.audio.size()));
-            sourcesOk &= physicalPaths.size() == 31 && document.audio.size() == 81;
+            juce::String actualDocument,plannedDocument;
+            sourcesOk &= expectedPlan&&physicalPaths.size()==expectedPlan->recordings.size()
+                &&document.audio.size()==expectedPlan->document.audio.size();
+            if(expectedPlan)sourcesOk &= OttoMaterialIO::encode(document,actualDocument,renderError)
+                &&OttoMaterialIO::encode(expectedPlan->document,plannedDocument,renderError)&&actualDocument==plannedDocument;
             const auto catalog = MaterialPronunciationCatalog::index({{copiedRoot, UtauMode::classic}});
-            sourcesOk &= catalog.ok() && catalog.warnings.isEmpty() && catalog.entries.size() == 81;
+            sourcesOk &= catalog.ok() && catalog.warnings.isEmpty() && catalog.entries.size()==expectedCatalogEntries;
             int checked = 0;
+            std::set<BindingKey> checkedBindings;
             for (const auto& track : data.tracks) for (const auto& clip : track.clips) for (const auto& note : clip.notes)
             {
+                const Registration::Locator where{track.id,clip.id,note.clipPartId,note.id};
+                const auto binding=expectedBindings.find(key(where));
+                juce::File ownerFile=clip.sourceFile;
+                if(!note.clipPartId.isEmpty())
+                {ownerFile=juce::File{};for(const auto& part:clip.parts)if(part.id==note.clipPartId)ownerFile=part.sourceFile;}
+                sourcesOk &= binding!=expectedBindings.end()&&checkedBindings.insert(key(where)).second;
+                if(binding!=expectedBindings.end())sourcesOk &= note.materialAudioId==binding->second->audioId
+                    &&note.materialRegionId==binding->second->regionId&&ownerFile==binding->second->copiedSource;
                 int matches = 0;
                 for (const auto& entry : catalog.entries)
-                    if (entry.audio == clip.sourceFile && entry.audioId == note.materialAudioId && entry.regionId == note.materialRegionId)
+                    if (entry.audio == ownerFile && entry.audioId == note.materialAudioId && entry.regionId == note.materialRegionId)
                     {
                         MaterialPronunciationCatalog::Entry resolved;
                         if (entry.alias == "-" && note.materialLocalOverride
@@ -176,7 +208,7 @@ inline bool runTeioProjectMaterialRegistrationAudioGate(const juce::File& origin
                     }
                 sourcesOk &= matches == 1; ++checked;
             }
-            sourcesOk &= checked == 81;
+            sourcesOk &= checked==int(originalNotes)&&checkedBindings.size()==expectedBindings.size();
             check((tag + "_isolated_catalog_copied_audio_OTTO_explicit_variant_readback").toRawUTF8(), sourcesOk,
                 "physical=" + juce::String(int(physicalPaths.size())) + ", variants=" + juce::String(int(document.audio.size()))
                 + ", boundNotes=" + juce::String(checked) + ", " + renderError);
@@ -229,7 +261,30 @@ inline bool runTeioProjectMaterialRegistrationAudioGate(const juce::File& origin
     };
     // Generic gate creates its own unique child DIRECTLY under the prefix, not
     // under reportRoot: extra nesting would exceed Windows file/path limits.
-    const bool accepted = runProjectMaterialRegistrationRealProjectGate(originalProject, outputPrefix, facts.variants, renderer, error);
+    const bool accepted = runProjectMaterialRegistrationRealProjectGate(originalProject, outputPrefix, facts.variants, renderer, error,
+        [&](const Registration::Plan& prepared,juce::String& prepareError)
+        {
+            expectedPlan=std::make_unique<Registration::Plan>(prepared);
+            std::set<BindingKey> originalKeys;
+            for(const auto& track:original.tracks)for(const auto& clip:track.clips)for(const auto& note:clip.notes)
+                originalKeys.insert(BindingKey{track.id,clip.id,note.clipPartId,note.id});
+            bool exact=prepared.ready&&prepared.recordings.size()==31&&prepared.bindings.size()==originalNotes;
+            for(const auto& binding:expectedPlan->bindings)
+                exact &= originalKeys.contains(key(binding.where))&&expectedBindings.emplace(key(binding.where),&binding).second;
+            exact &= expectedBindings.size()==originalKeys.size();
+            std::set<juce::String> canonicalIds;
+            for(const auto& audio:prepared.document.audio)
+            {
+                exact &= canonicalIds.insert(audio.id).second;
+                for(const auto& row:audio.rows)expectedCatalogEntries+=std::size_t(1+row.additionalAliases.size());
+            }
+            report->setProperty("expectedCanonicalVariants",int(prepared.document.audio.size()));
+            report->setProperty("expectedCanonicalCatalogEntries",int(expectedCatalogEntries));
+            check("prepared_canonical_document_covers_all_original_notes",exact,
+                "physical="+juce::String(int(prepared.recordings.size()))+", uniqueVariants="+juce::String(int(prepared.document.audio.size()))+", bindings="+juce::String(int(prepared.bindings.size())));
+            if(!exact)prepareError="Canonical registration plan does not cover every original note exactly once";
+            return exact;
+        });
     check("teio_before_adoption_and_cold_reopen_PCM_exact", accepted, error);
     check("all_three_real_render_phases_ran", phase == 3);
     check("model_config_bytes_unchanged", modelHashes(nsfModel) == resources);

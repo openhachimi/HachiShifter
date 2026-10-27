@@ -16,6 +16,48 @@ inline std::vector<SourceTimePoint> nativeClipClock(const ClipData& clip)
     return map;
 }
 
+// Score-aligned material has an audible source support independent of the
+// nominal imported note rectangle. Source P remains in source segments; raw UST
+// preutterance is a requested TARGET duration and is never a source coordinate.
+struct NativeScoreMaterialSupport
+{
+    double sourceBegin=0,sourceEnd=0,alignmentSource=0;
+    double targetBegin=0,targetEnd=0;
+};
+inline bool nativeScoreMaterialAudioSupport(const NoteData& note,const ClipData& owner,
+    const std::vector<SourceTimePoint>& clock,NativeScoreMaterialSupport& output,juce::String& error)
+{
+    const auto fail=[&](const char* text){error=text;return false;};
+    error.clear();
+    if(!note.nativeScoreMaterialAligned||note.materialAudioId.isEmpty()||note.materialRegionId.isEmpty()
+        ||clock.size()<2||note.nativeSegments.empty())return fail("Missing explicit score-aligned material support");
+    const auto begin=note.nativeSourceStartSeconds,end=note.nativeSourceEndSeconds;
+    if(!std::isfinite(begin)||!std::isfinite(end)||!std::isfinite(note.materialSourceStartSeconds)
+        ||!std::isfinite(note.materialSourceEndSeconds)||begin<0||end<=begin
+        ||begin<note.materialSourceStartSeconds-1.e-8||end>note.materialSourceEndSeconds+1.e-8)
+        return fail("Invalid score-aligned source support identity");
+    double p=std::numeric_limits<double>::infinity();
+    for(const auto& segment:note.nativeSegments)
+    {
+        if(!std::isfinite(segment.alignmentSeconds))return fail("Invalid source P in score-aligned material");
+        p=std::min(p,begin+segment.alignmentSeconds);
+    }
+    for(std::size_t i=0;i<clock.size();++i)
+        if(!std::isfinite(clock[i].sourceSeconds)||!std::isfinite(clock[i].targetSeconds)
+            ||(i&&(clock[i].sourceSeconds<=clock[i-1].sourceSeconds||clock[i].targetSeconds<=clock[i-1].targetSeconds)))
+            return fail("Invalid score-aligned source clock");
+    if(begin<owner.sourceOffsetSeconds+clock.front().sourceSeconds-1.e-7
+        ||end>owner.sourceOffsetSeconds+clock.back().sourceSeconds+1.e-7||p<begin-1.e-8||p>end+1.e-8)
+        return fail("Score-aligned source support is outside its actual clock");
+    const auto targetP=nativeTargetTimeAt(clock,p-owner.sourceOffsetSeconds);
+    if(!std::isfinite(note.startSeconds)||std::abs(targetP-note.startSeconds)>1.e-6)
+        return fail("Source P does not align with the imported score onset");
+    NativeScoreMaterialSupport result{begin,end,p,nativeTargetTimeAt(clock,begin-owner.sourceOffsetSeconds),
+        nativeTargetTimeAt(clock,end-owner.sourceOffsetSeconds)};
+    if(result.targetEnd<=result.targetBegin)return fail("Empty score-aligned audible support");
+    output=result;return true;
+}
+
 // Bind each split to its own source interval. Older splits copied the whole
 // syllable's segment metadata into both halves; the shared audio clock is truth.
 inline void bindNativeNoteSource(NoteData& note, const ClipData& clip,
@@ -50,8 +92,49 @@ inline SampleRegionSetting nativeNoteSourceTiming(const NoteData& note, const Cl
     SampleRegionSetting row;
     row.name=note.label;row.pronunciationKind=note.pronunciationKind;row.simplifiedConsonant=note.simplifiedConsonant;
     row.vowelSplitsExplicit=note.vowelSplitsExplicit;
+    row.nativePronunciationEdges=note.nativePronunciationEdges;row.nativeTransition=note.nativeTransition;
+    if(note.nativeScoreMaterialAligned)
+    {
+        row.regionStartSeconds=note.nativeSourceStartSeconds;row.regionEndSeconds=note.nativeSourceEndSeconds;
+        row.alignmentSeconds=row.regionStartSeconds;double c=row.regionStartSeconds;
+        const auto base=note.nativeSourceStartSeconds;
+        if(!note.nativeSegments.empty())row.alignmentSeconds=std::numeric_limits<double>::infinity();
+        for(auto segment:note.nativeSegments)
+        {
+            segment.sourceStartSeconds+=base;segment.sourceEndSeconds+=base;segment.alignmentSeconds+=base;
+            row.alignmentSeconds=std::min(row.alignmentSeconds,segment.alignmentSeconds);
+            if(segment.role==NativeSegmentRole::consonant)c=std::max(c,segment.sourceEndSeconds);
+            row.segments.push_back(std::move(segment));
+        }
+        row.fixedDurationSeconds=std::max(0.0,c-row.regionStartSeconds);
+        row.overlapSeconds=note.nativeSegments.empty()?0:note.nativeSegments.front().overlapSeconds;
+        if(row.nativePronunciationEdges&&(row.regionStartSeconds!=note.materialSourceStartSeconds||row.regionEndSeconds!=note.materialSourceEndSeconds))
+        {
+            std::optional<NativePronunciationEdges> clipped;juce::String error;
+            if(clipNativePronunciationEdges(row.nativePronunciationEdges,note.materialSourceStartSeconds,note.materialSourceEndSeconds,
+                row.regionStartSeconds,row.regionEndSeconds,clipped,error))row.nativePronunciationEdges=std::move(clipped);
+        }
+        return row;
+    }
     row.regionStartSeconds=clip.sourceOffsetSeconds+nativeSourceTimeAt(clock,note.startSeconds);
     row.regionEndSeconds=clip.sourceOffsetSeconds+nativeSourceTimeAt(clock,note.startSeconds+note.durationSeconds);
+    if(note.nativePronunciationEdges)
+    {
+        // Independent score arithmetic (.1 + .7) can differ by one ULP from
+        // the exact stored source annotation (.8). Prefer that known physical
+        // anchor only when BOTH the profile and current clock already agree
+        // within numerical tolerance. Never repair an actual crop or bad codec.
+        const auto& edges=*note.nativePronunciationEdges;
+        constexpr double anchorEpsilon=1.e-9;
+        if(note.materialSourceStartSeconds>=0
+            &&std::abs(note.materialSourceStartSeconds-edges.entryFromSourceSeconds)<=anchorEpsilon
+            &&std::abs(row.regionStartSeconds-note.materialSourceStartSeconds)<=anchorEpsilon)
+            row.regionStartSeconds=note.materialSourceStartSeconds;
+        if(note.materialSourceEndSeconds>=0
+            &&std::abs(note.materialSourceEndSeconds-edges.terminationSourceSeconds)<=anchorEpsilon
+            &&std::abs(row.regionEndSeconds-note.materialSourceEndSeconds)<=anchorEpsilon)
+            row.regionEndSeconds=note.materialSourceEndSeconds;
+    }
     const auto base=note.nativeSourceStartSeconds>=0?note.nativeSourceStartSeconds:row.regionStartSeconds;
     const auto materialBase=note.materialSourceStartSeconds>=0?note.materialSourceStartSeconds:base;
     row.alignmentSeconds=row.regionStartSeconds;
@@ -85,6 +168,9 @@ inline double nativeNotePreutteranceTarget(const NoteData& note,const ClipData& 
             auto childNote=note;childNote.startSeconds-=part.startSeconds;
             return part.startSeconds+nativeNotePreutteranceTarget(childNote,part);
         }
+    // A protocol score stores the actual post-P onset. Its requested lead-in
+    // is target support BEFORE that onset, never a source marker after it.
+    if(!note.nativeScoreMaterialAligned&&(clip.sourceFile==juce::File{}||clip.sourceFile.hasFileExtension("ust;ustx;mid;midi")))return note.startSeconds;
     const auto clock=nativeClipClock(clip);
     const auto row=nativeNoteSourceTiming(note,clip,clock);
     return nativeTargetTimeAt(clock,row.alignmentSeconds-clip.sourceOffsetSeconds);
@@ -100,8 +186,9 @@ struct NativeNoteMovePlan
 
 inline std::optional<NativeNoteMovePlan> planNativeNoteMove(
     const ClipData& original, const std::vector<juce::String>& ids,
-    double requested, float pitch, NativeNoteTimeEdit edit = NativeNoteTimeEdit::move)
+    double requested, float pitch, NativeNoteTimeEdit edit = NativeNoteTimeEdit::move,bool connectedSeams=false)
 {
+    connectedSeams=connectedSeams||original.nativeAudioLinked||std::any_of(original.notes.begin(),original.notes.end(),[](const auto& note){return note.connectedToPrevious||note.connectedToNext;});
     if (!std::isfinite(requested) || !std::isfinite(pitch)) return {};
     const auto selected = [&](const NoteData& note)
     { return std::find(ids.begin(), ids.end(), note.id) != ids.end(); };
@@ -130,6 +217,11 @@ inline std::optional<NativeNoteMovePlan> planNativeNoteMove(
                     segment.sourceEndSeconds=placed(row.regionStartSeconds+segment.sourceEndSeconds)-note.startSeconds;
                     segment.alignmentSeconds=placed(row.regionStartSeconds+segment.alignmentSeconds)-note.startSeconds;
                 }
+                // This proxy's source coordinates ARE editor time. A typed
+                // middle is an absolute physical source marker too, so map it
+                // through the child's clock rather than leaving it in WAV time.
+                if(note.nativeTransition)note.nativeTransition->boundarySourceSeconds=placed(note.nativeTransition->boundarySourceSeconds);
+                note.nativePronunciationEdges.reset(); // audible source profiles stay on the real child
                 note.nativeSourceStartSeconds=note.startSeconds;
                 note.nativeSourceEndSeconds=note.startSeconds+note.durationSeconds;
                 note.materialSourceStartSeconds=note.startSeconds;
@@ -137,13 +229,14 @@ inline std::optional<NativeNoteMovePlan> planNativeNoteMove(
                 note.utauPreutteranceOverrideEnabled=true;
                 note.utauPreutteranceSeconds=placed(timing.alignmentSeconds)-note.startSeconds;
                 note.consonantSeconds=placed(timing.consonantEndSeconds)-note.startSeconds;
+                note.nativeScoreMaterialAligned=false; // temporary editor-time proxy, not persisted source support
                 break;
             }
         proxy.parts.clear();proxy.nativeAudioLinked=false;
         proxy.audioStartSeconds=0;proxy.audioDurationSeconds=-1;
         proxy.sourceOffsetSeconds=0;proxy.sourceDurationSeconds=proxy.durationSeconds;
         proxy.sourceTimeMap={{0,0},{proxy.durationSeconds,proxy.durationSeconds}};
-        auto plan=planNativeNoteMove(proxy,ids,requested,pitch,edit);if(!plan)return {};
+        auto plan=planNativeNoteMove(proxy,ids,requested,pitch,edit,true);if(!plan)return {};
         const auto commonClock=plan->clip.sourceTimeMap;
         const auto warp=[&](double t){return nativeTargetTimeAt(commonClock,t);};
         auto result=std::move(plan->clip);result.nativeAudioLinked=true;
@@ -189,12 +282,18 @@ inline std::optional<NativeNoteMovePlan> planNativeNoteMove(
             for(auto& note:result.notes)if(note.clipPartId==part.id)
             {
                 auto bound=std::find_if(source.notes.begin(),source.notes.end(),[&](const auto& n){return n.id==note.id;});
-                auto originalNote=*bound;bindNativeNoteSource(originalNote,source,&clock);
+                auto originalNote=*bound;
+                // Score-aligned support includes pre-P audio outside the score
+                // rectangle. A musical move warps its clock; it must not crop
+                // that source support back to the nominal note interval.
+                if(!bound->nativeScoreMaterialAligned)bindNativeNoteSource(originalNote,source,&clock);
+                note.nativeScoreMaterialAligned=bound->nativeScoreMaterialAligned;
                 note.nativeSourceStartSeconds=originalNote.nativeSourceStartSeconds;
                 note.nativeSourceEndSeconds=originalNote.nativeSourceEndSeconds;note.nativeSegments=std::move(originalNote.nativeSegments);
                 note.materialSourceStartSeconds=bound->materialSourceStartSeconds;note.materialSourceEndSeconds=bound->materialSourceEndSeconds;
                 note.utauPreutteranceOverrideEnabled=bound->utauPreutteranceOverrideEnabled;
                 note.utauPreutteranceSeconds=bound->utauPreutteranceSeconds;
+                note.nativeTransition=bound->nativeTransition;note.nativePronunciationEdges=bound->nativePronunciationEdges;
             }
         }
         return NativeNoteMovePlan{std::move(result),plan->delta};
@@ -262,7 +361,7 @@ inline std::optional<NativeNoteMovePlan> planNativeNoteMove(
             if (selected(note))
                 movingEdges.push_back(leftLike ? note.startSeconds
                     : note.startSeconds + note.durationSeconds);
-        bool changed = true;
+        bool changed = !connectedSeams;
         while (changed)
         {
             changed = false;
@@ -333,11 +432,18 @@ inline std::optional<NativeNoteMovePlan> planNativeNoteMove(
             const auto a=juce::jlimit(from,to,nativeTargetTimeAt(clock,row.regionStartSeconds+zone.sourceStartSeconds-original.sourceOffsetSeconds));
             const auto b=juce::jlimit(from,to,nativeTargetTimeAt(clock,row.regionStartSeconds+zone.sourceEndSeconds-original.sourceOffsetSeconds));
             if(b<=a+1.e-12)continue;
-            const auto weight=zone.role==NativeSegmentRole::vowel&&zone.stretchable&&std::isfinite(zone.stretchWeight)
+            const auto weight=(zone.role==NativeSegmentRole::vowel||zone.role==NativeSegmentRole::transition)&&zone.stretchable&&std::isfinite(zone.stretchWeight)
                 ?(b-a)*std::max(0.0,zone.stretchWeight):0.0;
             placed.push_back({a,b,weight});total+=weight;
         }
-        if(total<=1.e-12)return NativeNoteMovePlan{original,0};
+        if(total<=1.e-12)
+        {
+            if(!connectedSeams)return NativeNoteMovePlan{original,0};
+            // A connected fragment must not become immovable merely because
+            // all of its inferred zones are fixed/unknown. Keep source markers
+            // intact and warp this complete positive interval as one unit.
+            placed={{from,to,to-from}};total=to-from;
+        }
         double progress=0;
         for(const auto& zone:placed)
         {

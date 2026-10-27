@@ -27,7 +27,8 @@ public:
         // new-variant rows onto unrelated same-file project registrations.
         std::function<bool(const CommunityDatasetIO::Plan&, juce::String&)> preflight;
         // Actual successful disk commit only. Register via the existing manager,
-        // refresh/invalidate and apply the existing guarded model transaction.
+        // refresh/invalidate. Main conservatively refuses in-use/ambiguous IDs;
+        // this import does not rewrite or rebind existing project notes.
         // This wizard performs NO model mutation, registration or PCM copy.
         std::function<void(const CommunityDatasetIO::Plan&, const CommunityDatasetIO::Report&)> published;
     };

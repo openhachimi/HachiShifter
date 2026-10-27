@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <utility>
 
 namespace hachi
 {
@@ -38,6 +39,15 @@ bool parseRole(const juce::String& value, NativeSegmentRole& role)
         }
     return false;
 }
+// GUI198: one shared 0.1 ms display for every OTTO number. Fields compare
+// against this exact formatting, so untouched values keep full precision.
+juce::String msText(double seconds)
+{
+    auto value = seconds * 1000.0; if (std::abs(value) < 0.05) value = 0.0;
+    auto text = juce::String(value, 1);
+    if (text.endsWith(".0")) text = text.dropLastCharacters(2);
+    return text;
+}
 bool parseNumber(const juce::String& text, double& value)
 {
     const auto trimmed = text.trim();
@@ -64,7 +74,7 @@ public:
             editor.setColour(juce::TextEditor::textColourId, foreground);
             editor.applyColourToAllText(foreground, false);
         };
-        for (auto* editor : { &owner.alias, &owner.extraAliases, &owner.cuts, &owner.batchAliases, &owner.segmentEditor })
+        for (auto* editor : { &owner.alias, &owner.extraAliases, &owner.cuts, &owner.batchAliases, &owner.segmentEditor, &owner.edgeEntry, &owner.edgeExit })
             refreshEditor(*editor);
         for (auto& editor : owner.timings) refreshEditor(editor);
         owner.list.setColour(juce::ListBox::backgroundColourId, Palette::base);
@@ -101,6 +111,21 @@ public:
                 g.drawVerticalLine(juce::roundToInt(x(time)), 2.0f, static_cast<float>(getHeight() - 2));
             if (active)
             {
+                auto proposed=row;juce::String edgeError;
+                const bool showEdges=!owner.edgeFieldsChanged(row)||owner.applyEdgeFields(proposed,owner.edgeEnabled.getToggleState(),owner.edgeEntry.getText(),owner.edgeExit.getText(),edgeError);
+                if(showEdges&&proposed.nativePronunciationEdges)
+                {
+                    const auto& p=*proposed.nativePronunciationEdges;g.setColour(Palette::accentLight.withAlpha(.2f));
+                    for(int edgeIndex=0;edgeIndex<2;++edgeIndex)
+                    {
+                        const auto window=edgeIndex==0?std::pair{p.entryFromSourceSeconds,p.entryToSourceSeconds}:std::pair{p.exitFromSourceSeconds,p.exitToSourceSeconds};
+                        const auto left=x(window.first),right=x(window.second);g.fillRect(juce::Rectangle<float>(left,float(area.getY()),std::max(0.0f,right-left),float(area.getHeight())));
+                        juce::Path ramp;ramp.startNewSubPath(left,float(edgeIndex==0?area.getBottom():area.getY()));ramp.lineTo(right,float(edgeIndex==0?area.getY():area.getBottom()));g.setColour(Palette::accentLight);g.strokePath(ramp,juce::PathStrokeType(1.5f));g.setColour(Palette::accentLight.withAlpha(.2f));
+                    }
+                    // GUI198: inner fade ends are draggable knobs (same fields).
+                    if(owner.edgeEntry.isEnabled())for(const bool entry:{true,false})if(const auto knob=edgeKnob(entry))
+                    {g.setColour(Palette::panel);g.fillEllipse(knob->withSizeKeepingCentre(10.f,10.f));g.setColour(Palette::accentLight);g.drawEllipse(knob->withSizeKeepingCentre(10.f,10.f),1.6f);g.setColour(Palette::accentLight.withAlpha(.2f));}
+                }
                 g.setColour(Palette::contrastingText(Palette::graphBackground));
                 g.drawText(row.name, juce::roundToInt(x(row.regionStartSeconds)) + 3, 1,
                            std::max(30, juce::roundToInt(x(row.regionEndSeconds) - x(row.regionStartSeconds)) - 6),
@@ -148,8 +173,25 @@ public:
         return juce::jlimit(0.0, owner.session->durationSeconds(),
             (point - area.getX()) / std::max(1, area.getWidth()) * owner.session->durationSeconds());
     }
+    // Knob of the (proposed) fade-in end / fade-out start, if editable.
+    std::optional<juce::Rectangle<float>> edgeKnob(bool entry) const
+    {
+        if (!owner.session || owner.session->durationSeconds() <= 0 || !owner.edgeEntry.isEnabled()) return {};
+        const auto* row = owner.activeRow(); if (!row) return {};
+        auto proposed = *row; juce::String error;
+        if (owner.edgeFieldsChanged(*row) && !owner.applyEdgeFields(proposed, owner.edgeEnabled.getToggleState(), owner.edgeEntry.getText(), owner.edgeExit.getText(), error)) return {};
+        if (!proposed.nativePronunciationEdges) return {};
+        const auto area = getLocalBounds().reduced(10, 20);
+        const auto seconds = entry ? proposed.nativePronunciationEdges->entryToSourceSeconds : proposed.nativePronunciationEdges->exitFromSourceSeconds;
+        const auto px = static_cast<float>(area.getX() + seconds / owner.session->durationSeconds() * area.getWidth());
+        return juce::Rectangle<float>(px - 6.f, static_cast<float>(area.getY()) - 6.f, 12.f, 12.f);
+    }
+    int edgeDragging = 0;
     void mouseDown(const juce::MouseEvent& event) override
     {
+        edgeDragging = 0;
+        for (const bool entry : { true, false })
+            if (const auto knob = edgeKnob(entry); knob && knob->expanded(3.f).contains(event.position)) { edgeDragging = entry ? 1 : 2; dragging = false; return; }
         if (!owner.commitFields()) return;
         anchor = timeAt(event.position.x); dragging = true; sideChosen = false; owner.rangeSelected = false;
         if (owner.adjacentPronunciation.getToggleState() && !owner.session->rows().empty() && !owner.activeRow())
@@ -166,6 +208,11 @@ public:
     }
     void mouseDrag(const juce::MouseEvent& event) override
     {
+        if (edgeDragging != 0)
+        {
+            (edgeDragging == 1 ? owner.edgeEntry : owner.edgeExit).setText(msText(timeAt(event.position.x)), false);
+            owner.edgeFieldsEdited(); repaint(); return;
+        }
         if (!dragging || event.getDistanceFromDragStart() < 4) return;
         const auto end = timeAt(event.position.x);
         if (owner.selectedRangeAnchor.isNotEmpty())
@@ -192,6 +239,7 @@ public:
     }
     void mouseUp(const juce::MouseEvent&) override
     {
+        if (edgeDragging != 0) { edgeDragging = 0; return; }
         dragging = false;
         if (!owner.rangeSelected) return;
         owner.refreshing = true; owner.list.deselectAllRows(); owner.refreshing = false;
@@ -229,9 +277,15 @@ MaterialAnnotationEditor::MaterialAnnotationEditor(std::shared_ptr<MaterialAnnot
     for (auto* component : std::initializer_list<juce::Component*>{&title, &status, &aliasLabel, &extraLabel,
         &cutLabel, &batchLabel, &segmentLabel, &pronunciationKindLabel, &alias, &extraAliases, &cuts, &batchAliases, &segmentEditor, &pronunciationKindChoice, &adjacentPronunciation,
         &applyButton, &splitButton, &renameButton, &mergeButton, &deleteButton, &undoButton, &redoButton, &saveButton,
-        &createAliasButton, &cancelAliasButton, &detailButton})
+        &createAliasButton, &cancelAliasButton, &detailButton, &japaneseAutoButton, &previewButton, &edgeEnabled, &edgeEntryLabel, &edgeExitLabel, &edgeSummary, &edgeEntry, &edgeExit})
         addAndMakeVisible(component);
     title.setText(audio.getFileName(), juce::dontSendNotification);
+    edgeEnabled.setButtonText(strings.text("edge.enabled"));edgeEnabled.setTooltip(strings.text("edge.separate"));
+    edgeEntryLabel.setText(strings.text("edge.entry"),juce::dontSendNotification);edgeExitLabel.setText(strings.text("edge.exit"),juce::dontSendNotification);
+    edgeEntry.setTooltip(strings.text("edge.sourceMs"));edgeExit.setTooltip(strings.text("edge.sourceMs"));
+    edgeEnabled.onClick=[this]{edgeFieldsEdited();};edgeEntry.onTextChange=edgeExit.onTextChange=[this]{edgeFieldsEdited();};
+    edgeEntry.onReturnKey=edgeExit.onReturnKey=[this]{if(commitFields())refresh(selectedIds());};
+
     aliasLabel.setText(tr("主别名", "Primary alias"), juce::dontSendNotification);
     extraLabel.setText(tr("附加别名（分号分隔）", "Additional aliases (semicolon)"), juce::dontSendNotification);
     cutLabel.setText(tr("切分位置 ms（逗号或空格）", "Split positions ms (comma/space)"), juce::dontSendNotification);
@@ -266,6 +320,10 @@ MaterialAnnotationEditor::MaterialAnnotationEditor(std::shared_ptr<MaterialAnnot
     mergeButton.setButtonText(tr("合并所选", "Merge selected"));
     deleteButton.setButtonText(tr("删除所选", "Delete selected"));
     undoButton.setButtonText(tr("撤销", "Undo")); redoButton.setButtonText(tr("重做", "Redo"));
+    previewButton.setButtonText(strings.text("preview.play"));previewButton.setTooltip(strings.text("preview.pronunciation"));
+    previewButton.onClick=[this]{if(onPreviewPronunciation)onPreviewPronunciation();};
+    japaneseAutoButton.setButtonText(strings.text("jaAuto.current"));
+    japaneseAutoButton.onClick = [this] { if (onJapaneseAutoAnnotation) onJapaneseAutoAnnotation(); };
     saveButton.setButtonText(tr("保存标注", "Save annotations"));
     applyButton.onClick = [this] { if (commitFields()) refresh(selectedIds()); };
     splitButton.onClick = [this] { splitAtText(); };
@@ -325,6 +383,8 @@ MaterialAnnotationEditor::~MaterialAnnotationEditor()
 }
 
 juce::Component& MaterialAnnotationEditor::overviewWaveform() { return *waveform; }
+std::optional<juce::Point<float>> MaterialAnnotationEditor::overviewEdgeKnob(bool entry) const
+{ if (const auto knob = waveform->edgeKnob(entry)) return knob->getCentre(); return {}; }
 
 void MaterialAnnotationEditor::openDetail(const juce::String& id)
 {
@@ -424,6 +484,59 @@ void MaterialAnnotationEditor::selectedRowsChanged(int last)
         ? session->rows()[static_cast<std::size_t>(last)].materialRegionId : juce::String();
     showFields(); waveform->repaint();
 }
+bool MaterialAnnotationEditor::applyEdgeFields(SampleRegionSetting& row,bool enabled,const juce::String& entry,const juce::String& exit,juce::String& error)
+{
+    double entryMs=0,exitMs=0;
+    if(enabled&&(!parseNumber(entry,entryMs)||!parseNumber(exit,exitMs)))
+    {error="Finite absolute source milliseconds are required";return false;}
+    return editNativePronunciationEdges(row,enabled,entryMs/1000,exitMs/1000,error);
+}
+bool MaterialAnnotationEditor::edgeFieldsChanged(const SampleRegionSetting& row) const
+{
+    if(session&&session->isClassicNoteScope())return false;
+    if(edgeEnabled.getToggleState()!=row.nativePronunciationEdges.has_value())return true;
+    if(!edgeEnabled.getToggleState())return false;
+    return edgeEntry.getText()!=msText(row.nativePronunciationEdges->entryToSourceSeconds)
+        ||edgeExit.getText()!=msText(row.nativePronunciationEdges->exitFromSourceSeconds);
+}
+void MaterialAnnotationEditor::showEdgeFields(const SampleRegionSetting* row)
+{
+    edgeEnabled.setToggleState(row&&row->nativePronunciationEdges.has_value(),juce::dontSendNotification);
+    const bool editable=row&&session&&!session->isClassicNoteScope();edgeEnabled.setEnabled(editable);
+    NativePronunciationEdges profile;juce::String error;bool have=false;
+    if(row){if(row->nativePronunciationEdges){profile=*row->nativePronunciationEdges;have=true;}else have=defaultNativePronunciationEdges(*row,profile,error);}
+    edgeEntry.setText(have?msText(profile.entryToSourceSeconds):juce::String{},false);
+    edgeExit.setText(have?msText(profile.exitFromSourceSeconds):juce::String{},false);
+    edgeEntry.setEnabled(editable&&edgeEnabled.getToggleState());edgeExit.setEnabled(editable&&edgeEnabled.getToggleState());updateEdgeSummary();
+}
+void MaterialAnnotationEditor::edgeFieldsEdited()
+{
+    if(refreshing)return;fieldsDirty=true;const bool editable=activeRow()&&session&&!session->isClassicNoteScope();
+    edgeEntry.setEnabled(editable&&edgeEnabled.getToggleState());edgeExit.setEnabled(editable&&edgeEnabled.getToggleState());updateEdgeSummary();waveform->repaint();
+}
+void MaterialAnnotationEditor::updateEdgeSummary()
+{
+    const auto* current=activeRow();if(!current){edgeSummary.setText({},juce::dontSendNotification);return;}
+    auto row=*current;juce::String error;
+    if(edgeFieldsChanged(row)&&!applyEdgeFields(row,edgeEnabled.getToggleState(),edgeEntry.getText(),edgeExit.getText(),error))
+    {edgeSummary.setText(strings.text("edge.invalid")+" "+error,juce::dontSendNotification);return;}
+    if(!row.nativePronunciationEdges){edgeSummary.setText(strings.text("edge.absent"),juce::dontSendNotification);return;}
+    const auto& p=*row.nativePronunciationEdges;
+    const auto summary=strings.text("edge.summary")+" ["+msText(p.entryFromSourceSeconds)+", "+msText(p.entryToSourceSeconds)+"] / ["
+        +msText(p.exitFromSourceSeconds)+", "+msText(p.exitToSourceSeconds)+"] ms";
+    edgeSummary.setText(summary,juce::dontSendNotification);edgeSummary.setTooltip(summary+"\n"+strings.text("edge.separate"));
+}
+bool MaterialAnnotationEditor::hasUnpublishedFields() const
+{
+    if (fieldsDirty) return true;
+    const auto* row = activeRow(); if (!row) return false;
+    if (alias.getText() != row->name || extraAliases.getText() != row->additionalAliases.joinIntoString(";")
+        || segmentEditor.getText() != segmentBaseline || pronunciationKindChoice.getSelectedId() != static_cast<int>(row->pronunciationKind)+1) return true;
+    if(edgeFieldsChanged(*row))return true;
+    const double values[]{row->regionStartSeconds,row->regionEndSeconds,row->fixedDurationSeconds,row->alignmentSeconds-row->regionStartSeconds,row->overlapSeconds};
+    for (std::size_t i=0;i<timings.size();++i) if (timings[i].getText() != msText(values[i])) return true;
+    return false;
+}
 void MaterialAnnotationEditor::showFields()
 {
     refreshing = true;
@@ -434,7 +547,7 @@ void MaterialAnnotationEditor::showFields()
         row ? row->fixedDurationSeconds : 0, row ? row->alignmentSeconds - row->regionStartSeconds : 0,
         row ? row->overlapSeconds : 0};
     for (std::size_t i = 0; i < timings.size(); ++i)
-    { timings[i].setText(row ? juce::String(numbers[i] * 1000, 6) : juce::String(), false); timings[i].setEnabled(row != nullptr); }
+    { timings[i].setText(row ? msText(numbers[i]) : juce::String(), false); timings[i].setEnabled(row != nullptr); }
     segmentBaseline.clear();
     if (row)
     {
@@ -442,15 +555,16 @@ void MaterialAnnotationEditor::showFields()
         {
             if (segmentBaseline.isNotEmpty()) segmentBaseline += ",";
             segmentBaseline += juce::String::charToString(roleCode(segment.role)) + ":"
-                + juce::String(segment.sourceEndSeconds * 1000, 6);
+                + msText(segment.sourceEndSeconds);
         }
         // A display suggestion only. An untouched bare row remains unsegmented.
-        if (row->segments.empty()) segmentBaseline = "V:" + juce::String(row->regionEndSeconds * 1000, 6);
+        if (row->segments.empty()) segmentBaseline = "V:" + msText(row->regionEndSeconds);
     }
     segmentEditor.setText(segmentBaseline, false); segmentEditor.setEnabled(row != nullptr);
     alias.setEnabled(row != nullptr); extraAliases.setEnabled(row != nullptr);
     pronunciationKindChoice.setEnabled(row != nullptr); applyButton.setEnabled(row != nullptr);
     pronunciationKindChoice.setSelectedId(row ? static_cast<int>(row->pronunciationKind) + 1 : 1, juce::dontSendNotification);
+    showEdgeFields(row);
     fieldsDirty = false; refreshing = false;
 }
 void MaterialAnnotationEditor::refresh(const std::vector<juce::String>& ids)
@@ -470,7 +584,7 @@ void MaterialAnnotationEditor::refresh(const std::vector<juce::String>& ids)
 }
 bool MaterialAnnotationEditor::commitFields()
 {
-    if (!fieldsDirty) return true;
+    if (!hasUnpublishedFields()) return true;
     const auto* current = activeRow();
     if (!current || !session) return false;
     auto row = *current;
@@ -489,7 +603,7 @@ bool MaterialAnnotationEditor::commitFields()
         current->overlapSeconds};
     bool changed[5]{};
     for (std::size_t i = 0; i < timings.size(); ++i)
-        changed[i] = timings[i].getText() != juce::String(before[i] * 1000, 6);
+        changed[i] = timings[i].getText() != msText(before[i]);
     // Editing an alias must not quantise inherited native timing to the display
     // precision. Only timing fields the user actually changed are replaced.
     if (changed[0]) row.regionStartSeconds = values[0] / 1000;
@@ -529,7 +643,7 @@ bool MaterialAnnotationEditor::commitFields()
             {
                 segment = current->segments[static_cast<std::size_t>(match)];
                 used[static_cast<std::size_t>(match)] = true;
-                if (tokens[i].substring(colon + 1).trim() == juce::String(segment.sourceEndSeconds * 1000, 6))
+                if (tokens[i].substring(colon + 1).trim() == msText(segment.sourceEndSeconds))
                     end = segment.sourceEndSeconds; // Retain exact inherited timing bits.
             }
             else
@@ -553,7 +667,10 @@ bool MaterialAnnotationEditor::commitFields()
         if (!row.segments.empty()) row.role = row.segments.front().role;
     }
     juce::String error;
+    if(edgeFieldsChanged(*current)&&!session->isClassicNoteScope()&&!applyEdgeFields(row,edgeEnabled.getToggleState(),edgeEntry.getText(),edgeExit.getText(),error))
+    {showError(strings.text("edge.invalid")+" "+error);return false;}
     if (!session->setRow(activeId, row, error)) { showError(error); return false; }
+    showFields(); // re-read the canonical session row after any shared bounds remap
     fieldsDirty = false;
     undoButton.setEnabled(session->canUndo()); redoButton.setEnabled(session->canRedo());
     list.repaint(); waveform->repaint();
@@ -628,9 +745,11 @@ void MaterialAnnotationEditor::resized()
 {
     auto area = getLocalBounds().reduced(12);
     auto titleRow = area.removeFromTop(26);
+    previewButton.setBounds(titleRow.removeFromRight(100).reduced(3,0));
+    japaneseAutoButton.setBounds(titleRow.removeFromRight(240).reduced(3,0));
     adjacentPronunciation.setBounds(titleRow.removeFromRight(230));
     title.setBounds(titleRow);
-    waveform->setBounds(area.removeFromTop(std::max(140, getHeight() / 3)));
+    waveform->setBounds(area.removeFromTop(std::max(90, (getHeight()-300) / 3)));
     area.removeFromTop(8);
     auto buttons = area.removeFromBottom(32);
     for (auto* button : {&undoButton, &redoButton, &mergeButton, &deleteButton})
@@ -638,6 +757,10 @@ void MaterialAnnotationEditor::resized()
     saveButton.setBounds(buttons.removeFromRight(150));
     status.setBounds(area.removeFromBottom(44));
     auto left = area.removeFromLeft(std::max(230, getWidth() / 3)); left.removeFromRight(10); list.setBounds(left);
+    edgeEnabled.setBounds(area.removeFromTop(26));
+    auto edgeLine=area.removeFromTop(42);const int edgeWidth=edgeLine.getWidth()/2;
+    auto entryCell=edgeLine.removeFromLeft(edgeWidth);edgeEntryLabel.setBounds(entryCell.removeFromTop(20));edgeEntry.setBounds(entryCell.reduced(2,0));
+    edgeExitLabel.setBounds(edgeLine.removeFromTop(20));edgeExit.setBounds(edgeLine.reduced(2,0));edgeSummary.setBounds(area.removeFromTop(38));
     auto line = area.removeFromTop(44); aliasLabel.setBounds(line.removeFromTop(20)); alias.setBounds(line);
     line = area.removeFromTop(44); extraLabel.setBounds(line.removeFromTop(20)); extraAliases.setBounds(line);
     line = area.removeFromTop(28);

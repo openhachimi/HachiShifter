@@ -1,1355 +1,1585 @@
 {
-  "date": "2026-10-16",
+  "date": "2026-10-27",
   "scope": "source-navigation-not-runtime-benchmark",
   "interfaces": {
     "ProjectModel": [
       {
         "name": "ProjectModel",
-        "line": 827,
+        "line": 1034,
         "signature": "ProjectModel()"
       },
       {
         "name": "snapshot",
-        "line": 829,
+        "line": 1036,
         "signature": "ProjectData snapshot() const"
       },
       {
         "name": "revisionNumber",
-        "line": 830,
+        "line": 1037,
         "signature": "std::uint64_t revisionNumber() const"
       },
       {
         "name": "replace",
-        "line": 831,
+        "line": 1038,
         "signature": "void replace(ProjectData replacement)"
       },
       {
         "name": "resetDocument",
-        "line": 833,
+        "line": 1040,
         "signature": "void resetDocument(ProjectData replacement = {})"
       },
       {
         "name": "clear",
-        "line": 834,
+        "line": 1041,
         "signature": "void clear()"
       },
       {
         "name": "setAssetManagerVisible",
-        "line": 836,
+        "line": 1043,
         "signature": "void setAssetManagerVisible(bool visible)"
       },
       {
         "name": "setHamoodState",
-        "line": 837,
+        "line": 1044,
         "signature": "bool setHamoodState(const juce::String& state, juce::String& error)"
       },
       {
         "name": "undo",
-        "line": 838,
+        "line": 1045,
         "signature": "bool undo()"
       },
       {
         "name": "redo",
-        "line": 839,
+        "line": 1046,
         "signature": "bool redo()"
       },
       {
         "name": "canUndo",
-        "line": 840,
+        "line": 1047,
         "signature": "bool canUndo() const"
       },
       {
         "name": "canRedo",
-        "line": 841,
+        "line": 1048,
         "signature": "bool canRedo() const"
       },
       {
         "name": "addAudioFile",
-        "line": 843,
+        "line": 1050,
         "signature": "juce::String addAudioFile(const juce::File& file, double durationSeconds, double startSeconds = 0.0, const juce::String& targetTrackId = {}, const VoicebankOtoEntry* oto = nullptr, UtauMode otoMode = UtauMode::classic)"
       },
       {
+        "name": "addMaterialPronunciations",
+        "line": 1062,
+        "signature": "juce::String addMaterialPronunciations( const juce::File& audio, const std::vector<SampleRegionSetting>& completeRows, const std::vector<juce::String>& selectedRegionIds, double absoluteStart, const juce::String& targetTrackId, juce::String& error, const juce::String& chosenAlias = {})"
+      },
+      {
+        "name": "addTypedTrack",
+        "line": 1067,
+        "signature": "juce::String addTypedTrack(TrackType type = TrackType::hachi, const juce::String& name = {})"
+      },
+      {
         "name": "addTrack",
-        "line": 848,
-        "signature": "juce::String addTrack(const juce::String& name, bool compose = true, bool referenceOnly = false, bool accompaniment = false)"
+        "line": 1069,
+        "signature": "juce::String addTrack(const juce::String& name, bool compose = true, bool referenceOnly = false, bool accompaniment = false, TrackType type = TrackType::hachi)"
       },
       {
         "name": "setTrackReferenceOnly",
-        "line": 850,
+        "line": 1072,
         "signature": "void setTrackReferenceOnly(const juce::String& trackId, bool referenceOnly)"
       },
       {
         "name": "setTrackName",
-        "line": 851,
+        "line": 1073,
         "signature": "void setTrackName(const juce::String& trackId, const juce::String& name)"
       },
       {
         "name": "setClipNotesIfEmpty",
-        "line": 852,
+        "line": 1074,
         "signature": "bool setClipNotesIfEmpty(const juce::String& clipId, std::vector<NoteData> notes)"
       },
       {
         "name": "markNativeUnpitchedRegions",
-        "line": 853,
+        "line": 1075,
         "signature": "std::size_t markNativeUnpitchedRegions(const juce::String& clipId)"
       },
       {
         "name": "setNativeTrimSourceAnalysis",
-        "line": 854,
-        "signature": "bool setNativeTrimSourceAnalysis(const juce::File& file, const std::vector<NoteData>& sourceNotes)"
+        "line": 1076,
+        "signature": "bool setNativeTrimSourceAnalysis(const juce::File& file, const std::vector<NoteData>& sourceNotes, const juce::String& expectedSourceFingerprint = {})"
       },
       {
         "name": "setClipAudioAnalysis",
-        "line": 855,
+        "line": 1078,
         "signature": "bool setClipAudioAnalysis(const juce::String& clipId, std::vector<NoteData> notes, const ClipData& importedClip = ClipData{})"
       },
       {
         "name": "addMidiFile",
-        "line": 857,
+        "line": 1080,
         "signature": "bool addMidiFile(const juce::File& file, juce::String& error)"
       },
       {
         "name": "midiTrackChoices",
-        "line": 867,
+        "line": 1090,
         "signature": "static std::vector<MidiTrackChoice> midiTrackChoices(const juce::File& file, juce::String& error)"
       },
       {
         "name": "addMidiTrack",
-        "line": 874,
+        "line": 1097,
         "signature": "juce::String addMidiTrack(const juce::File& file, int trackIndex, juce::String& error)"
       },
       {
         "name": "writeMidiFile",
-        "line": 880,
-        "signature": "static bool writeMidiFile(const ProjectData& data, const juce::File& file, juce::String& error)"
+        "line": 1105,
+        "signature": "static bool writeMidiFile(const ProjectData& data, const juce::File& file, juce::String& error, const juce::String& trackId = {}, bool includeMuted = false)"
       },
       {
         "name": "addUstFile",
-        "line": 896,
-        "signature": "bool addUstFile(const juce::File& file, juce::String& error, juce::StringArray& warnings, UstImportMode mode = UstImportMode::addTrack, juce::String* importedTrackId = nullptr, int encoding = 0)"
+        "line": 1123,
+        "signature": "bool addUstFile(const juce::File& file, juce::String& error, juce::StringArray& warnings, UstImportMode mode = UstImportMode::addTrack, juce::String* importedTrackId = nullptr, int encoding = 0, TrackType destinationType = TrackType::hachi)"
       },
       {
         "name": "exportUst",
-        "line": 900,
+        "line": 1128,
         "signature": "bool exportUst(const juce::File& file, const juce::String& trackId, juce::String& error, juce::StringArray& warnings, int encoding = 0) const"
       },
       {
         "name": "setTempo",
-        "line": 902,
+        "line": 1130,
         "signature": "void setTempo(double bpm, int numerator, int denominator = 4)"
       },
       {
         "name": "setTempoChange",
-        "line": 905,
+        "line": 1133,
         "signature": "void setTempoChange(double quarterPosition, double bpm, bool synchronizeNotes = true)"
       },
       {
         "name": "contentFingerprint",
-        "line": 909,
+        "line": 1137,
         "signature": "juce::int64 contentFingerprint() const"
       },
       {
+        "name": "registrationMusicSourceFingerprint",
+        "line": 1139,
+        "signature": "static juce::String registrationMusicSourceFingerprint(const ProjectData&)"
+      },
+      {
+        "name": "adoptRegisteredMaterialBindings",
+        "line": 1140,
+        "signature": "bool adoptRegisteredMaterialBindings(std::uint64_t expectedRevision, const juce::String& expectedFingerprint, const std::vector<ProjectMaterialRegistrationOwnerBinding>& owners, const std::vector<ProjectMaterialRegistrationNoteBinding>& notes, juce::String& error)"
+      },
+      {
         "name": "setGridDivision",
-        "line": 910,
+        "line": 1145,
         "signature": "void setGridDivision(const juce::String& division)"
       },
       {
         "name": "setNoteEditDivision",
-        "line": 911,
+        "line": 1146,
         "signature": "void setNoteEditDivision(int division)"
       },
       {
         "name": "setBaseScale",
-        "line": 912,
+        "line": 1147,
         "signature": "void setBaseScale(const juce::String& scale)"
       },
       {
         "name": "setTrackCompose",
-        "line": 913,
+        "line": 1148,
         "signature": "void setTrackCompose(const juce::String& trackId, bool enabled)"
       },
       {
         "name": "setTrackMuted",
-        "line": 914,
+        "line": 1149,
         "signature": "void setTrackMuted(const juce::String& trackId, bool muted)"
       },
       {
         "name": "setTrackSolo",
-        "line": 915,
+        "line": 1150,
         "signature": "void setTrackSolo(const juce::String& trackId, bool solo)"
       },
       {
         "name": "setTrackVolume",
-        "line": 916,
+        "line": 1151,
         "signature": "void setTrackVolume(const juce::String& trackId, float volume)"
       },
       {
         "name": "setClipGainEnvelope",
-        "line": 917,
+        "line": 1152,
         "signature": "void setClipGainEnvelope(const juce::String& clipId, std::vector<GainEnvelopePoint> points)"
       },
       {
         "name": "setTrackPan",
-        "line": 918,
+        "line": 1153,
         "signature": "void setTrackPan(const juce::String& trackId, float pan)"
       },
       {
         "name": "setTrackSmoothOverlaps",
-        "line": 919,
+        "line": 1154,
         "signature": "void setTrackSmoothOverlaps(const juce::String& trackId, bool enabled)"
       },
       {
         "name": "setTrackNormalizeVolume",
-        "line": 920,
+        "line": 1155,
         "signature": "void setTrackNormalizeVolume(const juce::String& trackId, bool enabled)"
       },
       {
         "name": "setTrackNsfSmoothPitchTransitions",
-        "line": 921,
+        "line": 1156,
         "signature": "void setTrackNsfSmoothPitchTransitions(const juce::String& trackId, bool enabled)"
       },
       {
         "name": "setTrackNsfNoiseProtection",
-        "line": 922,
+        "line": 1157,
         "signature": "void setTrackNsfNoiseProtection(const juce::String& trackId, bool enabled)"
       },
       {
         "name": "setTrackVoicebankDirectory",
-        "line": 923,
+        "line": 1158,
         "signature": "void setTrackVoicebankDirectory(const juce::String& trackId, const juce::File& directory)"
       },
       {
         "name": "setTrackUtauConsonantVelocity",
-        "line": 925,
+        "line": 1160,
         "signature": "void setTrackUtauConsonantVelocity(const juce::String& trackId, int velocity)"
       },
       {
         "name": "setTrackUtauGlobalFlags",
-        "line": 926,
+        "line": 1161,
         "signature": "void setTrackUtauGlobalFlags(const juce::String& trackId, const juce::String& flags)"
       },
       {
         "name": "setUtauMode",
-        "line": 927,
+        "line": 1162,
         "signature": "void setUtauMode(UtauMode mode)"
       },
       {
         "name": "setTrackUtauMode",
-        "line": 928,
+        "line": 1163,
         "signature": "void setTrackUtauMode(const juce::String& trackId, UtauMode mode)"
       },
       {
         "name": "setTrackChineseCvvc",
-        "line": 929,
+        "line": 1164,
         "signature": "void setTrackChineseCvvc(const juce::String& trackId, bool enabled)"
       },
       {
         "name": "setTrackCvvcCurveCrossfade",
-        "line": 930,
+        "line": 1165,
         "signature": "void setTrackCvvcCurveCrossfade(const juce::String& trackId, bool curved)"
       },
       {
         "name": "setTrackOutputEngine",
-        "line": 931,
+        "line": 1166,
         "signature": "void setTrackOutputEngine(const juce::String& trackId, UtauOutputEngine engine, const juce::File& resampler = {}, const juce::File& wavtool = {})"
       },
       {
         "name": "setNotesVibrato",
-        "line": 933,
+        "line": 1168,
         "signature": "void setNotesVibrato(const std::vector<juce::String>& noteIds, const NoteData& parameters, bool enabled, std::optional<bool> realLine = std::nullopt)"
       },
       {
         "name": "setNotesVibratoRealLine",
-        "line": 936,
+        "line": 1171,
         "signature": "void setNotesVibratoRealLine(const std::vector<juce::String>& noteIds, bool enabled)"
       },
       {
         "name": "bakeNoteVibratoIntoPitch",
-        "line": 940,
+        "line": 1175,
         "signature": "bool bakeNoteVibratoIntoPitch(const juce::String& noteId)"
       },
       {
         "name": "setNotesUtauSplice",
-        "line": 941,
+        "line": 1176,
         "signature": "void setNotesUtauSplice(const std::vector<juce::String>& noteIds, bool enabled)"
       },
       {
         "name": "setPointCurves",
-        "line": 954,
-        "signature": "bool setPointCurves(std::vector<PointCurveEdit> edits, std::uint64_t expectedRevision)"
+        "line": 1204,
+        "signature": "bool setPointCurves(std::vector<PointCurveEdit> edits, std::uint64_t expectedRevision, juce::String* error = nullptr)"
+      },
+      {
+        "name": "previewPointCurves",
+        "line": 1206,
+        "signature": "bool previewPointCurves(const std::vector<PointCurveEdit>& edits, std::uint64_t expectedRevision, PointCurvePlanPreview&, juce::String& error) const"
       },
       {
         "name": "resetCvvcBoundaries",
-        "line": 956,
+        "line": 1209,
         "signature": "bool resetCvvcBoundaries(const std::vector<juce::String>& noteIds, std::uint64_t expectedRevision)"
       },
       {
         "name": "setCvvcBoundary",
-        "line": 957,
+        "line": 1210,
         "signature": "bool setCvvcBoundary(const juce::String& noteId, int rightPart, double position, std::uint64_t expectedRevision)"
       },
       {
         "name": "setCvvcEnvelopes",
-        "line": 958,
+        "line": 1211,
         "signature": "bool setCvvcEnvelopes(std::vector<CvvcEnvelopeEdit>, std::uint64_t expectedRevision)"
       },
       {
         "name": "setCvvcEnvelope",
-        "line": 959,
+        "line": 1212,
         "signature": "bool setCvvcEnvelope(const juce::String& noteId, int part, const juce::String& flag, backend::CvvcEnvelopeCurve points, std::uint64_t expectedRevision)"
       },
       {
         "name": "setNotesUtauFlagCurveEnabled",
-        "line": 961,
+        "line": 1214,
         "signature": "void setNotesUtauFlagCurveEnabled(const std::vector<juce::String>& noteIds, bool enabled)"
       },
       {
         "name": "resetNotesUtauFlagCurves",
-        "line": 968,
+        "line": 1221,
         "signature": "bool resetNotesUtauFlagCurves(const std::vector<juce::String>& noteIds)"
       },
       {
         "name": "resetNotesUtauFlagCurve",
-        "line": 970,
+        "line": 1223,
         "signature": "bool resetNotesUtauFlagCurve(const std::vector<juce::String>& noteIds, const juce::String& flag)"
       },
       {
         "name": "setNoteUtauFlagCurves",
-        "line": 974,
+        "line": 1227,
         "signature": "bool setNoteUtauFlagCurves(const juce::String& flag, const std::map<juce::String, std::vector<FlagCurvePoint>>& edits, std::optional<std::uint64_t> expectedRevision = std::nullopt, bool enabledOnly = true)"
       },
       {
         "name": "setNoteUtauFlagCurve",
-        "line": 977,
+        "line": 1230,
         "signature": "bool setNoteUtauFlagCurve(const juce::String& noteId, const juce::String& flag, std::vector<FlagCurvePoint> points)"
       },
       {
         "name": "setNotesRegionFlags",
-        "line": 979,
+        "line": 1232,
         "signature": "void setNotesRegionFlags(const std::vector<juce::String>& noteIds, bool split, const juce::String& first, const juce::String& second, const juce::String& third, const juce::String& fourth)"
       },
       {
         "name": "setNotesUtauJieSplitCleared",
-        "line": 983,
+        "line": 1236,
         "signature": "void setNotesUtauJieSplitCleared(const std::vector<juce::String>& noteIds)"
       },
       {
         "name": "setNotesUtauJieSplit",
-        "line": 984,
+        "line": 1237,
         "signature": "void setNotesUtauJieSplit(const std::vector<juce::String>& noteIds, double first, double second, double third)"
       },
       {
         "name": "clearNotesUtauJieSplit",
-        "line": 986,
+        "line": 1239,
         "signature": "void clearNotesUtauJieSplit(const std::vector<juce::String>& noteIds)"
       },
       {
         "name": "setTrackPitchAlgorithm",
-        "line": 987,
+        "line": 1240,
         "signature": "void setTrackPitchAlgorithm(const juce::String& trackId, PitchAlgorithm algorithm)"
       },
       {
         "name": "setTrackStretchAlgorithm",
-        "line": 988,
+        "line": 1241,
         "signature": "void setTrackStretchAlgorithm(const juce::String& trackId, StretchAlgorithm algorithm)"
       },
       {
         "name": "setPitchAlgorithm",
-        "line": 989,
+        "line": 1242,
         "signature": "void setPitchAlgorithm(PitchAlgorithm algorithm)"
       },
       {
         "name": "setStretchAlgorithm",
-        "line": 990,
+        "line": 1243,
         "signature": "void setStretchAlgorithm(StretchAlgorithm algorithm)"
       },
       {
         "name": "setTrackRenderOrder",
-        "line": 991,
-        "signature": "void setTrackRenderOrder(const juce::String& trackId, RenderOrder order)"
+        "line": 1244,
+        "signature": "void setTrackRenderOrder(const juce::String& trackId, RenderOrder order, std::optional<bool> mergeContiguous = {})"
       },
       {
         "name": "setRenderOrder",
-        "line": 992,
+        "line": 1246,
         "signature": "void setRenderOrder(RenderOrder order)"
       },
       {
         "name": "moveClip",
-        "line": 993,
+        "line": 1247,
         "signature": "void moveClip(const juce::String& clipId, double startSeconds)"
       },
       {
         "name": "canSplitClip",
-        "line": 994,
+        "line": 1248,
         "signature": "bool canSplitClip(const juce::String& clipId, double absoluteSeconds) const"
       },
       {
         "name": "splitClip",
-        "line": 997,
+        "line": 1251,
         "signature": "juce::String splitClip(const juce::String& clipId, double absoluteSeconds)"
       },
       {
         "name": "duplicateClip",
-        "line": 998,
+        "line": 1252,
         "signature": "juce::String duplicateClip(const juce::String& clipId, double startSeconds = -1.0, const juce::String& targetTrackId = {})"
       },
       {
         "name": "resizeClip",
-        "line": 1001,
+        "line": 1255,
         "signature": "void resizeClip(const juce::String& clipId, double startSeconds, double durationSeconds)"
       },
       {
         "name": "trimClip",
-        "line": 1003,
+        "line": 1257,
         "signature": "bool trimClip(const juce::String& clipId, double startSeconds, double durationSeconds)"
       },
       {
         "name": "setClipGain",
-        "line": 1004,
+        "line": 1258,
         "signature": "void setClipGain(const juce::String& clipId, float gain)"
       },
       {
         "name": "setClipFades",
-        "line": 1005,
+        "line": 1259,
         "signature": "void setClipFades(const juce::String& clipId, double fadeInSeconds, double fadeOutSeconds)"
       },
       {
         "name": "setClipMuted",
-        "line": 1007,
+        "line": 1261,
         "signature": "void setClipMuted(const juce::String& clipId, bool muted)"
       },
       {
         "name": "setClipNoteHints",
-        "line": 1008,
+        "line": 1262,
         "signature": "void setClipNoteHints(const juce::String& clipId, bool enabled)"
       },
       {
         "name": "setClipNormalDisplay",
-        "line": 1009,
+        "line": 1263,
         "signature": "void setClipNormalDisplay(const juce::String& clipId, bool enabled)"
       },
       {
         "name": "removeClip",
-        "line": 1010,
+        "line": 1264,
         "signature": "void removeClip(const juce::String& clipId)"
       },
       {
         "name": "removeClips",
-        "line": 1011,
+        "line": 1265,
         "signature": "void removeClips(const std::vector<juce::String>& clipIds)"
       },
       {
         "name": "canMergeClips",
-        "line": 1012,
+        "line": 1266,
         "signature": "bool canMergeClips(const std::vector<juce::String>& clipIds) const"
       },
       {
         "name": "mergeClips",
-        "line": 1013,
+        "line": 1267,
         "signature": "juce::String mergeClips(const std::vector<juce::String>& clipIds)"
       },
       {
         "name": "moveClips",
-        "line": 1014,
+        "line": 1268,
         "signature": "void moveClips(const std::vector<juce::String>& clipIds, double deltaSeconds, int trackDelta = 0)"
       },
       {
         "name": "removeTrack",
-        "line": 1015,
+        "line": 1269,
         "signature": "void removeTrack(const juce::String& trackId)"
       },
       {
         "name": "transposeNote",
-        "line": 1016,
+        "line": 1270,
         "signature": "void transposeNote(const juce::String& noteId, float semitones)"
       },
       {
         "name": "transposeNotes",
-        "line": 1017,
+        "line": 1271,
         "signature": "void transposeNotes(const std::vector<juce::String>& noteIds, float semitones)"
       },
       {
         "name": "moveUtauNotes",
-        "line": 1021,
+        "line": 1275,
         "signature": "bool moveUtauNotes(const std::vector<juce::String>& noteIds, double deltaSeconds, float semitones, juce::String* error = nullptr)"
       },
       {
         "name": "moveNativeNotes",
-        "line": 1025,
+        "line": 1279,
         "signature": "bool moveNativeNotes(const std::vector<juce::String>& noteIds, double deltaSeconds, float semitones, juce::String* error = nullptr)"
       },
       {
+        "name": "setNativeNoteTransition",
+        "line": 1283,
+        "signature": "bool setNativeNoteTransition(const juce::String& noteId,std::optional<double> middleSourceSeconds,juce::String& error)"
+      },
+      {
         "name": "trimNativeNoteEdge",
-        "line": 1027,
+        "line": 1284,
         "signature": "bool trimNativeNoteEdge(const juce::String& noteId, double deltaSeconds, bool leftEdge)"
       },
       {
         "name": "resizeNativeNoteEdge",
-        "line": 1028,
+        "line": 1285,
         "signature": "bool resizeNativeNoteEdge(const juce::String& noteId, double deltaSeconds, bool leftEdge)"
       },
       {
+        "name": "alignNotePreutteranceToGrid",
+        "line": 1288,
+        "signature": "bool alignNotePreutteranceToGrid(const juce::String& noteId, double quarterStep, juce::String& error)"
+      },
+      {
         "name": "setNotesMidi",
-        "line": 1029,
+        "line": 1289,
         "signature": "void setNotesMidi(const std::vector<juce::String>& noteIds, float midiNote)"
       },
       {
         "name": "averageNotesMidi",
-        "line": 1030,
+        "line": 1290,
         "signature": "void averageNotesMidi(const std::vector<juce::String>& noteIds)"
       },
       {
         "name": "quantizeNotesMidi",
-        "line": 1031,
+        "line": 1291,
         "signature": "void quantizeNotesMidi(const std::vector<juce::String>& noteIds, float stepSemitones = 1.0f)"
       },
       {
         "name": "notesOverlapping",
-        "line": 1035,
+        "line": 1295,
         "signature": "std::vector<juce::String> notesOverlapping( const juce::String& clipId, double fromSeconds, double toSeconds) const"
       },
       {
         "name": "insertNotes",
-        "line": 1037,
+        "line": 1297,
         "signature": "std::vector<juce::String> insertNotes( const juce::String& clipId, const std::vector<NoteData>& noteTemplates, double absoluteStartSeconds)"
       },
       {
         "name": "insertNativeAudioClips",
-        "line": 1040,
+        "line": 1300,
         "signature": "std::vector<juce::String> insertNativeAudioClips( const juce::String& trackId, const std::vector<ClipData>& templates, const std::vector<NativeConnection>& connections, double atSeconds)"
       },
       {
         "name": "duplicateNotes",
-        "line": 1043,
+        "line": 1303,
         "signature": "std::vector<juce::String> duplicateNotes( const std::vector<juce::String>& noteIds, const juce::String& targetClipId, double absoluteStartSeconds)"
       },
       {
         "name": "resizeNote",
-        "line": 1046,
+        "line": 1306,
         "signature": "void resizeNote(const juce::String& noteId, double newStart, double newDuration)"
       },
       {
         "name": "splitNote",
-        "line": 1047,
+        "line": 1307,
         "signature": "juce::String splitNote(const juce::String& noteId, double localSeconds)"
       },
       {
         "name": "mergeNotes",
-        "line": 1049,
+        "line": 1309,
         "signature": "juce::String mergeNotes(const std::vector<juce::String>& noteIds)"
       },
       {
         "name": "canJoinNativeNotes",
-        "line": 1050,
+        "line": 1310,
         "signature": "bool canJoinNativeNotes(const juce::String&,const juce::String&) const"
       },
       {
         "name": "joinNativeNotes",
-        "line": 1051,
+        "line": 1311,
         "signature": "juce::String joinNativeNotes(const juce::String&,const juce::String&)"
       },
       {
         "name": "setNotesConnection",
-        "line": 1054,
+        "line": 1314,
         "signature": "void setNotesConnection(const std::vector<juce::String>& noteIds, bool enabled)"
       },
       {
+        "name": "setNotesPortamento",
+        "line": 1317,
+        "signature": "bool setNotesPortamento(const std::vector<juce::String>& noteIds, bool enabled, juce::String& error, double durationSeconds = 0.1)"
+      },
+      {
+        "name": "forceNativeConnection",
+        "line": 1322,
+        "signature": "bool forceNativeConnection(const std::vector<juce::String>& noteIds, bool enabled, juce::String& error, double durationSeconds = 0.1)"
+      },
+      {
+        "name": "setConnectionPitchCurve",
+        "line": 1328,
+        "signature": "bool setConnectionPitchCurve(const juce::String& connectionId, std::vector<PitchCurveEditPoint> absolutePoints, juce::String& error)"
+      },
+      {
+        "name": "setConnectionPitchPoint",
+        "line": 1330,
+        "signature": "bool setConnectionPitchPoint(const juce::String& connectionId, int pointIndex, PitchCurveEditPoint absolutePoint, juce::String& error)"
+      },
+      {
+        "name": "createNativeVirtualConnection",
+        "line": 1334,
+        "signature": "juce::String createNativeVirtualConnection(const std::vector<juce::String>& orderedNoteIds, bool automaticPitch,juce::String& error,double durationSeconds=.1,bool automaticallyCreated=false, const NativeSplitTransitionEvidence* splitTransition=nullptr,bool sharedPitch=false)"
+      },
+      {
+        "name": "setNativeVirtualConnectionForNotes",
+        "line": 1339,
+        "signature": "bool setNativeVirtualConnectionForNotes(const std::vector<juce::String>& noteIds,bool enabled, bool automaticPitch,juce::String& error,double durationSeconds=.1,bool automaticallyCreated=false, const NativeSplitTransitionEvidence* splitTransition=nullptr,bool sharedPitch=false)"
+      },
+      {
+        "name": "setNativeVirtualConnectionEnabled",
+        "line": 1342,
+        "signature": "bool setNativeVirtualConnectionEnabled(const juce::String& groupId,bool enabled,juce::String& error)"
+      },
+      {
+        "name": "setNativeVirtualMovementCoupled",
+        "line": 1343,
+        "signature": "bool setNativeVirtualMovementCoupled(const juce::String& groupId,bool coupled,juce::String& error)"
+      },
+      {
+        "name": "removeNativeVirtualConnection",
+        "line": 1344,
+        "signature": "bool removeNativeVirtualConnection(const juce::String& groupId,juce::String& error)"
+      },
+      {
+        "name": "setNativeVirtualPitchCurve",
+        "line": 1345,
+        "signature": "bool setNativeVirtualPitchCurve(const juce::String& groupId, const std::vector<PitchCurveEditPoint>& absolutePoints,juce::String& error)"
+      },
+      {
+        "name": "resetNativeVirtualPitchCurve",
+        "line": 1347,
+        "signature": "bool resetNativeVirtualPitchCurve(const juce::String& groupId,juce::String& error)"
+      },
+      {
+        "name": "setNativeVirtualHandoverWindow",
+        "line": 1348,
+        "signature": "bool setNativeVirtualHandoverWindow(const juce::String& groupId,const juce::String& leftNoteId, const juce::String& rightNoteId,double absoluteFrom,double absoluteTo,juce::String& error)"
+      },
+      {
+        "name": "resetNativeVirtualHandoverWindow",
+        "line": 1350,
+        "signature": "bool resetNativeVirtualHandoverWindow(const juce::String& groupId,const juce::String& leftNoteId, const juce::String& rightNoteId,juce::String& error)"
+      },
+      {
+        "name": "mergeMelodyneConsonant",
+        "line": 1352,
+        "signature": "juce::String mergeMelodyneConsonant(const NativeConsonantMergeEvidence&,juce::String& error)"
+      },
+      {
+        "name": "restoreMelodyneConsonant",
+        "line": 1353,
+        "signature": "bool restoreMelodyneConsonant(const juce::String& mergedNoteId,bool discardMergedEdits,juce::String& error)"
+      },
+      {
         "name": "disconnectNativeAudio",
-        "line": 1055,
+        "line": 1354,
         "signature": "bool disconnectNativeAudio(const std::vector<juce::String>& noteIds)"
       },
       {
         "name": "linkNativeAudio",
-        "line": 1056,
+        "line": 1355,
         "signature": "bool linkNativeAudio(const std::vector<juce::String>& noteIds)"
       },
       {
         "name": "setNativeAudioOverlap",
-        "line": 1057,
+        "line": 1356,
         "signature": "bool setNativeAudioOverlap(const juce::String& trackId, bool enabled)"
       },
       {
         "name": "insertPrefixNote",
-        "line": 1062,
+        "line": 1361,
         "signature": "juce::String insertPrefixNote(const juce::String& noteId, double targetOverlapSeconds)"
       },
       {
         "name": "setNoteModulation",
-        "line": 1064,
+        "line": 1363,
         "signature": "void setNoteModulation(const juce::String& noteId, float modulation)"
       },
       {
         "name": "setNoteDrift",
-        "line": 1065,
+        "line": 1364,
         "signature": "void setNoteDrift(const juce::String& noteId, float drift)"
       },
       {
         "name": "setNoteTension",
-        "line": 1066,
+        "line": 1365,
         "signature": "void setNoteTension(const juce::String& noteId, float tension)"
       },
       {
         "name": "setNoteBreath",
-        "line": 1067,
+        "line": 1366,
         "signature": "void setNoteBreath(const juce::String& noteId, float breath)"
       },
       {
         "name": "setNoteFormant",
-        "line": 1068,
+        "line": 1367,
         "signature": "void setNoteFormant(const juce::String& noteId, float semitones)"
       },
       {
         "name": "setNoteGain",
-        "line": 1069,
+        "line": 1368,
         "signature": "void setNoteGain(const juce::String& noteId, float gain)"
       },
       {
         "name": "setNotesTailFade",
-        "line": 1070,
+        "line": 1369,
         "signature": "bool setNotesTailFade(const std::vector<juce::String>& noteIds, int mode)"
       },
       {
         "name": "setNotesNativeEnvelope",
-        "line": 1071,
+        "line": 1370,
         "signature": "bool setNotesNativeEnvelope(const std::vector<juce::String>& noteIds, const backend::NativeEnvelopeSettings& settings)"
       },
       {
         "name": "setNotesTailFade",
-        "line": 1072,
+        "line": 1371,
         "signature": "bool setNotesTailFade(const std::vector<juce::String>& noteIds, int mode, const backend::TailFadeSettings& settings)"
       },
       {
         "name": "setNotesAmplitudeEnvelopeBase",
-        "line": 1074,
+        "line": 1373,
         "signature": "void setNotesAmplitudeEnvelopeBase(const std::vector<juce::String>& noteIds, float basePercent)"
       },
       {
         "name": "setNoteAttack",
-        "line": 1076,
+        "line": 1375,
         "signature": "void setNoteAttack(const juce::String& noteId, double consonantSeconds, float attackSpeed)"
       },
       {
         "name": "setNoteAttackSpeed",
-        "line": 1077,
+        "line": 1376,
         "signature": "void setNoteAttackSpeed(const juce::String& noteId, float attackSpeed)"
       },
       {
         "name": "setNoteLabel",
-        "line": 1078,
+        "line": 1377,
         "signature": "void setNoteLabel(const juce::String& noteId, const juce::String& label)"
       },
       {
         "name": "convertTrackLyricsToPinyin",
-        "line": 1082,
+        "line": 1381,
         "signature": "int convertTrackLyricsToPinyin(const juce::String& trackId)"
       },
       {
         "name": "setNoteLabels",
-        "line": 1086,
+        "line": 1385,
         "signature": "void setNoteLabels(const std::vector<std::pair<juce::String, juce::String>>& labels)"
       },
       {
         "name": "setNoteUtauFlags",
-        "line": 1090,
+        "line": 1389,
         "signature": "void setNoteUtauFlags(const juce::String& noteId, const juce::String& flags)"
       },
       {
         "name": "setNotesUtauFlags",
-        "line": 1091,
+        "line": 1390,
         "signature": "void setNotesUtauFlags(const std::vector<juce::String>& noteIds, const juce::String& flags)"
       },
       {
         "name": "setNotesUtauConsonantVelocity",
-        "line": 1093,
+        "line": 1392,
         "signature": "void setNotesUtauConsonantVelocity(const std::vector<juce::String>& noteIds, int velocity)"
       },
       {
         "name": "setNoteUtauOto",
-        "line": 1120,
+        "line": 1419,
         "signature": "void setNoteUtauOto(const juce::String& noteId, const backend::UtauOtoOverride& oto)"
       },
       {
+        "name": "setNoteUtauOtoChecked",
+        "line": 1422,
+        "signature": "bool setNoteUtauOtoChecked(const juce::String& noteId, std::uint64_t expectedRevision, const backend::UtauOtoOverride& value, std::uint64_t& resultingRevision, juce::String& error)"
+      },
+      {
         "name": "clearNotesUtauOto",
-        "line": 1124,
+        "line": 1427,
         "signature": "void clearNotesUtauOto(const std::vector<juce::String>& noteIds)"
       },
       {
         "name": "setNotesUtauStp",
-        "line": 1126,
+        "line": 1429,
         "signature": "void setNotesUtauStp(const std::vector<juce::String>& noteIds, double seconds)"
       },
       {
         "name": "setNoteUtauTimingOverrides",
-        "line": 1127,
+        "line": 1430,
         "signature": "void setNoteUtauTimingOverrides(const juce::String& noteId, bool enabled, double preutteranceSeconds, double overlapSeconds)"
       },
       {
         "name": "setNoteRobustPitchCurve",
-        "line": 1130,
+        "line": 1433,
         "signature": "void setNoteRobustPitchCurve(const juce::String& noteId, bool enabled)"
       },
       {
         "name": "rememberDiffSingerParameters",
-        "line": 1131,
+        "line": 1434,
         "signature": "bool rememberDiffSingerParameters(const std::map<juce::String, std::vector<FlagCurve>>& curves)"
       },
       {
         "name": "applyDiffSingerParameters",
-        "line": 1132,
+        "line": 1435,
         "signature": "bool applyDiffSingerParameters(std::uint64_t expectedRevision, const std::map<juce::String, std::vector<FlagCurve>>& curves)"
       },
       {
         "name": "setDiffSingerParameterCurve",
-        "line": 1134,
+        "line": 1437,
         "signature": "bool setDiffSingerParameterCurve(const juce::String& id, const juce::String& key, std::vector<FlagCurvePoint> points)"
       },
       {
         "name": "setDiffSingerPitchOffset",
-        "line": 1136,
+        "line": 1439,
         "signature": "bool setDiffSingerPitchOffset(const juce::String& noteId, std::vector<PitchCurveEditPoint> points)"
       },
       {
         "name": "setNotePitchCurve",
-        "line": 1138,
-        "signature": "bool setNotePitchCurve(const juce::String& noteId, std::vector<PitchCurveEditPoint> points, bool storeControlPoints = false)"
+        "line": 1441,
+        "signature": "bool setNotePitchCurve(const juce::String& noteId, std::vector<PitchCurveEditPoint> points, bool storeControlPoints = false, bool authorPitchSupport = false)"
       },
       {
         "name": "applyDiffSingerTiming",
-        "line": 1141,
+        "line": 1444,
         "signature": "bool applyDiffSingerTiming(std::uint64_t expectedRevision, const std::vector<std::pair<juce::String, juce::String>>& timings)"
       },
       {
         "name": "applyDiffSingerPronunciation",
-        "line": 1143,
+        "line": 1446,
         "signature": "bool applyDiffSingerPronunciation(std::uint64_t expectedRevision, const juce::String& trackId, const std::vector<std::pair<juce::String, juce::String>>& readings, const juce::String& dictionary)"
       },
       {
         "name": "restoreDiffSingerPitchPoint",
-        "line": 1145,
+        "line": 1448,
         "signature": "bool restoreDiffSingerPitchPoint(std::uint64_t expectedRevision, const juce::String& noteId, const std::vector<PitchCurveEditPoint>& displayedPoints, int index)"
       },
       {
         "name": "applyDiffSingerPitch",
-        "line": 1147,
+        "line": 1450,
         "signature": "bool applyDiffSingerPitch(std::uint64_t expectedRevision, const std::vector<std::pair<juce::String, std::vector<PitchCurveEditPoint>>>& curves, bool preserveOutsideNoteHandles = false)"
       },
       {
         "name": "setDiffSingerOptions",
-        "line": 1150,
+        "line": 1453,
         "signature": "void setDiffSingerOptions(const juce::String& trackId, const juce::String& language, const juce::String& speaker)"
       },
       {
         "name": "setNoteAmplitudeEnvelope",
-        "line": 1152,
+        "line": 1455,
         "signature": "bool setNoteAmplitudeEnvelope(const juce::String& noteId, std::vector<AmplitudeEnvelopePoint> points)"
       },
       {
         "name": "crossfadeNotes",
-        "line": 1164,
+        "line": 1467,
         "signature": "int crossfadeNotes(std::vector<CrossfadeSpan> spans, std::uint64_t expectedRevision, bool curved = false)"
       },
       {
         "name": "rememberCvvcPhonemes",
-        "line": 1165,
+        "line": 1468,
         "signature": "bool rememberCvvcPhonemes(const std::vector<std::pair<juce::String,juce::String>>& caches, std::uint64_t expectedRevision)"
       },
       {
         "name": "setNotesAmplitudeEnvelopes",
-        "line": 1167,
+        "line": 1470,
         "signature": "bool setNotesAmplitudeEnvelopes( std::vector<std::pair<juce::String, std::vector<AmplitudeEnvelopePoint>>> envelopes)"
       },
       {
         "name": "plannedNoteFor",
-        "line": 1193,
+        "line": 1496,
         "signature": "static PlannedNote plannedNoteFor(double startSeconds, double requestedSeconds, double clipSeconds, const std::vector<NoteSpan>& occupied)"
       },
       {
         "name": "addClip",
-        "line": 1201,
+        "line": 1504,
         "signature": "juce::String addClip(const juce::String& trackId, double startSeconds, double durationSeconds)"
       },
       {
         "name": "canAddEmptyTuningClip",
-        "line": 1203,
+        "line": 1506,
         "signature": "bool canAddEmptyTuningClip(const juce::String& trackId, double startSeconds) const"
       },
       {
         "name": "addEmptyTuningClip",
-        "line": 1205,
+        "line": 1508,
         "signature": "juce::String addEmptyTuningClip(const juce::String& trackId, double startSeconds, double durationSeconds = 10.0)"
       },
       {
         "name": "regionsToImport",
-        "line": 1222,
+        "line": 1525,
         "signature": "static std::vector<std::size_t> regionsToImport( const std::vector<RegionSpan>& regions)"
       },
       {
         "name": "flattenNotePitch",
-        "line": 1238,
+        "line": 1541,
         "signature": "void flattenNotePitch(const std::vector<juce::String>& noteIds, bool snapNativeToSemitone = false)"
       },
       {
         "name": "restoreNativeSourcePitch",
-        "line": 1239,
+        "line": 1542,
         "signature": "bool restoreNativeSourcePitch(const std::vector<juce::String>& noteIds)"
       },
       {
         "name": "firstFreeStartFrom",
-        "line": 1240,
+        "line": 1543,
         "signature": "static double firstFreeStartFrom(double startSeconds, const std::vector<NoteSpan>& occupied)"
       },
       {
         "name": "addNote",
-        "line": 1243,
+        "line": 1546,
         "signature": "juce::String addNote(const juce::String& preferredClipId, double absoluteStart, double duration, float midiNote)"
       },
       {
         "name": "addNoteFrom",
-        "line": 1251,
+        "line": 1554,
         "signature": "juce::String addNoteFrom(const juce::String& preferredClipId, double absoluteFromSeconds, double maximumDuration, float midiNote)"
       },
       {
         "name": "removeNote",
-        "line": 1254,
+        "line": 1557,
         "signature": "void removeNote(const juce::String& noteId)"
       },
       {
         "name": "removeNotes",
-        "line": 1255,
+        "line": 1558,
         "signature": "void removeNotes(const std::vector<juce::String>& noteIds)"
       },
       {
         "name": "removeNotesRippling",
-        "line": 1259,
+        "line": 1562,
         "signature": "void removeNotesRippling(const std::vector<juce::String>& noteIds)"
       },
       {
         "name": "insertGapBeforeNote",
-        "line": 1263,
+        "line": 1566,
         "signature": "void insertGapBeforeNote(const juce::String& noteId, double seconds)"
       },
       {
         "name": "closeGapBeforeNote",
-        "line": 1266,
+        "line": 1569,
         "signature": "void closeGapBeforeNote(const juce::String& noteId, double seconds)"
       },
       {
         "name": "toggleNoteConnection",
-        "line": 1267,
+        "line": 1570,
         "signature": "void toggleNoteConnection(const juce::String& noteId)"
       },
       {
+        "name": "applySourceSettingsWithReport",
+        "line": 1591,
+        "signature": "MaterialUpdateReport applySourceSettingsWithReport( const juce::File& source, const std::vector<SampleRegionSetting>& rows, bool apply = true, const juce::String& audioVariantScope = {})"
+      },
+      {
         "name": "applySourceSettings",
-        "line": 1268,
+        "line": 1594,
         "signature": "void applySourceSettings(const juce::File& source, const std::vector<SampleRegionSetting>& rows)"
       },
       {
+        "name": "setNoteMaterialLocalOverride",
+        "line": 1596,
+        "signature": "void setNoteMaterialLocalOverride(const juce::String& noteId, bool enabled)"
+      },
+      {
+        "name": "getNoteMaterialLocalBinding",
+        "line": 1608,
+        "signature": "bool getNoteMaterialLocalBinding(const juce::String& noteId, NoteMaterialLocalBinding&, SampleRegionSetting& row, juce::String& error) const"
+      },
+      {
+        "name": "applyNoteMaterialLocalRow",
+        "line": 1610,
+        "signature": "bool applyNoteMaterialLocalRow(const NoteMaterialLocalBinding&, const SampleRegionSetting&, std::uint64_t& resultingRevision, juce::String& error)"
+      },
+      {
+        "name": "restoreNoteMaterialLocalRow",
+        "line": 1612,
+        "signature": "bool restoreNoteMaterialLocalRow(const NoteMaterialLocalBinding&, SampleRegionSetting& restored, std::uint64_t& resultingRevision, juce::String& error)"
+      },
+      {
+        "name": "makeClassicNoteMaterialOto",
+        "line": 1615,
+        "signature": "static bool makeClassicNoteMaterialOto(const SampleRegionSetting&, backend::UtauOtoOverride&, juce::String& error)"
+      },
+      {
+        "name": "replaceNotesMaterialSources",
+        "line": 1638,
+        "signature": "MaterialSourceReplacementReport replaceNotesMaterialSources( const std::vector<MaterialSourceChoice>& choices, std::uint64_t expectedRevision, juce::String& error, bool apply = true)"
+      },
+      {
+        "name": "replaceNoteMaterialSource",
+        "line": 1646,
+        "signature": "MaterialSourceReplacementReport replaceNoteMaterialSource( const juce::String& noteId, const juce::File& audio, const std::vector<SampleRegionSetting>& completeRows, const juce::String& audioId, const juce::String& regionId, const juce::String& chosenAlias, juce::String& error, bool apply = true)"
+      },
+      {
+        "name": "pendingMaterialSourceAnalyses",
+        "line": 1651,
+        "signature": "std::vector<MaterialSourceBindingTicket> pendingMaterialSourceAnalyses() const"
+      },
+      {
+        "name": "completeMaterialSourceAnalysis",
+        "line": 1656,
+        "signature": "bool completeMaterialSourceAnalysis(const MaterialSourceBindingTicket& ticket, const std::vector<NoteData>& fullFileSourceNotes, juce::String& error)"
+      },
+      {
         "name": "save",
-        "line": 1271,
+        "line": 1659,
         "signature": "bool save(const juce::File& file, juce::String& error) const"
       },
       {
         "name": "load",
-        "line": 1272,
+        "line": 1660,
         "signature": "bool load(const juce::File& file, juce::String& error)"
       },
       {
         "name": "saveRecoverySnapshot",
-        "line": 1273,
+        "line": 1661,
         "signature": "static bool saveRecoverySnapshot(ProjectData data, const juce::File& recoveryFile, const juce::File& originalFile, juce::String& error)"
       }
     ],
     "AudioEngine": [
       {
         "name": "AudioEngine",
-        "line": 58,
-        "signature": "AudioEngine()"
+        "line": 60,
+        "signature": "explicit AudioEngine(bool initialiseOutputDevice = true)"
       },
       {
         "name": "~AudioEngine",
-        "line": 59,
+        "line": 61,
         "signature": "~AudioEngine() override"
       },
       {
         "name": "prepareToPlay",
-        "line": 61,
+        "line": 63,
         "signature": "void prepareToPlay(int samplesPerBlockExpected, double sampleRate) override"
       },
       {
         "name": "releaseResources",
-        "line": 62,
+        "line": 64,
         "signature": "void releaseResources() override"
       },
       {
         "name": "getNextAudioBlock",
-        "line": 63,
+        "line": 65,
         "signature": "void getNextAudioBlock(const juce::AudioSourceChannelInfo& bufferToFill) override"
       },
       {
         "name": "syncProject",
-        "line": 65,
+        "line": 67,
         "signature": "void syncProject(const ProjectData& project, bool diffSingerExport = false, WavExportComponent component = WavExportComponent::full)"
       },
       {
         "name": "componentExportIssue",
-        "line": 67,
+        "line": 69,
         "signature": "static juce::String componentExportIssue(const ProjectData& project, const juce::File& engine, const juce::String& trackId = {}, const std::vector<juce::String>& noteIds = {}, juce::Range<double> range = {}, const juce::String& auditionTrack = {}, UtauOutputEngine defaultEngine = UtauOutputEngine::resampler)"
       },
       {
         "name": "setPlayUntil",
-        "line": 74,
+        "line": 76,
         "signature": "void setPlayUntil(double seconds)"
       },
       {
         "name": "setUtauRenderNoteSelection",
-        "line": 75,
+        "line": 77,
         "signature": "void setUtauRenderNoteSelection(const std::vector<juce::String>& noteIds)"
       },
       {
         "name": "setAuditionTrack",
-        "line": 79,
+        "line": 81,
         "signature": "void setAuditionTrack(const juce::String& trackId)"
       },
       {
         "name": "trackIsAudible",
-        "line": 82,
+        "line": 84,
         "signature": "static bool trackIsAudible(bool muted, bool solo, bool anySolo, bool referenceOnly, bool beingWorkedOn)"
       },
       {
         "name": "selectEveryUtauNote",
-        "line": 88,
+        "line": 90,
         "signature": "int selectEveryUtauNote(const ProjectData& project)"
       },
       {
         "name": "selectAllRenderedUtauNotes",
-        "line": 89,
+        "line": 91,
         "signature": "bool selectAllRenderedUtauNotes()"
       },
       {
         "name": "setHifiganModelDirectory",
-        "line": 90,
+        "line": 92,
         "signature": "void setHifiganModelDirectory(const juce::File& directory)"
       },
       {
         "name": "setUtauResamplerFile",
-        "line": 95,
+        "line": 97,
         "signature": "void setUtauResamplerFile(const juce::File& executable)"
       },
       {
         "name": "setUtauOutputDefaults",
-        "line": 96,
+        "line": 98,
         "signature": "void setUtauOutputDefaults(UtauOutputEngine engine, const juce::File& wavtool)"
       },
       {
         "name": "currentUtauOutputEngine",
-        "line": 97,
+        "line": 99,
         "signature": "UtauOutputEngine currentUtauOutputEngine() const"
       },
       {
         "name": "currentUtauWavtoolFile",
-        "line": 98,
+        "line": 100,
         "signature": "juce::File currentUtauWavtoolFile() const"
       },
       {
         "name": "outputEngineDisplayName",
-        "line": 99,
+        "line": 101,
         "signature": "juce::String outputEngineDisplayName(const TrackData& track) const"
       },
       {
         "name": "bundledUtauResampler",
-        "line": 104,
+        "line": 106,
         "signature": "static juce::File bundledUtauResampler( const juce::File& executableDirectory)"
       },
       {
         "name": "resolveUtauResampler",
-        "line": 107,
+        "line": 109,
         "signature": "static juce::File resolveUtauResampler( const juce::String& configured, const juce::File& executableDirectory)"
       },
       {
         "name": "diagnosticUtauResamplerFile",
-        "line": 114,
+        "line": 116,
         "signature": "juce::File diagnosticUtauResamplerFile() const"
       },
       {
         "name": "currentUtauResamplerFile",
-        "line": 118,
+        "line": 120,
         "signature": "juce::File currentUtauResamplerFile() const"
       },
       {
         "name": "setInferenceConfiguration",
-        "line": 122,
+        "line": 124,
         "signature": "void setInferenceConfiguration(backend::InferenceBackend inference, int deviceIndex)"
       },
       {
         "name": "probeDuration",
-        "line": 123,
+        "line": 125,
         "signature": "std::optional<double> probeDuration(const juce::File& file)"
       },
       {
         "name": "setAuditionFile",
-        "line": 124,
+        "line": 126,
         "signature": "bool setAuditionFile(const juce::File& file)"
       },
       {
         "name": "clearAuditionFile",
-        "line": 125,
+        "line": 127,
         "signature": "void clearAuditionFile()"
       },
       {
         "name": "play",
-        "line": 127,
+        "line": 129,
         "signature": "void play()"
       },
       {
         "name": "stop",
-        "line": 128,
+        "line": 130,
         "signature": "void stop()"
       },
       {
         "name": "setPosition",
-        "line": 129,
+        "line": 131,
         "signature": "void setPosition(double seconds)"
       },
       {
         "name": "position",
-        "line": 130,
+        "line": 132,
         "signature": "double position() const"
       },
       {
+        "name": "nativeScorePrerollStart",
+        "line": 135,
+        "signature": "double nativeScorePrerollStart() const"
+      },
+      {
         "name": "trackPeak",
-        "line": 131,
+        "line": 136,
         "signature": "float trackPeak(const juce::String& trackId) const"
       },
       {
         "name": "renderProgress",
-        "line": 132,
+        "line": 137,
         "signature": "std::optional<double> renderProgress() const"
       },
       {
         "name": "playbackNeedsRender",
-        "line": 135,
+        "line": 140,
         "signature": "bool playbackNeedsRender(double lookAheadSeconds = 0.75) const"
       },
       {
         "name": "hasPlayableRenderedAudio",
-        "line": 136,
+        "line": 141,
         "signature": "bool hasPlayableRenderedAudio() const"
       },
       {
         "name": "hasCurrentRenderedAudio",
-        "line": 137,
+        "line": 142,
         "signature": "bool hasCurrentRenderedAudio() const"
       },
       {
         "name": "rewindToFirstPlayableRenderedAudio",
-        "line": 138,
+        "line": 143,
         "signature": "bool rewindToFirstPlayableRenderedAudio(double leadInSeconds = 0.03)"
       },
       {
         "name": "activeRenderBackends",
-        "line": 139,
+        "line": 144,
         "signature": "juce::String activeRenderBackends() const"
       },
       {
         "name": "activeRenderWarnings",
-        "line": 140,
+        "line": 145,
         "signature": "juce::String activeRenderWarnings() const"
       },
       {
         "name": "renderCapabilityWarnings",
-        "line": 146,
+        "line": 151,
         "signature": "static juce::StringArray renderCapabilityWarnings( const ProjectData& project, UtauOutputEngine defaultEngine = UtauOutputEngine::resampler)"
       },
       {
         "name": "clipsJoinAt",
-        "line": 158,
+        "line": 163,
         "signature": "static bool clipsJoinAt(const ClipData& clip, const ClipData& neighbour, bool asNext)"
       },
       {
         "name": "glideChains",
-        "line": 166,
+        "line": 171,
         "signature": "static std::vector<std::vector<const ClipData*>> glideChains( const std::vector<const ClipData*>& orderedClips)"
       },
       {
         "name": "mergedRequestFor",
-        "line": 172,
-        "signature": "static backend::Mld5FileRenderRequest mergedRequestFor( const std::vector<const ClipData*>& group, const TrackData& track, const juce::File& hifiganModelDirectory, const backend::OrtExecutionConfig& inference)"
+        "line": 177,
+        "signature": "static backend::Mld5FileRenderRequest mergedRequestFor( const std::vector<const ClipData*>& group, const TrackData& track, const juce::File& hifiganModelDirectory, const backend::OrtExecutionConfig& inference, std::optional<bool> legacyUvCarrier = {}, bool skipSharedPitch = false, const SharedPitchLines* sharedLines = nullptr)"
+      },
+      {
+        "name": "setDiagnosticNsfRendering",
+        "line": 187,
+        "signature": "void setDiagnosticNsfRendering(bool incrementalRender, bool legacyUvCarrier = false, bool skipSharedPitch = false)"
+      },
+      {
+        "name": "setDiagnosticUtauTimelinePitch",
+        "line": 197,
+        "signature": "void setDiagnosticUtauTimelinePitch(bool enabled)"
+      },
+      {
+        "name": "setDiagnosticUtauOwnPitch",
+        "line": 198,
+        "signature": "void setDiagnosticUtauOwnPitch(bool enabled)"
+      },
+      {
+        "name": "setDiagnosticUtauNominalBridge",
+        "line": 199,
+        "signature": "void setDiagnosticUtauNominalBridge(bool enabled)"
       },
       {
         "name": "diagnosticMergedPhraseCount",
-        "line": 178,
+        "line": 202,
         "signature": "int diagnosticMergedPhraseCount() const"
       },
       {
         "name": "diagnosticScheduledNsfUtauRenders",
-        "line": 179,
+        "line": 203,
         "signature": "std::uint64_t diagnosticScheduledNsfUtauRenders() const"
       },
       {
         "name": "diagnosticRenderPriorityPosition",
-        "line": 180,
+        "line": 204,
         "signature": "double diagnosticRenderPriorityPosition() const"
       },
       {
+        "name": "projectTrackNotePitch",
+        "line": 220,
+        "signature": "static std::vector<ProjectedNotePitch> projectTrackNotePitch( const TrackData&, const std::vector<NativeConnection>&)"
+      },
+      {
         "name": "diagnosticNativeTargetMidi",
-        "line": 186,
+        "line": 226,
         "signature": "static std::vector<float> diagnosticNativeTargetMidi( const ProjectData& project, int trackIndex, int clipIndex)"
       },
       {
         "name": "diagnosticNativeRequest",
-        "line": 188,
+        "line": 228,
         "signature": "static backend::Mld5FileRenderRequest diagnosticNativeRequest(const ClipData& clip,const TrackData& track)"
       },
       {
         "name": "utauNoteWaveforms",
-        "line": 194,
+        "line": 234,
         "signature": "std::shared_ptr<const std::vector<UtauNoteWaveform>> utauNoteWaveforms() const"
       },
       {
         "name": "refreshUtauWaveforms",
-        "line": 200,
+        "line": 240,
         "signature": "void refreshUtauWaveforms()"
       },
       {
         "name": "refreshNativeWaveforms",
-        "line": 201,
+        "line": 241,
         "signature": "void refreshNativeWaveforms()"
       },
       {
         "name": "nativeClipWaveforms",
-        "line": 202,
+        "line": 242,
         "signature": "std::shared_ptr<const std::vector<NativeRenderedWaveform>> nativeClipWaveforms() const"
       },
       {
         "name": "nativeClipWaveformHash",
-        "line": 203,
-        "signature": "static std::uint64_t nativeClipWaveformHash(const ClipData&, const TrackData&)"
+        "line": 246,
+        "signature": "static std::uint64_t nativeClipWaveformHash(const ClipData&, const TrackData&, const std::vector<NativeVirtualGroup>* virtualGroups = nullptr)"
       },
       {
         "name": "utauNoteRenderHash",
-        "line": 209,
+        "line": 253,
         "signature": "static std::uint64_t utauNoteRenderHash(const NoteData& note)"
       },
       {
         "name": "utauNoteAudioHash",
-        "line": 212,
+        "line": 256,
         "signature": "static std::uint64_t utauNoteAudioHash(const NoteData& note)"
       },
       {
         "name": "utauNotePhonemeHash",
-        "line": 213,
+        "line": 257,
         "signature": "static std::uint64_t utauNotePhonemeHash(const NoteData& note)"
       },
       {
         "name": "utauPhonemeMixContextHash",
-        "line": 214,
+        "line": 258,
         "signature": "static std::uint64_t utauPhonemeMixContextHash(const TrackData& track)"
       },
       {
         "name": "diagnosticUtauRequestNotes",
-        "line": 218,
+        "line": 262,
         "signature": "static std::vector<backend::UtauNoteRenderSpec> diagnosticUtauRequestNotes( const ProjectData& project, const juce::String& clipId, const std::vector<juce::String>& selection = {})"
       },
       {
         "name": "utauRequestNotesForClip",
-        "line": 222,
+        "line": 266,
         "signature": "static std::vector<backend::UtauNoteRenderSpec> utauRequestNotesForClip( const ProjectData& project, const juce::String& clipId)"
       },
       {
+        "name": "diagnosticUtauRequestedFamily",
+        "line": 268,
+        "signature": "static backend::RequestedVoicebankFamily diagnosticUtauRequestedFamily( const ProjectData& project, const juce::String& clipId)"
+      },
+      {
         "name": "diagnosticUtauRenderKey",
-        "line": 224,
+        "line": 270,
         "signature": "static std::string diagnosticUtauRenderKey( const ProjectData& project, const juce::String& clipId, UtauOutputEngine defaultEngine = UtauOutputEngine::resampler, const juce::File& resampler = {}, const juce::File& wavtool = {})"
       },
       {
         "name": "exportWav",
-        "line": 229,
+        "line": 275,
         "signature": "bool exportWav(const juce::File& file, juce::String& error, const juce::String& trackId = {}, double fromSeconds = 0.0, double toSeconds = 0.0, WavExportOptions options = {})"
       },
       {
+        "name": "diagnosticNativeSourceEdgeGain",
+        "line": 279,
+        "signature": "std::optional<float> diagnosticNativeSourceEdgeGain(const juce::String& clipId,double localSeconds) const"
+      },
+      {
         "name": "playbackSampleRate",
-        "line": 233,
+        "line": 280,
         "signature": "double playbackSampleRate() const"
       },
       {
         "name": "isPlaying",
-        "line": 234,
+        "line": 281,
         "signature": "bool isPlaying() const"
       },
       {
         "name": "devices",
-        "line": 235,
+        "line": 282,
         "signature": "juce::AudioDeviceManager& devices()"
       },
       {
         "name": "ensureOutputDevice",
-        "line": 236,
+        "line": 283,
         "signature": "bool ensureOutputDevice(juce::String& error)"
       },
       {
         "name": "restoreDeviceState",
-        "line": 237,
+        "line": 284,
         "signature": "void restoreDeviceState(juce::PropertiesFile& properties)"
       },
       {
         "name": "saveDeviceState",
-        "line": 238,
+        "line": 285,
         "signature": "void saveDeviceState(juce::PropertiesFile& properties) const"
       }
     ],
     "SampleSettings": [
       {
         "name": "sidecarFor",
-        "line": 78,
+        "line": 95,
         "signature": "static juce::File sidecarFor(const juce::File& audio)"
       },
       {
+        "name": "annotationFor",
+        "line": 97,
+        "signature": "static juce::File annotationFor(const juce::File& audio)"
+      },
+      {
+        "name": "setMaterialRoots",
+        "line": 98,
+        "signature": "static void setMaterialRoots(const juce::StringArray& roots)"
+      },
+      {
+        "name": "materialRoots",
+        "line": 99,
+        "signature": "static juce::StringArray materialRoots()"
+      },
+      {
+        "name": "hasNativeAnnotation",
+        "line": 100,
+        "signature": "static bool hasNativeAnnotation(const juce::File& audio, juce::String* error = nullptr)"
+      },
+      {
+        "name": "copyAnnotations",
+        "line": 102,
+        "signature": "static bool copyAnnotations(const juce::File& source, const juce::File& destination, juce::String& error)"
+      },
+      {
         "name": "nativeSegmentsFor",
-        "line": 82,
+        "line": 107,
         "signature": "static std::vector<NativeSegment> nativeSegmentsFor( const SampleRegionSetting& row)"
       },
       {
         "name": "loadOrDerive",
-        "line": 84,
-        "signature": "static std::vector<SampleRegionSetting> loadOrDerive(const juce::File& audio, const ProjectData& project)"
+        "line": 111,
+        "signature": "static std::vector<SampleRegionSetting> loadOrDerive(const juce::File& audio, const ProjectData& project, juce::String* error = nullptr, bool explicitLegacyMigration = false, const juce::String& audioId = {})"
       },
       {
         "name": "save",
-        "line": 86,
-        "signature": "static bool save(const juce::File& audio, const std::vector<SampleRegionSetting>& rows, juce::String& error)"
+        "line": 116,
+        "signature": "static bool save(const juce::File& audio, const std::vector<SampleRegionSetting>& rows, juce::String& error, const juce::String& audioId = {})"
       },
       {
         "name": "convertMelodyneProject",
-        "line": 91,
-        "signature": "static bool convertMelodyneProject(ProjectData& project, juce::StringArray& warnings)"
+        "line": 121,
+        "signature": "static bool convertMelodyneProject(ProjectData& project, juce::StringArray& warnings, bool autoRegisterTransitions = true,bool publishAnnotations = true)"
       },
       {
         "name": "importOto",
-        "line": 92,
+        "line": 123,
         "signature": "static bool importOto(const juce::File& oto, const juce::File& audio, double audioDuration, std::vector<SampleRegionSetting>& rows, juce::String& error)"
       },
       {
         "name": "exportOto",
-        "line": 95,
+        "line": 126,
         "signature": "static bool exportOto(const juce::File& oto, const juce::File& audio, const std::vector<SampleRegionSetting>& rows, double audioDuration, juce::String& error)"
       },
       {
         "name": "importVoicebank",
-        "line": 98,
+        "line": 129,
         "signature": "static bool importVoicebank(const juce::File& root, juce::StringArray& audioFiles, int& sidecarsWritten, int& regionsWritten, juce::StringArray& warnings)"
       },
       {
         "name": "noteOtoFromEntry",
-        "line": 106,
+        "line": 137,
         "signature": "static backend::UtauOtoOverride noteOtoFromEntry(const VoicebankOtoEntry& entry, bool withRegions)"
       },
       {
         "name": "entryWithNoteOto",
-        "line": 123,
+        "line": 154,
         "signature": "static VoicebankOtoEntry entryWithNoteOto(VoicebankOtoEntry entry, const backend::UtauOtoOverride& oto)"
       },
       {
         "name": "loadVoicebankOto",
-        "line": 142,
+        "line": 173,
         "signature": "static std::vector<VoicebankOtoEntry> loadVoicebankOto( const juce::File& root, juce::StringArray& warnings, bool jieMode = false, bool mouMode = false, const juce::File& onlyOtoFile = {})"
       },
       {
         "name": "loadAudioOto",
-        "line": 147,
+        "line": 178,
         "signature": "static std::vector<VoicebankOtoEntry> loadAudioOto(const juce::File& audio, const juce::File& root, UtauMode mode, juce::StringArray& warnings)"
       },
       {
         "name": "nativeAudioFromOto",
-        "line": 150,
+        "line": 181,
         "signature": "static std::optional<ClipData> nativeAudioFromOto(const VoicebankOtoEntry& entry, UtauMode mode, double sourceDurationSeconds)"
       },
       {
         "name": "voicebankFilesRevision",
-        "line": 156,
+        "line": 187,
         "signature": "static std::uint64_t voicebankFilesRevision()"
       },
       {
         "name": "updateVoicebankOtoEntry",
-        "line": 157,
+        "line": 188,
         "signature": "static bool updateVoicebankOtoEntry(const VoicebankOtoEntry& original, const VoicebankOtoEntry& updated, juce::String& error)"
       },
       {
         "name": "jieClassicOtoFileFor",
-        "line": 163,
+        "line": 194,
         "signature": "static juce::File jieClassicOtoFileFor(const juce::File& otoFile)"
       },
       {
         "name": "updateJieVoicebankOtoEntry",
-        "line": 164,
+        "line": 195,
         "signature": "static bool updateJieVoicebankOtoEntry(const VoicebankOtoEntry& original, const VoicebankOtoEntry& updated, juce::String& error)"
       },
       {
         "name": "duplicateVoicebankOtoEntry",
-        "line": 169,
+        "line": 200,
         "signature": "static bool duplicateVoicebankOtoEntry(const VoicebankOtoEntry& source, const juce::String& newAlias, bool jieMode, juce::String& error)"
       },
       {
         "name": "entryLookupName",
-        "line": 177,
+        "line": 208,
         "signature": "static juce::String entryLookupName(const VoicebankOtoEntry& entry)"
       },
       {
         "name": "findEntryForAlias",
-        "line": 180,
+        "line": 211,
         "signature": "static int findEntryForAlias(const std::vector<VoicebankOtoEntry>& entries, const juce::String& alias)"
       },
       {
         "name": "jieOtoFileFor",
-        "line": 182,
+        "line": 213,
         "signature": "static juce::File jieOtoFileFor(const juce::File& otoFile)"
       },
       {
         "name": "mergeJieOto",
-        "line": 184,
+        "line": 215,
         "signature": "static void mergeJieOto(std::vector<VoicebankOtoEntry>& entries)"
       },
       {
         "name": "mergeMouOto",
-        "line": 187,
+        "line": 218,
         "signature": "static void mergeMouOto(std::vector<VoicebankOtoEntry>& entries)"
       },
       {
         "name": "mouRegionCount",
-        "line": 190,
+        "line": 221,
         "signature": "static int mouRegionCount(const juce::String& classes)"
       },
       {
         "name": "mouClassesForCount",
-        "line": 194,
+        "line": 225,
         "signature": "static juce::String mouClassesForCount(const juce::String& classes, int count)"
       },
       {
         "name": "updateMouOtoEntry",
-        "line": 198,
+        "line": 229,
         "signature": "static bool updateMouOtoEntry(const VoicebankOtoEntry& original, const VoicebankOtoEntry& updated, juce::String& error)"
       },
       {
         "name": "createMouOto",
-        "line": 210,
+        "line": 241,
         "signature": "static bool createMouOto(const juce::File& root, int& written, int& kept, int& merged, juce::String& error)"
       },
       {
         "name": "mouOtoFileFor",
-        "line": 212,
+        "line": 243,
         "signature": "static juce::File mouOtoFileFor(const juce::File& otoFile)"
       },
       {
         "name": "createJieOto",
-        "line": 215,
+        "line": 246,
         "signature": "static bool createJieOto(const juce::File& root, int& written, int& kept, juce::String& error)"
       },
       {
         "name": "createJieOtoFromMou",
-        "line": 220,
+        "line": 251,
         "signature": "static bool createJieOtoFromMou(const juce::File& root, JieFromMouResult& result, juce::String& error)"
       },
       {
         "name": "updateJieOtoEntry",
-        "line": 222,
+        "line": 253,
         "signature": "static bool updateJieOtoEntry(const VoicebankOtoEntry& original, const VoicebankOtoEntry& updated, juce::String& error)"
       }
     ],
@@ -1398,254 +1628,254 @@
     "AnalysisService": [
       {
         "name": "configFromProperties",
-        "line": 49,
+        "line": 52,
         "signature": "static AnalysisConfig configFromProperties(const juce::PropertiesFile* properties)"
       },
       {
         "name": "configFromEnvironment",
-        "line": 50,
+        "line": 53,
         "signature": "static AnalysisConfig configFromEnvironment()"
       },
       {
         "name": "status",
-        "line": 51,
+        "line": 54,
         "signature": "static AnalysisStatus status(const AnalysisConfig& config)"
       },
       {
         "name": "analyse",
-        "line": 52,
+        "line": 55,
         "signature": "static AnalysisResult analyse(const juce::File& file, const AnalysisConfig& config, juce::String& error, Progress progress = {})"
       },
       {
         "name": "applySourcePitch",
-        "line": 56,
+        "line": 59,
         "signature": "static std::size_t applySourcePitch(ClipData& clip, const std::vector<NoteData>& sourceNotes)"
       },
       {
         "name": "reanalyseProjectSourcePitch",
-        "line": 58,
+        "line": 61,
         "signature": "static bool reanalyseProjectSourcePitch(ProjectData& project, const AnalysisConfig& config, juce::String& error, Progress progress = {}, AnalysisStatus* usedStatus = nullptr)"
       },
       {
         "name": "backendText",
-        "line": 63,
+        "line": 66,
         "signature": "static juce::String backendText(const AnalysisStatus& status)"
       }
     ],
     "RenderService": [
       {
         "name": "RenderService",
-        "line": 86,
+        "line": 97,
         "signature": "RenderService()"
       },
       {
         "name": "~RenderService",
-        "line": 87,
+        "line": 98,
         "signature": "~RenderService()"
       },
       {
         "name": "renderMld5",
-        "line": 88,
+        "line": 99,
         "signature": "void renderMld5(Mld5RenderRequest request, Completion completion)"
       },
       {
         "name": "renderMld5File",
-        "line": 89,
+        "line": 100,
         "signature": "void renderMld5File(Mld5FileRenderRequest request, FileCompletion completion, RenderSchedule schedule = {})"
       },
       {
         "name": "renderUtau",
-        "line": 91,
+        "line": 102,
         "signature": "void renderUtau(UtauRenderRequest request, FileCompletion completion, RenderSchedule schedule = {})"
       },
       {
         "name": "renderNsfUtau",
-        "line": 97,
+        "line": 108,
         "signature": "void renderNsfUtau(UtauRenderRequest request, juce::File modelDirectory, OrtExecutionConfig execution, FileCompletion completion, RenderSchedule schedule = {})"
       },
       {
         "name": "cancelAll",
-        "line": 100,
+        "line": 111,
         "signature": "void cancelAll()"
       },
       {
         "name": "hasActiveJobs",
-        "line": 101,
+        "line": 112,
         "signature": "bool hasActiveJobs()"
       },
       {
         "name": "setPlaybackPosition",
-        "line": 102,
+        "line": 113,
         "signature": "void setPlaybackPosition(double seconds) noexcept"
       },
       {
         "name": "beginUpdate",
-        "line": 103,
+        "line": 114,
         "signature": "void beginUpdate()"
       },
       {
         "name": "endUpdate",
-        "line": 104,
+        "line": 115,
         "signature": "void endUpdate(const std::unordered_set<std::string>& keys)"
       },
       {
         "name": "playbackPriorityPosition",
-        "line": 105,
+        "line": 116,
         "signature": "double playbackPriorityPosition() const"
       }
     ],
     "UtauRenderer": [
       {
         "name": "mappedAliasTiming",
-        "line": 224,
+        "line": 250,
         "signature": "static std::optional<UtauSampleTiming> mappedAliasTiming( const juce::File& directory, const juce::String& alias, float midiNote)"
       },
       {
         "name": "supportsComponentExport",
-        "line": 228,
+        "line": 254,
         "signature": "static bool supportsComponentExport(const juce::File& engine, const juce::String& effectiveFlags)"
       },
       {
         "name": "diagnosticPitchbend",
-        "line": 230,
+        "line": 256,
         "signature": "static juce::String diagnosticPitchbend( const UtauNoteRenderSpec& note, double bpm, double preutterance, double outputSeconds)"
       },
       {
         "name": "fitAmplitudeEnvelope",
-        "line": 234,
+        "line": 260,
         "signature": "static std::vector<UtauAmplitudePoint> fitAmplitudeEnvelope( const std::vector<UtauAmplitudePoint>& drawn, double preutteranceSeconds, double soundingEndSeconds)"
       },
       {
         "name": "invalidateVoicebankCache",
-        "line": 237,
+        "line": 263,
         "signature": "static void invalidateVoicebankCache()"
       },
       {
         "name": "prewarmHfDaemon",
-        "line": 243,
+        "line": 269,
         "signature": "static void prewarmHfDaemon(const juce::File& resamplerExecutable)"
       },
       {
         "name": "startHfDaemonIfNeeded",
-        "line": 246,
+        "line": 272,
         "signature": "static bool startHfDaemonIfNeeded(const juce::File& resamplerExecutable, int port = 51765)"
       },
       {
         "name": "shutdownHfDaemon",
-        "line": 251,
+        "line": 277,
         "signature": "static void shutdownHfDaemon()"
       },
       {
         "name": "hfDaemonInterpreter",
-        "line": 256,
+        "line": 282,
         "signature": "static juce::String hfDaemonInterpreter(const juce::File& engineDirectory)"
       },
       {
         "name": "voicebankIndexReady",
-        "line": 262,
+        "line": 288,
         "signature": "static bool voicebankIndexReady(const juce::File& voicebankDirectory, bool fourRegion, bool consonantClasses, std::function<void()> whenReady)"
       },
       {
         "name": "diagnosticIndexBuilds",
-        "line": 270,
+        "line": 296,
         "signature": "static int diagnosticIndexBuilds()"
       },
       {
         "name": "diagnosticMessageThreadWaits",
-        "line": 273,
+        "line": 299,
         "signature": "static int diagnosticMessageThreadWaits()"
       },
       {
         "name": "diagnosticRecheckVoicebankFiles",
-        "line": 274,
+        "line": 300,
         "signature": "static void diagnosticRecheckVoicebankFiles()"
       },
       {
         "name": "recheckVoicebankFiles",
-        "line": 276,
+        "line": 302,
         "signature": "static void recheckVoicebankFiles(const juce::File& root)"
       },
       {
         "name": "diagnosticResolve",
-        "line": 277,
+        "line": 303,
         "signature": "static juce::String diagnosticResolve(const juce::File& voicebankDirectory, const juce::String& alias, float midiNote, bool fourRegion, bool consonantClasses, bool byScan)"
       },
       {
         "name": "crossfadeEnd",
-        "line": 289,
+        "line": 315,
         "signature": "static double crossfadeEnd(double soundStart, double overlap, double nextNoteEnd)"
       },
       {
         "name": "crossfadesInto",
-        "line": 298,
+        "line": 324,
         "signature": "static bool crossfadesInto(double soundStart, double noteEnd)"
       },
       {
         "name": "sendsFlagCurves",
-        "line": 309,
+        "line": 335,
         "signature": "static bool sendsFlagCurves(bool noteFlagCurve)"
       },
       {
         "name": "readsOnlyFirstTwoRegions",
-        "line": 310,
+        "line": 336,
         "signature": "static bool readsOnlyFirstTwoRegions(bool fourRegion, bool consonantClasses, double durationSeconds)"
       },
       {
         "name": "firstTwoRegions",
-        "line": 313,
+        "line": 339,
         "signature": "static std::array<double, 4> firstTwoRegions( const std::array<double, 4>& regionSeconds)"
       },
       {
         "name": "sampleTiming",
-        "line": 315,
+        "line": 341,
         "signature": "static std::optional<UtauSampleTiming> sampleTiming( const juce::File& voicebankDirectory, const juce::String& alias, float midiNote, int consonantVelocity = 100, bool fourRegion = false, bool consonantClasses = false)"
       },
       {
         "name": "sampleTiming",
-        "line": 322,
+        "line": 348,
         "signature": "static std::optional<UtauSampleTiming> sampleTiming( const juce::File& voicebankDirectory, const juce::String& alias, float midiNote, int consonantVelocity, bool fourRegion, bool consonantClasses, const UtauOtoOverride* noteOto)"
       },
       {
         "name": "resolveVoiceSample",
-        "line": 346,
+        "line": 380,
         "signature": "static ResolvedSample resolveVoiceSample( const juce::File& voicebankDirectory, const juce::String& alias, float midiNote, int consonantVelocity = 100, bool fourRegion = false, bool consonantClasses = false, double stpSeconds = 0.0, bool preutteranceOverrideEnabled = false, double preutteranceSeconds = 0.0, bool overlapOverrideEnabled = false, double overlapSeconds = 0.0, const UtauOtoOverride* noteOto = nullptr, bool aliasIsResolved = false)"
       },
       {
         "name": "render",
-        "line": 353,
+        "line": 387,
         "signature": "static UtauRenderResult render(const UtauRenderRequest& request)"
       },
       {
         "name": "tailFadeSpan",
-        "line": 355,
+        "line": 389,
         "signature": "static std::optional<UtauTailFadeSpan> tailFadeSpan( const UtauSampleTiming& timing,double soundStart,double soundEnd, double nominalDuration,int velocity,bool fourRegion,bool mou, const std::array<double,3>* manual=nullptr)"
       },
       {
         "name": "headEnvelopeSpan",
-        "line": 359,
+        "line": 393,
         "signature": "static std::optional<UtauTailFadeSpan> headEnvelopeSpan( const UtauSampleTiming& timing,double soundStart,double soundEnd, double nominalDuration,int velocity,bool fourRegion,bool mou, const std::array<double,3>* manual=nullptr)"
       },
       {
         "name": "regionSplit",
-        "line": 370,
+        "line": 404,
         "signature": "static UtauRegionSplit regionSplit( const std::array<double, 4>& sourceSeconds, double outputSeconds, int consonantVelocity, double leadInSeconds, const std::array<double, 3>* manualFractions, const juce::String* classes = nullptr)"
       }
     ],
     "NsfHifiganRenderer": [
       {
         "name": "shutdown",
-        "line": 66,
+        "line": 84,
         "signature": "static void shutdown()"
       },
       {
         "name": "modelAvailable",
-        "line": 67,
+        "line": 85,
         "signature": "static bool modelAvailable(const juce::File& configuredModelDirectory)"
       },
       {
         "name": "render",
-        "line": 68,
-        "signature": "static NsfHifiganRenderResult render( const juce::AudioBuffer<float>& source, double sampleRate, int targetSamples, double framePeriodMs, const std::vector<float>& targetMidi, const std::vector<float>& formantSemitones, const std::vector<NsfHifiganTimeMapPoint>& timeMap, const juce::File& configuredModelDirectory, const OrtExecutionConfig& execution, NsfHifiganStretchOrder stretchOrder, bool normalizeVolume = false, const NsfHifiganEdgeGuard& edgeGuard = NsfHifiganEdgeGuard{}, const std::function<bool()>& cancelled = {}, bool protectNativeNoise = false, bool smoothPitchTransitions = true, bool incrementalNativeRender = false, const std::vector<float>& sourceMidi = {})"
+        "line": 86,
+        "signature": "static NsfHifiganRenderResult render( const juce::AudioBuffer<float>& source, double sampleRate, int targetSamples, double framePeriodMs, const std::vector<float>& targetMidi, const std::vector<float>& formantSemitones, const std::vector<NsfHifiganTimeMapPoint>& timeMap, const juce::File& configuredModelDirectory, const OrtExecutionConfig& execution, NsfHifiganStretchOrder stretchOrder, bool normalizeVolume = false, const NsfHifiganEdgeGuard& edgeGuard = NsfHifiganEdgeGuard{}, const std::function<bool()>& cancelled = {}, bool protectNativeNoise = false, bool smoothPitchTransitions = true, bool incrementalNativeRender = false, const std::vector<float>& sourceMidi = {}, const NsfHifiganSourceAssembly* sourceAssembly = nullptr)"
       }
     ],
     "DiffSingerRenderer": [
@@ -1803,247 +2033,257 @@
   "mcp": {
     "project_new": {
       "file": "backend/McpServer.cpp",
-      "line": 443,
+      "line": 462,
       "description": "Create an empty HachiShifter project / 新建工程"
     },
     "project_open": {
       "file": "backend/McpServer.cpp",
-      "line": 444,
+      "line": 463,
       "description": "Open HJPX, legacy HSPX, MPD, MIDI, or audio from path / 打开工程或素材"
     },
     "project_save": {
       "file": "backend/McpServer.cpp",
-      "line": 451,
+      "line": 474,
       "description": "Save current project as HJPX / 保存工程"
     },
     "project_snapshot": {
       "file": "backend/McpServer.cpp",
-      "line": 455,
+      "line": 478,
       "description": "Read every current track, clip, note, pitch and marker / 读取全部工程内容"
     },
     "import_audio": {
       "file": "backend/McpServer.cpp",
-      "line": 456,
+      "line": 479,
       "description": "Import an audio file at start_seconds / 导入音频"
     },
     "analyse_audio": {
       "file": "backend/McpServer.cpp",
-      "line": 465,
+      "line": 488,
       "description": "Run configured GAME+FCPE analysis with native fallback and return actual backend / 执行 GAME+FCPE 分析并报告实际后端"
     },
     "analysis_status": {
       "file": "backend/McpServer.cpp",
-      "line": 471,
+      "line": 494,
       "description": "Inspect GAME large/small, FCPE and inference availability / 查看 GAME、FCPE 与推理状态"
     },
     "import_midi": {
       "file": "backend/McpServer.cpp",
-      "line": 473,
+      "line": 496,
       "description": "Import MIDI notes and tempo / 导入 MIDI"
     },
     "export_midi": {
       "file": "backend/McpServer.cpp",
-      "line": 477,
-      "description": "Write the project out as a MIDI file with its tempo map and lyrics / 导出 MIDI"
+      "line": 500,
+      "description": "Write all tracks or one track as MIDI, retaining conductor tempo/meter and lyrics / 导出 MIDI"
     },
     "export_ust": {
       "file": "backend/McpServer.cpp",
-      "line": 481,
+      "line": 508,
       "description": "Export one monophonic track as UST, retaining imported opaque data / 导出单轨 UST"
     },
     "import_ust": {
       "file": "backend/McpServer.cpp",
-      "line": 486,
+      "line": 513,
       "description": "Import a UTAU project as a plain UTAU track / 导入 UST"
     },
     "import_melodyne": {
       "file": "backend/McpServer.cpp",
-      "line": 491,
+      "line": 518,
       "description": "Import Melodyne MPD edits; recursive_media, preserve_edits and source_pitch control import / 导入 Melodyne 工程并控制素材搜索、工程编辑与原始 F0"
+    },
+    "restore_merged_consonant": {
+      "file": "backend/McpServer.cpp",
+      "line": 536,
+      "description": "Restore archived original consonant/vowel fragments through the common Model authority"
     },
     "set_tempo": {
       "file": "backend/McpServer.cpp",
-      "line": 505,
+      "line": 540,
       "description": "Set BPM and time signature / 设置速度与拍号"
     },
     "add_track": {
       "file": "backend/McpServer.cpp",
-      "line": 513,
+      "line": 548,
       "description": "Create a melodic, audio or accompaniment track / 新建旋律、普通或伴奏轨道"
     },
     "set_track": {
       "file": "backend/McpServer.cpp",
-      "line": 521,
+      "line": 556,
       "description": "Set compose, mute, solo, gain, pan and render algorithms / 设置轨道及算法"
     },
     "set_clip": {
       "file": "backend/McpServer.cpp",
-      "line": 563,
+      "line": 600,
       "description": "Set clip gain, fades and mute state / 设置采样增益、淡入淡出和静音"
     },
     "move_clip": {
       "file": "backend/McpServer.cpp",
-      "line": 574,
+      "line": 611,
       "description": "Move a clip on the timeline / 移动采样"
     },
     "resize_clip": {
       "file": "backend/McpServer.cpp",
-      "line": 580,
+      "line": 617,
       "description": "Stretch a whole clip while preserving its source media / 整体拉伸采样并保留原始素材"
     },
     "duplicate_clip": {
       "file": "backend/McpServer.cpp",
-      "line": 588,
+      "line": 625,
       "description": "Deep-copy a clip and its notes to a timeline position / 深度复制采样及其音符到指定位置"
     },
     "transpose_note": {
       "file": "backend/McpServer.cpp",
-      "line": 596,
+      "line": 633,
       "description": "Move a note and its whole contour / 整体移动音高线"
     },
     "edit_notes_pitch": {
       "file": "backend/McpServer.cpp",
-      "line": 602,
+      "line": 639,
       "description": "Batch transpose, set, average or quantize note pitches / 批量移调、设置、平均或量化音符"
     },
     "duplicate_notes": {
       "file": "backend/McpServer.cpp",
-      "line": 618,
+      "line": 655,
       "description": "Deep-copy selected notes into a target clip / 深度复制所选音符到目标采样"
     },
     "resize_note": {
       "file": "backend/McpServer.cpp",
-      "line": 628,
+      "line": 665,
       "description": "Change note time bounds / 修改音符时间"
     },
     "set_note": {
       "file": "backend/McpServer.cpp",
-      "line": 636,
+      "line": 673,
       "description": "Set pitch, Robust Pitch Curve, tension, breath, formant, gain, Attack and consonant parameters / 设置稳健音高线及全部音符参数"
     },
     "set_pitch_curve": {
       "file": "backend/McpServer.cpp",
-      "line": 711,
+      "line": 748,
       "description": "Draw an absolute target-pitch curve without replacing source F0 / 绘制目标音高线并保留原始 F0"
     },
     "add_note": {
       "file": "backend/McpServer.cpp",
-      "line": 718,
+      "line": 755,
       "description": "Create a note in a clip / 在采样中创建音符"
     },
     "remove_note": {
       "file": "backend/McpServer.cpp",
-      "line": 728,
+      "line": 765,
       "description": "Delete a note / 删除音符"
     },
     "toggle_note_connection": {
       "file": "backend/McpServer.cpp",
-      "line": 732,
+      "line": 769,
       "description": "Connect or separate adjacent notes / 连接或分离相邻音符"
+    },
+    "set_notes_portamento": {
+      "file": "backend/McpServer.cpp",
+      "line": 774,
+      "description": "Set real pitch-only glide bridges; never join source audio or change envelopes / 设置真实滑音连接，不拼接素材"
     },
     "remove_clip": {
       "file": "backend/McpServer.cpp",
-      "line": 737,
+      "line": 780,
       "description": "Delete a clip / 删除采样"
     },
     "remove_track": {
       "file": "backend/McpServer.cpp",
-      "line": 741,
+      "line": 784,
       "description": "Delete a track / 删除轨道"
     },
     "undo": {
       "file": "backend/McpServer.cpp",
-      "line": 745,
+      "line": 788,
       "description": "Undo the last project edit / 撤销工程编辑"
     },
     "redo": {
       "file": "backend/McpServer.cpp",
-      "line": 746,
+      "line": 789,
       "description": "Redo the last project edit / 重做工程编辑"
     },
     "utau_render_selection": {
       "file": "backend/McpServer.cpp",
-      "line": 747,
+      "line": 790,
       "description": "Choose which UTAU notes render and play; empty selects every note / 选择参与 UTAU 渲染与试听的音符"
     },
     "set_utau_resampler": {
       "file": "backend/McpServer.cpp",
-      "line": 754,
+      "line": 797,
       "description": "Point UTAU rendering at a resampler executable / 指定 UTAU 重采样器"
     },
     "render_prepare": {
       "file": "backend/McpServer.cpp",
-      "line": 759,
+      "line": 802,
       "description": "Pre-render the current project with its selected algorithms / 按当前所选算法预渲染工程"
     },
     "render_status": {
       "file": "backend/McpServer.cpp",
-      "line": 765,
+      "line": 808,
       "description": "Read pre-render progress and active backends / 读取预渲染进度与实际后端"
     },
     "export_wav": {
       "file": "backend/McpServer.cpp",
-      "line": 766,
+      "line": 809,
       "description": "Render every note and export to WAV; track_id exports one track alone, from_seconds/to_seconds one stretch / 渲染全曲并导出 WAV，track_id 可单独导出一个轨道"
     },
     "transport_play": {
       "file": "backend/McpServer.cpp",
-      "line": 781,
+      "line": 824,
       "description": "Render if needed and start playback; play_until_seconds stops where a selection ends / 必要时预渲染并开始播放"
     },
     "transport_stop": {
       "file": "backend/McpServer.cpp",
-      "line": 789,
+      "line": 832,
       "description": "Stop transport playback / 停止播放"
     },
     "transport_seek": {
       "file": "backend/McpServer.cpp",
-      "line": 790,
+      "line": 833,
       "description": "Seek transport to position_seconds / 跳转播放位置"
     },
     "transport_status": {
       "file": "backend/McpServer.cpp",
-      "line": 794,
+      "line": 837,
       "description": "Read playback position and render state / 读取播放位置与渲染状态"
     },
     "sample_settings_read": {
       "file": "backend/McpServer.cpp",
-      "line": 795,
-      "description": "Read or derive audio .hjm.csv regions / 读取或生成音频 .hjm.csv 分段"
+      "line": 838,
+      "description": "Read or derive audio otto.ini regions / 读取或生成音频 otto.ini 分段"
     },
     "sample_settings_save": {
       "file": "backend/McpServer.cpp",
-      "line": 800,
-      "description": "Save audio regions to .hjm.csv / 保存音频分段到 .hjm.csv"
+      "line": 843,
+      "description": "Save audio regions to otto.ini / 保存音频分段到 otto.ini"
     },
     "oto_import": {
       "file": "backend/McpServer.cpp",
-      "line": 807,
+      "line": 850,
       "description": "Import one audio file's regions from UTAU oto.ini / 从 UTAU oto.ini 导入单个音频分段"
     },
     "oto_export": {
       "file": "backend/McpServer.cpp",
-      "line": 816,
+      "line": 859,
       "description": "Export one audio file's regions to UTAU oto.ini / 将单个音频分段导出为 UTAU oto.ini"
     },
     "jie_oto_create": {
       "file": "backend/McpServer.cpp",
-      "line": 822,
+      "line": 865,
       "description": "Seed a voicebank's four-region oto4.ini from its oto.ini / 按 oto.ini 生成界•OTO"
     },
     "voicebank_import": {
       "file": "backend/McpServer.cpp",
-      "line": 826,
-      "description": "Import an UTAU voicebank and create .hjm.csv sidecars / 导入 UTAU 音源并生成 .hjm.csv"
+      "line": 869,
+      "description": "Inspect a UTAU or native material folder without writing annotations / 只读检查 UTAU 或原生素材目录，不写入标注"
     },
     "read_file": {
       "file": "backend/McpServer.cpp",
-      "line": 830,
+      "line": 873,
       "description": "Read a byte range as base64 / 读取任意文件内容"
     },
     "list_directory": {
       "file": "backend/McpServer.cpp",
-      "line": 838,
+      "line": 881,
       "description": "List a directory with type and size / 列出目录内容"
     },
     "editor_selection": {
@@ -2158,1169 +2398,1773 @@
     }
   },
   "main_flags": {
-    "--audit-hamood-keys": 134,
-    "--smoke-hamood-utau": 153,
-    "--smoke-hamood": 159,
-    "--smoke-diffsinger-pitch-offset": 166,
-    "--smoke-accompaniment-tempo": 173,
-    "--smoke-accompaniment": 189,
-    "--smoke-wav-export-options": 196,
-    "--smoke-diffsinger-pitch-persistence": 206,
-    "--reopen": 210,
-    "--smoke-diffsinger-pitch-handles": 214,
-    "--smoke-diffsinger-pitch-restore": 220,
-    "--smoke-diffsinger-pitch-reference": 227,
-    "--smoke-continuous-flag": 233,
-    "--smoke-classic-flag-ui": 240,
-    "--smoke-diffsinger-inference": 249,
-    "--smoke-diffsinger-parameter-retake": 255,
-    "--smoke-diffsinger-cache": 262,
-    "--smoke-diffsinger-parameters": 267,
-    "--smoke-diffsinger-expressions": 272,
-    "--smoke-diffsinger-consonants": 279,
-    "--smoke-diffsinger-timing": 285,
-    "--smoke-diffsinger-ui": 292,
-    "--smoke-diffsinger": 301,
-    "--smoke-chinese-cvvc": 308,
-    "--smoke-output-engine": 316,
-    "--smoke-native-vibrato": 325,
-    "--smoke-native-vibrato-render": 336,
-    "--smoke-native-noise-option": 342,
-    "--smoke-native-incremental": 350,
-    "--smoke-native-shutdown": 358,
-    "--smoke-native-noise": 366,
-    "--smoke-wcs-nonloop": 373,
-    "--smoke-hn-cache": 380,
-    "--force": 383,
-    "--smoke-hifisampler": 387,
-    "--smoke-hifishifter-mel": 387,
-    "--smoke-nsf-regions": 396,
-    "--smoke-nsf-pitch-transitions": 404,
-    "--smoke-voicebank-import": 410,
-    "--smoke-voicebank-selection": 416,
-    "--smoke-nsf-picker": 425,
-    "--smoke-cross-region-editing": 434,
-    "--smoke-hamood-persistence": 434,
-    "--smoke-mou-to-jie": 441,
-    "--smoke-oto-overlap": 447,
-    "--smoke-modeless-oto": 453,
-    "--smoke-oto-continuity": 458,
-    "--smoke-native-envelope": 463,
-    "--smoke-cvvc-layout-cache": 468,
-    "--smoke-auto-crossfade": 473,
-    "--smoke-pitch-point-selection": 478,
-    "--smoke-point-group": 483,
-    "--smoke-envelope-point-selection": 488,
-    "--smoke-native-linked-envelope": 493,
-    "--smoke-advanced-envelope": 498,
-    "--smoke-advanced-envelope-panel": 498,
-    "--smoke-playback-priority": 503,
-    "--smoke-ust-fidelity": 504,
-    "--smoke-project-safety": 505,
-    "--smoke-normal-display": 513,
-    "--smoke-note-hints": 521,
-    "--smoke-clip-editor-scope": 529,
-    "--smoke-empty-tuning-clip": 537,
-    "--smoke-track-gain-envelope": 545,
-    "--smoke-native-rendered-waveform": 553,
-    "--smoke-native-note-move": 560,
-    "--smoke-native-source-pitch-restore": 566,
-    "--smoke-native-audio-overlap-focus": 572,
-    "--smoke-native-audio-overlap": 578,
-    "--smoke-native-linked-pitch": 584,
-    "--smoke-source-breathiness": 591,
-    "--smoke-native-unpitched-regions": 598,
-    "--smoke-native-consonant-display": 606,
-    "--smoke-native-pitch-visibility": 613,
-    "--smoke-native-audio-link": 619,
-    "--smoke-native-note-join": 625,
-    "--smoke-native-trim-expand": 630,
-    "--smoke-native-audio-trim": 635,
-    "--smoke-native-audio-disconnect": 641,
-    "--smoke-native-note-copy-paste": 647,
-    "--smoke-native-import-performance": 654,
-    "--smoke-native-source-pitch": 661,
-    "--smoke-native-waveform-preview": 669,
-    "--smoke-timeline-notes": 677,
-    "--smoke-clip-gain-knob": 685,
-    "--smoke-clip-merge": 693,
-    "--smoke-timeline-selection": 701,
-    "--smoke-clip-trim": 709,
-    "--smoke-clip-split": 718,
-    "--smoke-independent-zoom": 727,
-    "--smoke-scroll-zoom": 736,
-    "--preview-note-dance": 745,
-    "--smoke-tempo-change": 753,
-    "--smoke-timeline-pit": 762,
-    "--mcp-live": 768,
-    "--mcp-list-sessions": 768,
-    "--session": 771,
-    "--smoke-hifisampler-envelope": 776,
-    "--smoke-nsf-project-note": 782,
-    "--mcp": 788,
-    "--roots": 790,
-    "--smoke-oto-playback": 802,
-    "--smoke-oto-editor": 1002,
-    "--click": 1113,
-    "--smoke-splice-envelope": 1125,
-    "--smoke-dialog-enter": 1235,
-    "--smoke-source-edit-view": 1293,
-    "--smoke-consonant-hold": 1355,
-    "--smoke-mou-panel-counts": 1575,
-    "--smoke-mou-consonant-ticks": 1666,
-    "--smoke-mou-boundary-drag": 1819,
-    "--smoke-prefix-map": 1908,
-    "--repair-mou-oto": 1949,
-    "--smoke-mou-oto-file": 1970,
-    "--smoke-utau-mode": 2169,
-    "--smoke-lane-marquee": 2309,
-    "--smoke-flag-lane": 2410,
-    "--smoke-keyboard-labels": 3271,
-    "--smoke-lane-labels": 3325,
-    "--smoke-export-targets": 3353,
-    "--smoke-audition-position": 3459,
-    "--smoke-lyric-envelope": 3501,
-    "--smoke-lyric-timing": 3573,
-    "--smoke-vibrato-bake": 3672,
-    "--smoke-mou-note-regions": 3785,
-    "--smoke-region-guides": 4071,
-    "--smoke-rest-playback": 4145,
-    "--smoke-rest-lyric": 4241,
-    "--smoke-missing-alias-piano": 4404,
-    "--smoke-flag-curve-mode": 4531,
-    "--smoke-flag-point-value": 4716,
-    "--smoke-flag-overlap": 4806,
-    "--smoke-load-timing": 4921,
-    "--smoke-flatten-pitch-line": 5034,
-    "--smoke-note-across-tracks": 5194,
-    "--smoke-clip-across-tracks": 5350,
-    "--smoke-reference-track": 5499,
-    "--smoke-native-pitch-seam": 5647,
-    "--smoke-native-pitch-points": 5719,
-    "--smoke-paste-at-pointer": 5943,
-    "--smoke-note-menu-split": 6086,
-    "--smoke-lyric-gate": 6268,
-    "--smoke-lyric-tab": 6365,
-    "--smoke-syllable-cuts": 6565,
-    "--smoke-single-syllable": 6747,
-    "--smoke-deleted-notes-silent": 6854,
-    "--smoke-delete-clip": 7001,
-    "--smoke-draw-unit": 7098,
-    "--smoke-new-track-draw": 7191,
-    "--smoke-draw-drag": 7298,
-    "--smoke-draw-overlap": 7469,
-    "--smoke-dropdown-arrow": 7653,
-    "--smoke-pitch-line": 7744,
-    "--smoke-view-menu": 8035,
-    "--inspect-melodyne-tracks": 8148,
-    "--smoke-melodyne-provider": 8159,
-    "--probe-melodyne-vst3-instance": 8184,
-    "--smoke-native-timing": 8196,
-    "--smoke-integrated-ui": 8253,
-    "--smoke-integrated": 8262,
-    "--smoke-native-hjm": 8268,
-    "--smoke-batch-lyrics": 8335,
-    "--smoke-envelope-lanes": 8427,
-    "--smoke-wheel": 8486,
-    "--smoke-waveform-toggle": 8527,
-    "--smoke-envelope-base": 8637,
-    "--smoke-amplitude-waveform": 8958,
-    "--smoke-vibrato-end": 9416,
-    "--smoke-hanzi-pinyin": 9676,
-    "--smoke-shared-pitch-line": 9815,
-    "--smoke-waveform-alignment": 10473,
-    "--smoke-note-waveform": 10672,
-    "--smoke-utau-waveform": 10978,
-    "--smoke-voicebank-index": 11152,
-    "--smoke-ust-pitch": 11618,
-    "--low": 11923,
-    "--smoke-hf-daemon-owner": 12042,
-    "--quit": 12050,
-    "--smoke-hf-prewarm": 12055,
-    "--smoke-ust-vibrato": 12188,
-    "--smoke-mcp-roots": 12433,
-    "--smoke-mcp-schema": 12540,
-    "--smoke-dragged-transition": 12705,
-    "--smoke-forward-bend": 12928,
-    "--smoke-midi-track-import": 13100,
-    "--smoke-midi-export": 13429,
-    "--sounding": 13554,
-    "--still": 13686,
-    "--smoke-ust-import": 13722,
-    "--smoke-ust-encoding": 13863,
-    "--smoke-ust": 14015,
-    "--smoke-active-resampler": 14220,
-    "--smoke-bundled-resampler": 14265,
-    "--smoke-anchor-frequency": 14323,
-    "--smoke-note-oto": 14509,
-    "--smoke-prefix-jie": 14939,
-    "--smoke-prefix-note": 15093,
-    "--smoke-utau-overlap": 15450,
-    "--smoke-note-stp": 15765,
-    "--smoke-track-toggle-tips": 16004,
-    "--smoke-track-area-menu": 16251,
-    "--smoke-stretch-items": 16352,
-    "--smoke-render-order": 16404,
-    "--smoke-llsm2-length": 16536,
-    "--smoke-glide-seam": 16588,
-    "--smoke-native-envelope-base": 16652,
-    "--smoke-nsf-utau-phrase": 16736,
-    "--smoke-nsf-utau-synth": 16768,
-    "--smoke-nsf-utau-f0": 16816,
-    "--smoke-nsf-utau-mix": 16861,
-    "--smoke-nsf-utau-plan": 16926,
-    "--smoke-render-capability": 16983,
-    "--smoke-oto-hjm-discipline": 17034,
-    "--smoke-asset-register-dir": 17104,
-    "--smoke-oto-audio": 17148,
-    "--smoke-asset-audio": 17161,
-    "--smoke-project-voicebank-assets": 17175,
-    "--smoke-asset-search": 17181,
-    "--smoke-asset-manager": 17190,
-    "--smoke-gap-menu": 17310,
-    "--smoke-insert-gap": 17429,
-    "--smoke-ripple-delete": 17545,
-    "--smoke-paste-notes": 17634,
-    "--smoke-consonant-edge": 17810,
-    "--smoke-consonant-reset": 17966,
-    "--smoke-region-split": 18073,
-    "--smoke-vibrato-presets": 18165,
-    "--smoke-follow-rule": 18235,
-    "--smoke-play-until": 18307,
-    "--smoke-flags-field": 18366,
-    "--smoke-vertical-drag": 18431,
-    "--smoke-scroll-sync": 18524,
-    "--smoke-edit-follow": 18605,
-    "--smoke-note-drag-threshold": 18705,
-    "--smoke-roll-drag": 18780,
-    "--smoke-playhead-band": 18911,
-    "--smoke-roll-cull": 18964,
-    "--smoke-roll-timing": 19037,
-    "--smoke-envelope-shapes": 19083,
-    "--smoke-envelope-presets": 19400,
-    "--smoke-piano-roll": 19416,
-    "--render-project": 19464,
-    "--inspect-project": 19541,
-    "--inspect-settings": 19577,
-    "--smoke-oto-spectrum": 19604,
-    "--smoke-game-defaults": 19611,
-    "--inspect-analysis": 19617,
-    "--inspect-fcpe": 19639,
-    "--smoke-export": 19665,
-    "--smoke-mld5": 19695,
-    "--smoke-utau-selection": 19788,
-    "--smoke-utau-voicebank": 19902,
-    "--smoke-utau": 19985,
-    "--inspect-midi": 20071,
-    "--inspect-audio": 20094,
-    "--inspect-mpd": 20129
+    "--migrate-otto-folder": 258,
+    "--export-otto-folder": 259,
+    "--include-bare": 269,
+    "--replace": 273,
+    "--smoke-main-project-registration-ui": 283,
+    "--smoke-classic-note-scope": 289,
+    "--smoke-oto-provenance": 294,
+    "--smoke-community-dataset-menu": 299,
+    "--smoke-material-root-registration": 304,
+    "--smoke-variant-asset-ui": 309,
+    "--smoke-voicebank-family": 314,
+    "--smoke-track-types": 319,
+    "--smoke-engine-view-capabilities": 324,
+    "--smoke-track-editing-interfaces-ui": 331,
+    "--smoke-material-variants": 338,
+    "--smoke-community-dataset": 343,
+    "--smoke-ustx-importer": 349,
+    "--smoke-japanese-inference-dialog": 354,
+    "--smoke-japanese-inference-modes": 359,
+    "--smoke-native-source-reopen-scope": 364,
+    "--smoke-native-material-overlap": 370,
+    "--smoke-native-edge-profile-gui": 376,
+    "--smoke-native-pronunciation-edge-edit": 381,
+    "--smoke-native-source-slice-edges": 386,
+    "--smoke-native-source-assembly": 391,
+    "--smoke-world-source-assembly": 395,
+    "--smoke-focused-defaults": 399,
+    "--smoke-transition-pair-import-options": 401,
+    "--smoke-legacy-native-usage": 403,
+    "--smoke-native-melodyne-yellow": 405,
+    "--smoke-native-permanent-seam": 407,
+    "--smoke-native-virtual-single-line": 412,
+    "--smoke-native-virtual-handover-window": 417,
+    "--smoke-native-virtual-handover-gesture": 422,
+    "--smoke-native-virtual-flat-bezier": 427,
+    "--smoke-native-virtual-coupled-move": 432,
+    "--smoke-native-note-transition-menu": 437,
+    "--render-saved-nsf-three": 442,
+    "--profile-teio-request-fingerprint": 447,
+    "--render-teio-full-virtual": 459,
+    "--smoke-main-real-multi-bridge-window": 465,
+    "--smoke-native-real-multi-split-audio": 471,
+    "--smoke-native-virtual-hop-curve": 476,
+    "--smoke-native-virtual-peer-waveform": 481,
+    "--smoke-native-virtual-curve-tool": 486,
+    "--smoke-native-virtual-nonlinear-curve": 491,
+    "--smoke-native-virtual-same-file-skip": 496,
+    "--smoke-melodyne-optimization-entry": 501,
+    "--smoke-native-virtual-multi-split": 506,
+    "--smoke-native-virtual-chain-extension": 511,
+    "--smoke-native-virtual-unavailable-group": 516,
+    "--smoke-native-virtual-shared-pitch-gesture": 521,
+    "--smoke-native-virtual-chain-shared": 526,
+    "--smoke-native-virtual-waveform-hash": 531,
+    "--smoke-native-virtual-export-parity": 536,
+    "--smoke-native-virtual-glide-audio": 541,
+    "--smoke-native-partial-cut-drag-gesture": 546,
+    "--real-partial-cut-drag": 551,
+    "--smoke-native-partial-cut-move": 559,
+    "--smoke-native-consonant-merge-detection": 564,
+    "--smoke-native-consonant-merge-model": 569,
+    "--smoke-native-consonant-merge-plan": 574,
+    "--smoke-native-virtual-connection-ui": 579,
+    "--smoke-native-logical-transition-registration": 584,
+    "--smoke-native-split-transition-detection": 589,
+    "--smoke-native-split-transition-mixer": 594,
+    "--smoke-native-split-transition-plan": 599,
+    "--smoke-native-virtual-auto": 604,
+    "--smoke-native-virtual-pitch-edit": 609,
+    "--smoke-native-virtual-move": 614,
+    "--smoke-native-virtual-pitch-request": 619,
+    "--smoke-native-virtual-pitch-plan": 624,
+    "--smoke-native-virtual-mixer": 629,
+    "--smoke-native-virtual-entrypoints": 634,
+    "--smoke-native-virtual-model": 639,
+    "--smoke-native-virtual-plan": 644,
+    "--smoke-native-source-edge-mixer": 649,
+    "--smoke-native-score-replacement-ui": 654,
+    "--smoke-native-score-material-replacement": 660,
+    "--smoke-translation-no-file": 665,
+    "--smoke-translation-file": 670,
+    "--export-translations": 675,
+    "--smoke-teio-transition-registration": 684,
+    "--smoke-native-transition-detection": 689,
+    "--smoke-native-source-trend": 694,
+    "--smoke-native-transition-shape": 699,
+    "--smoke-native-midi-material": 704,
+    "--smoke-native-material-appearance": 709,
+    "--smoke-native-note-clicks": 714,
+    "--smoke-native-force-connection-ui": 719,
+    "--smoke-native-force-connection": 725,
+    "--smoke-melodyne-timing": 730,
+    "--smoke-native-source-edge-plan": 736,
+    "--smoke-source-preview-ui": 741,
+    "--smoke-main-japanese-annotation": 747,
+    "--smoke-japanese-annotation-safety": 754,
+    "--smoke-japanese-auto-annotation": 759,
+    "--smoke-main-community-import": 766,
+    "--smoke-community-import-gui": 773,
+    "--smoke-registered-project-audio": 779,
+    "--smoke-registration-facts": 785,
+    "--smoke-main-material-variants": 790,
+    "--audit-project-material-registration": 796,
+    "--smoke-project-material-registration-model": 805,
+    "--smoke-project-material-registration": 810,
+    "--smoke-note-material-local-override": 815,
+    "--smoke-local-material-scope": 820,
+    "--smoke-connection-pitch-ui": 825,
+    "--smoke-host-pitch-projection": 830,
+    "--smoke-material-pronunciation-catalog": 835,
+    "--smoke-graph-pitch-edit-batch": 840,
+    "--smoke-overlap-selector": 845,
+    "--smoke-forced-portamento-audio": 850,
+    "--smoke-track-pitch-scope": 856,
+    "--smoke-forced-portamento": 861,
+    "--smoke-named-vowel": 866,
+    "--smoke-vowel-timing-audio": 871,
+    "--smoke-pronunciation-timing": 877,
+    "--smoke-adjacent-pronunciation": 882,
+    "--smoke-vowel-stretch-alignment": 887,
+    "--smoke-material-source-replacement": 892,
+    "--smoke-native-nsf-compatibility": 897,
+    "--smoke-native-workflow-e2e": 903,
+    "--smoke-material-topology-audio": 912,
+    "--smoke-midi-export-scope": 918,
+    "--smoke-unified-draw-action": 924,
+    "--smoke-main-source-replacement-ui": 930,
+    "--smoke-single-entry-ui": 938,
+    "--smoke-nsf-native-expression": 946,
+    "--smoke-material-topology": 954,
+    "--smoke-native-connection-graph": 960,
+    "--smoke-material-format-auto": 966,
+    "--smoke-unified-material-editor": 972,
+    "--smoke-material-insertion": 978,
+    "--smoke-material-asset-tree": 984,
+    "--smoke-material-annotation": 990,
+    "--smoke-material-binding": 996,
+    "--smoke-otto-material": 1002,
+    "--audit-hamood-keys": 1011,
+    "--smoke-hamood-utau": 1030,
+    "--smoke-hamood": 1036,
+    "--smoke-diffsinger-pitch-offset": 1043,
+    "--smoke-accompaniment-tempo": 1050,
+    "--smoke-accompaniment": 1066,
+    "--smoke-wav-export-options": 1073,
+    "--smoke-diffsinger-pitch-persistence": 1083,
+    "--reopen": 1087,
+    "--smoke-diffsinger-pitch-handles": 1091,
+    "--smoke-diffsinger-pitch-restore": 1097,
+    "--smoke-diffsinger-pitch-reference": 1104,
+    "--smoke-continuous-flag": 1110,
+    "--smoke-classic-flag-ui": 1117,
+    "--smoke-diffsinger-inference": 1126,
+    "--smoke-diffsinger-parameter-retake": 1132,
+    "--smoke-diffsinger-cache": 1139,
+    "--smoke-diffsinger-parameters": 1144,
+    "--smoke-diffsinger-expressions": 1149,
+    "--smoke-diffsinger-consonants": 1156,
+    "--smoke-diffsinger-timing": 1162,
+    "--smoke-diffsinger-ui": 1169,
+    "--smoke-diffsinger": 1178,
+    "--smoke-chinese-cvvc": 1185,
+    "--smoke-output-engine": 1193,
+    "--smoke-native-vibrato": 1202,
+    "--smoke-native-vibrato-render": 1213,
+    "--smoke-native-noise-option": 1219,
+    "--smoke-native-incremental": 1227,
+    "--smoke-native-shutdown": 1235,
+    "--smoke-native-noise": 1243,
+    "--smoke-wcs-nonloop": 1250,
+    "--smoke-hn-cache": 1257,
+    "--force": 1260,
+    "--smoke-hifisampler": 1264,
+    "--smoke-hifishifter-mel": 1264,
+    "--smoke-nsf-regions": 1273,
+    "--smoke-nsf-pitch-transitions": 1281,
+    "--smoke-voicebank-import": 1287,
+    "--smoke-voicebank-selection": 1293,
+    "--smoke-nsf-picker": 1302,
+    "--smoke-cross-region-editing": 1311,
+    "--smoke-hamood-persistence": 1311,
+    "--smoke-mou-to-jie": 1318,
+    "--smoke-oto-overlap": 1324,
+    "--smoke-modeless-oto": 1330,
+    "--smoke-oto-continuity": 1335,
+    "--smoke-native-envelope": 1340,
+    "--smoke-cvvc-layout-cache": 1345,
+    "--smoke-auto-crossfade": 1350,
+    "--smoke-pitch-point-selection": 1355,
+    "--smoke-point-group": 1360,
+    "--smoke-envelope-point-selection": 1365,
+    "--smoke-native-linked-envelope": 1370,
+    "--smoke-advanced-envelope": 1375,
+    "--smoke-advanced-envelope-panel": 1375,
+    "--smoke-playback-priority": 1380,
+    "--smoke-ust-fidelity": 1381,
+    "--smoke-project-safety": 1382,
+    "--smoke-normal-display": 1390,
+    "--smoke-note-hints": 1398,
+    "--smoke-clip-editor-scope": 1406,
+    "--smoke-empty-tuning-clip": 1414,
+    "--smoke-track-gain-envelope": 1422,
+    "--smoke-native-rendered-waveform": 1430,
+    "--smoke-native-note-move": 1437,
+    "--smoke-native-source-pitch-restore": 1443,
+    "--smoke-native-audio-overlap-focus": 1449,
+    "--smoke-native-audio-overlap": 1455,
+    "--smoke-native-linked-pitch": 1461,
+    "--smoke-source-breathiness": 1468,
+    "--smoke-native-unpitched-regions": 1475,
+    "--smoke-native-consonant-display": 1483,
+    "--smoke-native-pitch-visibility": 1490,
+    "--smoke-native-audio-link": 1496,
+    "--smoke-native-note-join": 1502,
+    "--smoke-native-trim-expand": 1507,
+    "--smoke-native-audio-trim": 1512,
+    "--smoke-native-audio-disconnect": 1518,
+    "--smoke-native-note-copy-paste": 1524,
+    "--smoke-native-import-performance": 1531,
+    "--smoke-native-source-pitch": 1538,
+    "--smoke-native-waveform-preview": 1546,
+    "--smoke-timeline-notes": 1554,
+    "--smoke-clip-gain-knob": 1562,
+    "--smoke-clip-merge": 1570,
+    "--smoke-timeline-selection": 1578,
+    "--smoke-clip-trim": 1586,
+    "--smoke-clip-split": 1595,
+    "--smoke-independent-zoom": 1604,
+    "--smoke-scroll-zoom": 1613,
+    "--preview-note-dance": 1622,
+    "--smoke-tempo-change": 1630,
+    "--smoke-timeline-pit": 1639,
+    "--mcp-live": 1645,
+    "--mcp-list-sessions": 1645,
+    "--session": 1648,
+    "--smoke-hifisampler-envelope": 1653,
+    "--smoke-nsf-project-note": 1659,
+    "--mcp": 1665,
+    "--roots": 1667,
+    "--smoke-oto-playback": 1679,
+    "--smoke-oto-editor": 1879,
+    "--click": 1990,
+    "--smoke-splice-envelope": 2002,
+    "--smoke-dialog-enter": 2112,
+    "--smoke-source-edit-view": 2170,
+    "--smoke-consonant-hold": 2232,
+    "--smoke-mou-panel-counts": 2452,
+    "--smoke-mou-consonant-ticks": 2543,
+    "--smoke-mou-boundary-drag": 2696,
+    "--smoke-prefix-map": 2785,
+    "--repair-mou-oto": 2826,
+    "--smoke-mou-oto-file": 2847,
+    "--smoke-utau-mode": 3046,
+    "--smoke-lane-marquee": 3186,
+    "--smoke-flag-lane": 3287,
+    "--smoke-keyboard-labels": 4148,
+    "--smoke-lane-labels": 4202,
+    "--smoke-export-targets": 4230,
+    "--smoke-audition-position": 4336,
+    "--smoke-lyric-envelope": 4378,
+    "--smoke-lyric-timing": 4450,
+    "--smoke-vibrato-bake": 4549,
+    "--smoke-mou-note-regions": 4662,
+    "--smoke-region-guides": 4948,
+    "--smoke-rest-playback": 5022,
+    "--smoke-rest-lyric": 5118,
+    "--smoke-missing-alias-piano": 5281,
+    "--smoke-flag-curve-mode": 5408,
+    "--smoke-flag-point-value": 5593,
+    "--smoke-flag-overlap": 5683,
+    "--smoke-load-timing": 5798,
+    "--smoke-flatten-pitch-line": 5911,
+    "--smoke-note-across-tracks": 6071,
+    "--smoke-clip-across-tracks": 6227,
+    "--smoke-reference-track": 6376,
+    "--smoke-native-pitch-seam": 6524,
+    "--smoke-native-pitch-points": 6596,
+    "--smoke-paste-at-pointer": 6820,
+    "--smoke-note-menu-split": 6963,
+    "--smoke-lyric-gate": 7145,
+    "--smoke-lyric-tab": 7242,
+    "--smoke-syllable-cuts": 7442,
+    "--smoke-single-syllable": 7624,
+    "--smoke-deleted-notes-silent": 7731,
+    "--smoke-delete-clip": 7878,
+    "--smoke-draw-unit": 7975,
+    "--smoke-new-track-draw": 8069,
+    "--smoke-draw-drag": 8178,
+    "--smoke-draw-overlap": 8350,
+    "--smoke-dropdown-arrow": 8536,
+    "--smoke-pitch-line": 8627,
+    "--smoke-view-menu": 8918,
+    "--inspect-melodyne-tracks": 9031,
+    "--smoke-melodyne-provider": 9042,
+    "--probe-melodyne-vst3-instance": 9067,
+    "--smoke-native-timing": 9079,
+    "--smoke-file-only-translation-ui": 9136,
+    "--smoke-gui198-layout": 9141,
+    "--smoke-integrated-ui": 9156,
+    "--smoke-integrated": 9165,
+    "--smoke-native-hjm": 9171,
+    "--smoke-batch-lyrics": 9238,
+    "--smoke-envelope-lanes": 9330,
+    "--smoke-wheel": 9389,
+    "--smoke-waveform-toggle": 9430,
+    "--smoke-envelope-base": 9540,
+    "--smoke-amplitude-waveform": 9861,
+    "--smoke-vibrato-end": 10319,
+    "--smoke-hanzi-pinyin": 10579,
+    "--smoke-shared-pitch-line": 10718,
+    "--smoke-waveform-alignment": 11376,
+    "--smoke-note-waveform": 11575,
+    "--smoke-utau-waveform": 11881,
+    "--smoke-voicebank-index": 12055,
+    "--smoke-ust-pitch": 12521,
+    "--low": 12826,
+    "--smoke-hf-daemon-owner": 12945,
+    "--quit": 12953,
+    "--smoke-hf-prewarm": 12958,
+    "--smoke-ust-vibrato": 13091,
+    "--smoke-mcp-roots": 13336,
+    "--smoke-mcp-schema": 13443,
+    "--smoke-dragged-transition": 13608,
+    "--smoke-forward-bend": 13831,
+    "--smoke-midi-track-import": 14003,
+    "--smoke-midi-export": 14332,
+    "--sounding": 14457,
+    "--still": 14589,
+    "--smoke-ust-import": 14625,
+    "--smoke-ust-encoding": 14766,
+    "--smoke-ust": 14918,
+    "--smoke-active-resampler": 15123,
+    "--smoke-bundled-resampler": 15168,
+    "--smoke-anchor-frequency": 15226,
+    "--smoke-note-oto": 15412,
+    "--smoke-prefix-jie": 15842,
+    "--smoke-prefix-note": 15996,
+    "--smoke-utau-overlap": 16353,
+    "--smoke-note-stp": 16668,
+    "--smoke-track-toggle-tips": 16907,
+    "--smoke-track-area-menu": 17154,
+    "--smoke-stretch-items": 17255,
+    "--smoke-render-order": 17307,
+    "--smoke-llsm2-length": 17439,
+    "--smoke-glide-seam": 17491,
+    "--smoke-native-envelope-base": 17555,
+    "--smoke-nsf-utau-phrase": 17639,
+    "--smoke-nsf-utau-synth": 17671,
+    "--smoke-nsf-utau-f0": 17719,
+    "--smoke-nsf-utau-mix": 17764,
+    "--smoke-nsf-utau-plan": 17829,
+    "--smoke-render-capability": 17886,
+    "--smoke-oto-hjm-discipline": 17937,
+    "--smoke-asset-register-dir": 18007,
+    "--smoke-oto-audio": 18051,
+    "--smoke-asset-audio": 18064,
+    "--smoke-project-voicebank-assets": 18078,
+    "--smoke-asset-search": 18084,
+    "--smoke-asset-manager": 18093,
+    "--smoke-gap-menu": 18218,
+    "--smoke-insert-gap": 18337,
+    "--smoke-ripple-delete": 18453,
+    "--smoke-paste-notes": 18542,
+    "--smoke-consonant-edge": 18718,
+    "--smoke-consonant-reset": 18874,
+    "--smoke-region-split": 18981,
+    "--smoke-vibrato-presets": 19073,
+    "--smoke-follow-rule": 19143,
+    "--smoke-play-until": 19215,
+    "--smoke-flags-field": 19274,
+    "--smoke-vertical-drag": 19339,
+    "--smoke-scroll-sync": 19432,
+    "--smoke-edit-follow": 19513,
+    "--smoke-note-drag-threshold": 19613,
+    "--smoke-roll-drag": 19688,
+    "--smoke-playhead-band": 19819,
+    "--smoke-roll-cull": 19872,
+    "--smoke-roll-timing": 19945,
+    "--smoke-envelope-shapes": 19991,
+    "--smoke-envelope-presets": 20308,
+    "--smoke-piano-roll": 20324,
+    "--render-project": 20372,
+    "--inspect-project": 20501,
+    "--inspect-settings": 20537,
+    "--smoke-oto-spectrum": 20564,
+    "--smoke-game-defaults": 20571,
+    "--inspect-analysis": 20577,
+    "--inspect-fcpe": 20599,
+    "--smoke-export": 20625,
+    "--smoke-mld5": 20655,
+    "--smoke-utau-selection": 20748,
+    "--smoke-utau-voicebank": 20862,
+    "--smoke-utau": 20945,
+    "--inspect-midi": 21031,
+    "--inspect-audio": 21054,
+    "--import-mpd": 21089,
+    "--auto-merge-consonants": 21096,
+    "--auto-virtual-connections": 21097,
+    "--auto-virtual-pitch": 21098,
+    "--no-register-transitions": 21099,
+    "--recursive-media": 21100,
+    "--inspect-mpd-split-transitions": 21124,
+    "--inspect-mpd-joins": 21178,
+    "--inspect-mpd": 21185
   },
   "source_files": [
     {
-      "file": "juce/src/AccompanimentTempo.cpp",
+      "file": "src/AccompanimentTempo.cpp",
       "lines": 134,
       "bytes": 7481,
       "sha256": "8ca3ec073f08732517c6375fc9cef2b711e923081c7d65bb4d0b832388163db1"
     },
     {
-      "file": "juce/src/AccompanimentTempo.h",
+      "file": "src/AccompanimentTempo.h",
       "lines": 29,
       "bytes": 954,
       "sha256": "67bbe5edda33ca767dac27241fb20bec2ae3eb0e85cfb1ce3b94a1e494642767"
     },
     {
-      "file": "juce/src/AccompanimentTempoPanel.h",
+      "file": "src/AccompanimentTempoPanel.h",
       "lines": 76,
       "bytes": 3721,
       "sha256": "36bc02314693d303d842a94982cedf09346ee83d5d1b57a3ce0457cd37e0cc6a"
     },
     {
-      "file": "juce/src/AdvancedEnvelopePanel.h",
-      "lines": 665,
-      "bytes": 53907,
-      "sha256": "3a64b668f92bcfcfeafa9c013523b54de970f316474ca2f38d544452b22c9212"
+      "file": "src/AdvancedEnvelopePanel.h",
+      "lines": 666,
+      "bytes": 53915,
+      "sha256": "50806a7f1cd6b6febc39ead09251168a9f74c2ac0c4cd85258e61f015c3eada9"
     },
     {
-      "file": "juce/src/AssetManagerComponent.cpp",
-      "lines": 1281,
-      "bytes": 56457,
-      "sha256": "5eb39e1ecfd65d3b44aab296ddf9dcf9df51e65a39684e3ff557b67e4b1d0cf9"
+      "file": "src/AssetManagerComponent.cpp",
+      "lines": 1865,
+      "bytes": 92011,
+      "sha256": "dde2f6db561b43488beecd0ed6de3a2451c4435e5b848e895b94d0b4838dd5f3"
     },
     {
-      "file": "juce/src/AssetManagerComponent.h",
-      "lines": 167,
-      "bytes": 8721,
-      "sha256": "5408b4ac6b9505e07b2d82c71915da2dfb9f883d20cd08eb5d1149f8a110d37c"
+      "file": "src/AssetManagerComponent.h",
+      "lines": 289,
+      "bytes": 17256,
+      "sha256": "5ad414c9b30b0200a2eb474490177eaa023177926df4e34dc0ebc141db77e464"
     },
     {
-      "file": "juce/src/AudioEngine.cpp",
-      "lines": 3586,
-      "bytes": 193491,
-      "sha256": "3fb8e6d0177d03d360aad6e29e7245e69b1ba27fbe95ae82b9f49d39b45c9db1"
+      "file": "src/AudioEngine.cpp",
+      "lines": 4395,
+      "bytes": 256988,
+      "sha256": "966340a1d1ce2566426a738c37dadcdad7012f89d444225b9a37e9cd84a7f728"
     },
     {
-      "file": "juce/src/AudioEngine.h",
-      "lines": 352,
-      "bytes": 19620,
-      "sha256": "a4a008b2023021973281ad5b0ce0acbfac4f1b5880c397e8546efa649a41dd61"
+      "file": "src/AudioEngine.h",
+      "lines": 435,
+      "bytes": 24553,
+      "sha256": "ad161dae505273345174d4a30176aa83c6c217ad2b92d36bb53e0ef51c31cb3e"
     },
     {
-      "file": "juce/src/backend/AdvancedEnvelope.h",
-      "lines": 122,
-      "bytes": 7358,
-      "sha256": "f243f1d80df9a3610761f6244b09482f1174d53e0ce41ff1bfc6449eae351c2e"
-    },
-    {
-      "file": "juce/src/backend/AmplitudeEnvelopeCurve.h",
-      "lines": 53,
-      "bytes": 2378,
-      "sha256": "779874b68f85d0b919633318cc19a8be7416c34169eac27c727daa32bd9d09d5"
-    },
-    {
-      "file": "juce/src/backend/AnalysisService.cpp",
-      "lines": 437,
-      "bytes": 20096,
-      "sha256": "fa8647a5f7286208d5422ce43651ddcfce9d4d01361313be7e108f398eb6c0ab"
-    },
-    {
-      "file": "juce/src/backend/AnalysisService.h",
-      "lines": 70,
-      "bytes": 2709,
-      "sha256": "eede18e10cb041c3ef7014ab8ef87c831f25aae90b45859c01bf4c441b7b4856"
-    },
-    {
-      "file": "juce/src/backend/AudioFileReader.cpp",
-      "lines": 91,
-      "bytes": 3778,
-      "sha256": "4a8442dabe59a3a30b04cd518938ff35b07e758060b1f9464f8588149694e81d"
-    },
-    {
-      "file": "juce/src/backend/AudioFileReader.h",
-      "lines": 10,
-      "bytes": 261,
-      "sha256": "c96886af354f0b4a1383511b0eca10506cac39716a32b1ca68f1623f75e47ccd"
-    },
-    {
-      "file": "juce/src/backend/ChineseCvvcPhonemizer.h",
-      "lines": 470,
-      "bytes": 25457,
-      "sha256": "09190447dd847be6ac541d71e9b091d53c1ad6bbed27b0e01af67c548cd4b65f"
-    },
-    {
-      "file": "juce/src/backend/CvvcEnvelope.h",
-      "lines": 143,
-      "bytes": 7526,
-      "sha256": "4aee01a05f284a902e8851003046f34a26ac6f5e7673af98b73624160b2c2f71"
-    },
-    {
-      "file": "juce/src/backend/CvvcPhonemeCache.h",
-      "lines": 73,
-      "bytes": 3709,
-      "sha256": "1c0e664b9efe8121c6290c74d95d73732c573661c69722fbf96aba4a874d1b2c"
-    },
-    {
-      "file": "juce/src/backend/CvvcTiming.h",
-      "lines": 56,
-      "bytes": 2242,
-      "sha256": "ecf01cbec58985883a1531f38649fa3450f6a473f151eda3351a3d71bcae8f35"
-    },
-    {
-      "file": "juce/src/backend/DiffSingerOptions.h",
-      "lines": 53,
-      "bytes": 2573,
-      "sha256": "3a32adda447c03ce14bcbfd7ce0a52b6cd31c58ceed5ef55e57410fca4ca4924"
-    },
-    {
-      "file": "juce/src/backend/DiffSingerProjectCache.h",
-      "lines": 154,
-      "bytes": 9789,
-      "sha256": "643f115a28169e07699a4ac9232144b6b6ebfe521fd3d45c605755395012d07d"
-    },
-    {
-      "file": "juce/src/backend/DiffSingerRenderer.cpp",
-      "lines": 363,
-      "bytes": 17908,
-      "sha256": "02fefc855b07e650fe18a54bb6e336d730ba5f43f4ec7f655e0fceebd3eb5db4"
-    },
-    {
-      "file": "juce/src/backend/DiffSingerRenderer.h",
-      "lines": 24,
-      "bytes": 955,
-      "sha256": "2739ac254462ea02b6b7ef0a49005524b6a49221800f6f0f0401f869603959b7"
-    },
-    {
-      "file": "juce/src/backend/DiffSingerTiming.h",
-      "lines": 26,
-      "bytes": 897,
-      "sha256": "635f38e49cc44153b7e91723aca2fa956288f4d366a65e1ed26516bc9b9a8149"
-    },
-    {
-      "file": "juce/src/backend/FcpeAnalyzer.cpp",
-      "lines": 400,
-      "bytes": 17165,
-      "sha256": "4b046ccb742e1c4e15bb277e56e6e1b02f1ac58fcdb533850552415b064e1b6d"
-    },
-    {
-      "file": "juce/src/backend/FcpeAnalyzer.h",
-      "lines": 26,
-      "bytes": 742,
-      "sha256": "033c35cdb617d9b01cee190dce5ba61aa8aea8cf01a81614d88d0f38ddd36788"
-    },
-    {
-      "file": "juce/src/backend/GameAnalyzer.cpp",
-      "lines": 697,
-      "bytes": 31991,
-      "sha256": "507a53994c83f77430614d23a89972a51cb74a2214b896fe7b95fe08c2ccc3a2"
-    },
-    {
-      "file": "juce/src/backend/GameAnalyzer.h",
-      "lines": 35,
-      "bytes": 922,
-      "sha256": "6c054c2f4747b7b3841c97944e20332f6b694f5a164e564b2259244c51a520bd"
-    },
-    {
-      "file": "juce/src/backend/HifisamplerDsp.inc",
-      "lines": 587,
-      "bytes": 35494,
-      "sha256": "d8c90e115830d8db8c8be03e257a55d0c1c63bce82c5b9f768e1b572fe933576"
-    },
-    {
-      "file": "juce/src/backend/HifisamplerFlags.h",
-      "lines": 120,
-      "bytes": 5672,
-      "sha256": "7733b01317eae90f5f4c75dbd855a1531e3fb94b226511f3a8c5979a43769e15"
-    },
-    {
-      "file": "juce/src/backend/HnsepDiskCache.inc",
-      "lines": 97,
-      "bytes": 4913,
-      "sha256": "b2d7fe3c2788b84a3959320df036d092eb484b3318f95c58f5bcfae0c7644864"
-    },
-    {
-      "file": "juce/src/backend/LegacyTextCodec.h",
-      "lines": 142,
-      "bytes": 10567,
-      "sha256": "0962ea9bec930a45a0c2ff378d21a4be9f38c508c4553ace88c807de15f50706"
-    },
-    {
-      "file": "juce/src/backend/LiveMcpBridge.cpp",
-      "lines": 164,
-      "bytes": 8564,
-      "sha256": "9e402fc2d4864b42d607ea05064b70bf6fe38b84f90708e3a70578a9eb611728"
-    },
-    {
-      "file": "juce/src/backend/LiveMcpBridge.h",
-      "lines": 27,
-      "bytes": 882,
-      "sha256": "87b38f477e61e577abd30fa05af7e906a60a4ff2ae72d8413f1de6fda3eee342"
-    },
-    {
-      "file": "juce/src/backend/Llsm2Renderer.cpp",
-      "lines": 374,
-      "bytes": 19428,
-      "sha256": "f115e4fcceb808ce2717a8958a9f8c1add3ca2314e7e5df0f1c0c213e547ff16"
-    },
-    {
-      "file": "juce/src/backend/Llsm2Renderer.h",
-      "lines": 27,
-      "bytes": 903,
-      "sha256": "d3a54b15265aee8dc8a359defa2cf445636b7b73e90556117e04e81ac59168d1"
-    },
-    {
-      "file": "juce/src/backend/McpServer.cpp",
-      "lines": 2066,
-      "bytes": 118341,
-      "sha256": "0b8122513716df482ed923c80ef819a805cab0f17af66f84d24df238b114d182"
-    },
-    {
-      "file": "juce/src/backend/McpServer.h",
-      "lines": 67,
-      "bytes": 3382,
-      "sha256": "e8db23247ccdfdbcb079eb905d514b6c37b0fb2593b95cdd3fcc51bc61894a4b"
-    },
-    {
-      "file": "juce/src/backend/MelodyneImporter.cpp",
-      "lines": 1050,
-      "bytes": 54283,
-      "sha256": "725d5be60f1cd68eb6ad2f1067b244a3f2c8da0512d6e7f01b844cd8195a25fd"
-    },
-    {
-      "file": "juce/src/backend/MelodyneImporter.h",
-      "lines": 47,
-      "bytes": 1480,
-      "sha256": "fbf8f21e895b09088c7b8228f69afd12c9deb606fc40042d245fe38b36c40f68"
-    },
-    {
-      "file": "juce/src/backend/MelodyneProvider.cpp",
-      "lines": 153,
-      "bytes": 5112,
-      "sha256": "a51272337115dda33acf51034f0ab6392d48b8e0b1b00aec3d5f205a3c19c298"
-    },
-    {
-      "file": "juce/src/backend/MelodyneProvider.h",
-      "lines": 54,
-      "bytes": 1853,
-      "sha256": "215eb3cb5eff68c4c743dc68dbb1260331f1432fa5ab766238c97c7e73e2e1ed"
-    },
-    {
-      "file": "juce/src/backend/MixedEnvelopeIO.h",
-      "lines": 50,
-      "bytes": 2631,
-      "sha256": "ebc4043f61efd5cdbc302f21520846019a666afa5afb72e65c347d33676065ba"
-    },
-    {
-      "file": "juce/src/backend/Mld3Renderer.cpp",
-      "lines": 285,
-      "bytes": 14028,
-      "sha256": "52b69847e6e0c2ce13bcf8d69bf7d20225b96e33159255c96a63740730b56dd7"
-    },
-    {
-      "file": "juce/src/backend/Mld3Renderer.h",
-      "lines": 39,
-      "bytes": 1428,
-      "sha256": "ec5a67fdd777aad66d26ec5d8deb354cb09141d2775177f2aa4c9d75ddd4f6f9"
-    },
-    {
-      "file": "juce/src/backend/Mld5Renderer.cpp",
-      "lines": 847,
-      "bytes": 42206,
-      "sha256": "3140321e7ba26918445609c591fb917634344a50f696098f0f26fb722dc458c4"
-    },
-    {
-      "file": "juce/src/backend/Mld5Renderer.h",
-      "lines": 45,
-      "bytes": 1633,
-      "sha256": "4ef66291195e4125add342565825d35f4edb322695e51b090238831b599c6edf"
-    },
-    {
-      "file": "juce/src/backend/NativeAnalyzer.cpp",
-      "lines": 516,
-      "bytes": 23633,
-      "sha256": "941a0dd25427b2bbebdb231baf39093e90d1a8dd0d0339a8d9d2e8a87bb20223"
-    },
-    {
-      "file": "juce/src/backend/NativeAnalyzer.h",
-      "lines": 36,
-      "bytes": 1630,
-      "sha256": "bc7789a26210cbd88063c176d7ca3436bc6f0666125998e2c90654d1c36cb05b"
-    },
-    {
-      "file": "juce/src/backend/NativeEnvelope.h",
-      "lines": 95,
-      "bytes": 6657,
-      "sha256": "e70a60f79a4d0e74b29d18da9cc014e50f51bd91819b89a6feb1d7d432bd4e5c"
-    },
-    {
-      "file": "juce/src/backend/NsfHifiganRenderer.cpp",
-      "lines": 2039,
-      "bytes": 103896,
-      "sha256": "746666efaebf8762b72c82826381e3acbacd0c4d6f534e9ecb96d76d32b2fb2e"
-    },
-    {
-      "file": "juce/src/backend/NsfHifiganRenderer.h",
-      "lines": 199,
-      "bytes": 8618,
-      "sha256": "ab56eff6854a4f570a1550a7a7f0d4b69973139c9ea564373cbb9da472263f4d"
-    },
-    {
-      "file": "juce/src/backend/NsfRenderChunkCache.h",
-      "lines": 61,
-      "bytes": 2201,
-      "sha256": "4484e6ddcbf6d4849a196d897898707479e55f57ce7c5107dc6fb7096ac6e1b4"
-    },
-    {
-      "file": "juce/src/backend/OrtExecution.cpp",
-      "lines": 71,
-      "bytes": 2966,
-      "sha256": "cab00ddffd715419d48357b7ef2d8a6173beb9dcbe719d49eacc3818fc1cca14"
-    },
-    {
-      "file": "juce/src/backend/OrtExecution.h",
-      "lines": 35,
-      "bytes": 938,
-      "sha256": "03bfaa81d2d4e950eff18d6beb80e93c8646ff9a4aa0fc8aea228675ec8daa29"
-    },
-    {
-      "file": "juce/src/backend/OtoAudioAnalysis.cpp",
-      "lines": 223,
-      "bytes": 10630,
-      "sha256": "403ad26d39732ed8941d6a029f7abfddc73f9c45b2fed50f24f197e9faa3a4f8"
-    },
-    {
-      "file": "juce/src/backend/OtoAudioAnalysis.h",
-      "lines": 40,
-      "bytes": 1156,
-      "sha256": "8078e0e975d37a62323f49cc8491e463dd3e0cb26644b331dbf76a6c87cc8bdc"
-    },
-    {
-      "file": "juce/src/backend/PlaybackRenderPriority.h",
-      "lines": 54,
-      "bytes": 1864,
-      "sha256": "4988da2f93999a5d1bf68312989d6aeb07ef0186958d1263efab8a9c0c59c6ba"
-    },
-    {
-      "file": "juce/src/backend/PlaybackRenderQueue.h",
-      "lines": 158,
-      "bytes": 6235,
-      "sha256": "9cbc2a75ad1b5603c788ddff68c50bf4ec48d1af68e7fe12f3b7f87006da658e"
-    },
-    {
-      "file": "juce/src/backend/RenderService.cpp",
-      "lines": 1174,
-      "bytes": 61475,
-      "sha256": "5a8a9bff87771618af70e8c89438e2ac676f150c41d72913e7fd83eedc3d8121"
-    },
-    {
-      "file": "juce/src/backend/RenderService.h",
-      "lines": 115,
-      "bytes": 4568,
-      "sha256": "35f0ea6d03596e151887e67dc539bc99a74bdf47bd6e3b4b2ce5da3253bab79e"
-    },
-    {
-      "file": "juce/src/backend/SourceBreathiness.h",
-      "lines": 140,
-      "bytes": 8055,
-      "sha256": "ef077143ba0eb67c63fd416d403ad05a9f9db7e8ab4664e921cfd0456c60809c"
-    },
-    {
-      "file": "juce/src/backend/SourceVoicing.h",
-      "lines": 105,
-      "bytes": 5082,
-      "sha256": "4038c84d972a1a0bc5ef48ad437046cf257ba3ddeb8556b237d3dad51cdae6ea"
-    },
-    {
-      "file": "juce/src/backend/TailFadeSettings.h",
-      "lines": 114,
-      "bytes": 5834,
-      "sha256": "a7bfe56cea06a708773c6ecbe46bbff7ff18b33a437a31e5959b1a8e131ec363"
-    },
-    {
-      "file": "juce/src/backend/UstExchange.h",
-      "lines": 204,
-      "bytes": 17772,
-      "sha256": "b1c2f162f62772bb2f651ded8b55c685ff7afa71811d1268003dc6603586c4e6"
-    },
-    {
-      "file": "juce/src/backend/UstImporter.cpp",
-      "lines": 405,
-      "bytes": 16193,
-      "sha256": "c3623b2e992325a91c3bd2e3b8fa62577c1f8c0ec347f689b4b2df8baa221bf9"
-    },
-    {
-      "file": "juce/src/backend/UstImporter.h",
-      "lines": 133,
-      "bytes": 6023,
-      "sha256": "cbad1ba0ae7f8b380990c07ba6357d6f01014220d25ac009e6d273797193519a"
-    },
-    {
-      "file": "juce/src/backend/UstText.h",
-      "lines": 68,
-      "bytes": 3016,
-      "sha256": "fcdc064d0a422b56ead3a0aeb6d6a0de54e6f80f020491524c5f05a3d6e50452"
-    },
-    {
-      "file": "juce/src/backend/UtauMixEnvelope.h",
-      "lines": 69,
-      "bytes": 2917,
-      "sha256": "10155ec2208b53857d0081cd6057d7494e6c1145a7d5bde3b8343391690c1a0f"
-    },
-    {
-      "file": "juce/src/backend/UtauOtoOverride.h",
-      "lines": 49,
-      "bytes": 1912,
-      "sha256": "60cae7ae73f3c1821b47483f72e9a6b4d0b30a8949a0ad72003b910710fbb04c"
-    },
-    {
-      "file": "juce/src/backend/UtauRenderer.cpp",
-      "lines": 2747,
-      "bytes": 133023,
-      "sha256": "88150a10af2b1f4596c2bc352d342f2a2575a865b4dc7d3829da155f17209cee"
-    },
-    {
-      "file": "juce/src/backend/UtauRenderer.h",
-      "lines": 378,
-      "bytes": 20152,
-      "sha256": "5dabbee9dcaa40c3f9e56bac5a31172bea374fba05774d5420e8059fc905ead8"
-    },
-    {
-      "file": "juce/src/backend/WcsNonLoopFeatures.cpp",
-      "lines": 358,
-      "bytes": 17858,
-      "sha256": "22f2dfe5443254e638de3b3e475cc2833671cec451c1ba8b5896d8a53e388065"
-    },
-    {
-      "file": "juce/src/backend/WcsNonLoopFeatures.h",
-      "lines": 40,
-      "bytes": 1407,
-      "sha256": "81774d631bc7fb41442bcb3aae79577e7ac8b1021bcf4432af34e37aaa267002"
-    },
-    {
-      "file": "juce/src/backend/WorldRenderer.cpp",
-      "lines": 241,
-      "bytes": 13055,
-      "sha256": "4ec0b920805ac845b663c73983998c6086743e5529847f035dfc840e1f9666e4"
-    },
-    {
-      "file": "juce/src/backend/WorldRenderer.h",
-      "lines": 28,
-      "bytes": 704,
-      "sha256": "41a34859726d69c9dd0ee25c79c4ae20fbfd40a894be74a5372c06eecadc551c"
-    },
-    {
-      "file": "juce/src/ClipParts.h",
+      "file": "src/ClipParts.h",
       "lines": 157,
       "bytes": 8467,
       "sha256": "b60d1b8e6c4397bd54107afcfe096ef249d3798a946c975d245d0047fb797456"
     },
     {
-      "file": "juce/src/DiffSingerParameterCurves.h",
+      "file": "src/CommunityDatasetIO.cpp",
+      "lines": 441,
+      "bytes": 26732,
+      "sha256": "27b47c6c25137ea63a8d78aafea9f38a770f4816f4191f92aec2509e9a12509c"
+    },
+    {
+      "file": "src/CommunityDatasetIO.h",
+      "lines": 107,
+      "bytes": 4490,
+      "sha256": "fdd59516cde3c8dd9c7dbfe81a735ea639821dde1dbdf73b351111b351d42a65"
+    },
+    {
+      "file": "src/CommunityDatasetImportDialog.cpp",
+      "lines": 498,
+      "bytes": 30566,
+      "sha256": "3d091e5d01f17477da78b8e1048a1453f2e5b651813d3f504756459b122dba06"
+    },
+    {
+      "file": "src/CommunityDatasetImportDialog.h",
+      "lines": 63,
+      "bytes": 3092,
+      "sha256": "a007a4e5060672635297a13c5e496f2a04413294a77aa2ea14eb3efa87031104"
+    },
+    {
+      "file": "src/DiffSingerParameterCurves.h",
       "lines": 63,
       "bytes": 3407,
       "sha256": "7ded3f0180babf53d27654c3fe0a436127ab9f5bd899d598004c717e7b618c88"
     },
     {
-      "file": "juce/src/DiffSingerPhonemeDisplay.h",
+      "file": "src/DiffSingerPhonemeDisplay.h",
       "lines": 13,
       "bytes": 430,
       "sha256": "94ce570ae807359ba09ccaa806ced971446eea5525dc412b6bbfaf2302fe62ac"
     },
     {
-      "file": "juce/src/DiffSingerPhonemeEditor.h",
-      "lines": 380,
-      "bytes": 21197,
-      "sha256": "44522ecf9372768a00ab3c22196f78c7c98bd21e7c8555585aa5ae6b40c532af"
+      "file": "src/DiffSingerPhonemeEditor.h",
+      "lines": 382,
+      "bytes": 21216,
+      "sha256": "45773143ce51340548c184224c0c06ac1241b0483297d3ad703a901149148dd6"
     },
     {
-      "file": "juce/src/DiffSingerPitchHandles.h",
+      "file": "src/DiffSingerPitchHandles.h",
       "lines": 88,
       "bytes": 4609,
       "sha256": "087057fc789112bd591e9c71ebd2adee12562232a345d80bbfa44d023c554990"
     },
     {
-      "file": "juce/src/DiffSingerPitchRestore.h",
+      "file": "src/DiffSingerPitchRestore.h",
       "lines": 89,
       "bytes": 5196,
       "sha256": "6a2bee57ad554e24d4693f0dc121589d576c82f44dbf77826aa600c5341e547a"
     },
     {
-      "file": "juce/src/DiffSingerPronunciationEditor.h",
-      "lines": 131,
-      "bytes": 7577,
-      "sha256": "ee38f836b4afdcb262e7c481b5e58934be0de15fd747cb9e4969d0c2414f9835"
+      "file": "src/DiffSingerPronunciationEditor.h",
+      "lines": 133,
+      "bytes": 7504,
+      "sha256": "edac3497de6282c79cd01b90dab1abef1be7b638e29cb0962ffb829b4b56fab5"
     },
     {
-      "file": "juce/src/DiffSingerRequest.h",
+      "file": "src/DiffSingerRequest.h",
       "lines": 39,
       "bytes": 1862,
       "sha256": "6a0bd6e3c45c267d2131ddca1952b4bcc3b86d837fdc8685fa7a1243d84c4f68"
     },
     {
-      "file": "juce/src/FlagCurveDrawing.h",
+      "file": "src/FlagCurveDrawing.h",
       "lines": 65,
       "bytes": 2925,
       "sha256": "37c23908f5a4cc734d43b8d10136d6f0e36080748b43da9b1a00ad84cfa0acec"
     },
     {
-      "file": "juce/src/Hamood.cpp",
+      "file": "src/Hamood.cpp",
       "lines": 458,
       "bytes": 27377,
       "sha256": "d359b45b8f9eaa677b348d9a7bc96625913889cb11b86cd3bbb7a42945425f8f"
     },
     {
-      "file": "juce/src/Hamood.h",
+      "file": "src/Hamood.h",
       "lines": 64,
       "bytes": 2265,
       "sha256": "469e540f2d4c27c0ea144dacc5b48f3b6106983441dde72f67e4d06a7763a169"
     },
     {
-      "file": "juce/src/HamoodAudio.h",
+      "file": "src/HamoodAudio.h",
       "lines": 171,
       "bytes": 12773,
       "sha256": "572aab28f7f2ec248fe2211fdbbbebb65f62a6c4320a6526e2c1df52c1ee9490"
     },
     {
-      "file": "juce/src/HamoodProject.h",
+      "file": "src/HamoodProject.h",
       "lines": 152,
       "bytes": 10912,
       "sha256": "10f112f6de55de284aa1a178b7cc46dc936ebf3018513eb79cbbc21d51efea3d"
     },
     {
-      "file": "juce/src/HamoodTimelinePanel.h",
-      "lines": 110,
-      "bytes": 10913,
-      "sha256": "77d8cd79d5193fbd33eb2b598a59270e1fdd63eca5a242b818cb24b70325aceb"
+      "file": "src/HamoodTimelinePanel.h",
+      "lines": 112,
+      "bytes": 10781,
+      "sha256": "5cfcd43b7947a6c1e3d5b8173ec1b4f69adf896c04adb15123f5b768a3b5d39e"
     },
     {
-      "file": "juce/src/I18n.cpp",
-      "lines": 469,
-      "bytes": 83971,
-      "sha256": "d5d33ff55d0416e1b3b46f24b0335d21ad828dcc88d3a0267b852b3b49774447"
+      "file": "src/I18n.cpp",
+      "lines": 205,
+      "bytes": 12459,
+      "sha256": "f77dbb21bb298fadbea39405db3733beaa129c401c02dce8e9679c651cd9a7d3"
     },
     {
-      "file": "juce/src/I18n.h",
-      "lines": 21,
-      "bytes": 446,
-      "sha256": "a526915f1ef9dcc0910b9524d825ce1285a0e60689e08f9499ce4a6c5b91cd0e"
+      "file": "src/I18n.h",
+      "lines": 47,
+      "bytes": 2386,
+      "sha256": "e040738895e5ba9623e81cfe6ca727c75d1c82048e47ced7983ca7582e2eff9e"
     },
     {
-      "file": "juce/src/Main.cpp",
-      "lines": 20297,
-      "bytes": 1181879,
-      "sha256": "8dcefdbd7e7acc61dfbd3784d9d059a734ba30b8c88d2531635aed4aea099861"
+      "file": "src/JapaneseAnnotationBatch.cpp",
+      "lines": 129,
+      "bytes": 8218,
+      "sha256": "8c5258da334b2fac52f522c63031a8e68c9a699d6373ad8aeb699a32fb7f95a5"
     },
     {
-      "file": "juce/src/MainComponent.cpp",
-      "lines": 6391,
-      "bytes": 314354,
-      "sha256": "7b10de8adb5cbdce0888363668069d746ebdbf830991c84d26e42abd11c3092e"
+      "file": "src/JapaneseAnnotationBatch.h",
+      "lines": 42,
+      "bytes": 1803,
+      "sha256": "5bbc4a9fce9f41fe1e3f9a3b57049e74890a1de710914565b25c4928b21642f8"
     },
     {
-      "file": "juce/src/MainComponent.h",
-      "lines": 812,
-      "bytes": 44059,
-      "sha256": "698fb8855280c02899dca70e5431c4fa95f22ce41aac2d2909f32515e108953c"
+      "file": "src/JapaneseAutoAnnotation.cpp",
+      "lines": 252,
+      "bytes": 15419,
+      "sha256": "736e8d58645de7211c671cf3f0af090e998d65091c586206cbb6c86552a8c196"
     },
     {
-      "file": "juce/src/MainComponentDiffSinger.cpp",
-      "lines": 595,
-      "bytes": 37462,
-      "sha256": "ff56745bdf9390f0bb803032c085cf3cb8d081a001fabb319974f85fab58eae1"
+      "file": "src/JapaneseAutoAnnotation.h",
+      "lines": 58,
+      "bytes": 2868,
+      "sha256": "c1163ae2b36f3a61472bfc6eddb9cac6a837e76303d0cbb51c0014bc0d438791"
     },
     {
-      "file": "juce/src/MainComponentHamood.cpp",
-      "lines": 390,
-      "bytes": 34277,
-      "sha256": "2dec51e2ad07976256752b6365f3f7b518b5527f953b0a022b333d1d42d250c5"
+      "file": "src/JapaneseAutoAnnotationDialog.cpp",
+      "lines": 312,
+      "bytes": 24591,
+      "sha256": "0662caa87a22705e7bb3a34bb90dd518560eab56cc3288b1b74c3a320c611329"
     },
     {
-      "file": "juce/src/MainComponentMcp.cpp",
+      "file": "src/JapaneseAutoAnnotationDialog.h",
+      "lines": 59,
+      "bytes": 2558,
+      "sha256": "18af6a57181f94887485743c2adcc4c6cd2cdf28cdb7d2c6834c8e97a77ca9d3"
+    },
+    {
+      "file": "src/LegacyNativeSourceUsage.h",
+      "lines": 55,
+      "bytes": 3849,
+      "sha256": "782e5c155ba2474a4601578028926cfc6297a2bad4ebee119aa00a9f4e3f7f78"
+    },
+    {
+      "file": "src/Main.cpp",
+      "lines": 21375,
+      "bytes": 1250500,
+      "sha256": "3d24611e44b03e0cee749b6c018f587bde3152fe59b23975315e4be0bd33f2e9"
+    },
+    {
+      "file": "src/MainCommunityDatasetImport.cpp",
+      "lines": 258,
+      "bytes": 14286,
+      "sha256": "97c15e96bcf2e182f25af69463d71582a445f7b0c46548c0beb9e5e780d6451b"
+    },
+    {
+      "file": "src/MainComponent.cpp",
+      "lines": 7215,
+      "bytes": 384896,
+      "sha256": "9de45f7a4c55c7ed3e02652246c82d1f8ddbaf11f8f94d965ba70693a82817f4"
+    },
+    {
+      "file": "src/MainComponent.h",
+      "lines": 962,
+      "bytes": 55211,
+      "sha256": "ff9a9e6d6ec4632b5fe80ab4a18c8ee0178eb6f242172e8acbb5ab32cbfce70d"
+    },
+    {
+      "file": "src/MainComponentDiffSinger.cpp",
+      "lines": 607,
+      "bytes": 37269,
+      "sha256": "498a8f3a67f9be2b86c38592b39918ef9e5ddd5e9671e31e7e0d25268ac47b0d"
+    },
+    {
+      "file": "src/MainComponentHamood.cpp",
+      "lines": 433,
+      "bytes": 36897,
+      "sha256": "32289751b2ad585193f2200626dca247da106b99042bb040e327547f38878fb4"
+    },
+    {
+      "file": "src/MainComponentMcp.cpp",
       "lines": 783,
       "bytes": 58586,
       "sha256": "78731bc20cb02cece2b5d9b838c5cbc9a5e8414b8e071ee7adef57cc3f2e8bc7"
     },
     {
-      "file": "juce/src/ModelessWindows.h",
-      "lines": 52,
-      "bytes": 2129,
-      "sha256": "79168e4c485aaca5deded7ee0f4fbb2001b156dc5bc60a3747224c356699e1ce"
+      "file": "src/MainJapaneseAutoAnnotation.cpp",
+      "lines": 249,
+      "bytes": 16460,
+      "sha256": "54deb4819bf8cb2a70c40e65926c3e03d843f08e0fa4ece7dc0c673044c9dba4"
     },
     {
-      "file": "juce/src/NativeAudioClipboard.h",
+      "file": "src/MainMaterialSourcePicker.inc",
+      "lines": 125,
+      "bytes": 11635,
+      "sha256": "5ffd7e32406a6081b458384337966a01fa7d4b8ddf784258406920a65c5b90d7"
+    },
+    {
+      "file": "src/MainProjectMaterialRegistration.cpp",
+      "lines": 219,
+      "bytes": 16089,
+      "sha256": "9e1cf611be80908eff3c457164a08a3ae0fe51dee5d4d297971416a7a3500b89"
+    },
+    {
+      "file": "src/MaterialAnnotationEditor.cpp",
+      "lines": 784,
+      "bytes": 46156,
+      "sha256": "429a6abddcf21ef7b0d026a38caf1ed3eda8b1bb6541c9131a24ab80baa1cb1f"
+    },
+    {
+      "file": "src/MaterialAnnotationEditor.h",
+      "lines": 94,
+      "bytes": 4332,
+      "sha256": "40a8a971f674f98027c650e1a4327aa5b74df1fb17e8683c425403f18706d356"
+    },
+    {
+      "file": "src/MaterialAnnotationSession.cpp",
+      "lines": 711,
+      "bytes": 40978,
+      "sha256": "21735ed16cb90af3f66250be5dbee42a4e5f31f6c5e2a6af96f4cc54602bf38a"
+    },
+    {
+      "file": "src/MaterialAnnotationSession.h",
+      "lines": 104,
+      "bytes": 6704,
+      "sha256": "4b4b1b607d52cef5bd266e773935a6a0f0cf3af4085901a63b52af039c43b984"
+    },
+    {
+      "file": "src/MaterialPronunciationCatalog.cpp",
+      "lines": 305,
+      "bytes": 16539,
+      "sha256": "e522d7168cea19f6873fd22605a23ba0ad3e6f56872eee6df51309cf2ee19b92"
+    },
+    {
+      "file": "src/MaterialPronunciationCatalog.h",
+      "lines": 55,
+      "bytes": 2956,
+      "sha256": "b8c9a341da4c64223cd15fd98d0643e81cc3154876e4215934ac276c6af49ea1"
+    },
+    {
+      "file": "src/MelodyneImportOptimization.h",
+      "lines": 38,
+      "bytes": 2168,
+      "sha256": "2a1f925812d05b1e7f0595d7acd285f65887d4cebf488c489d01a79aae85c8be"
+    },
+    {
+      "file": "src/MelodyneTrackSelector.h",
+      "lines": 108,
+      "bytes": 5408,
+      "sha256": "abfa691cf2a242c2729df001060b46524e7042cd8c03cbe270d32a64edec9173"
+    },
+    {
+      "file": "src/ModelessWindows.h",
+      "lines": 75,
+      "bytes": 3396,
+      "sha256": "d742320ddaa384669fd0da80e8d5751c7d8b0e16fc003db620b034ca3fbaae8c"
+    },
+    {
+      "file": "src/NativeAudioClipboard.h",
       "lines": 99,
       "bytes": 5325,
       "sha256": "2411508494c5b1b263f55362b0907b3d477d7bdde707c5f88d7a90af6ece0622"
     },
     {
-      "file": "juce/src/NativeAudioDisconnect.h",
+      "file": "src/NativeAudioDisconnect.h",
       "lines": 71,
       "bytes": 3609,
       "sha256": "58f70913945a9a36fbcd74811794dd64b70b64ffa129290402ee5729fbd44385"
     },
     {
-      "file": "juce/src/NativeAudioFocus.h",
+      "file": "src/NativeAudioFocus.h",
       "lines": 41,
       "bytes": 2416,
       "sha256": "ad84c7107c5fcdf476251d56396fe9d070cf3c7c4fba34ca1da6adfe70fadb64"
     },
     {
-      "file": "juce/src/NativeAudioLink.h",
-      "lines": 40,
-      "bytes": 2094,
-      "sha256": "da931be4e0edb1be2772b1fe5ee8972202f80905e0cad56b08c5f75fdb1a627f"
+      "file": "src/NativeAudioLink.h",
+      "lines": 64,
+      "bytes": 3631,
+      "sha256": "e37a47770926720bcc4698e1f458e35d50f5f71ca8d9cf1e22cfff1d79dbf0ee"
     },
     {
-      "file": "juce/src/NativeAudioOverlap.h",
-      "lines": 180,
-      "bytes": 11115,
-      "sha256": "ba1619fed3dd2fcbf1c8b387aad712069e4e9f9239855701dd9ad69cdf1489ec"
+      "file": "src/NativeAudioOverlap.h",
+      "lines": 205,
+      "bytes": 12605,
+      "sha256": "5f63283af97d51f4ffbdc9fcf5eff236798454bdfdc3302400131f255bd5835f"
     },
     {
-      "file": "juce/src/NativeAudioTrim.h",
+      "file": "src/NativeAudioTrim.h",
       "lines": 182,
       "bytes": 11811,
       "sha256": "57a926cb639ef4e8912a03cdcf5a6e7391e1c803fcb5da61622f5a31ca9e2475"
     },
     {
-      "file": "juce/src/NativeNoteJoin.h",
+      "file": "src/NativeConsonantMergeDetection.h",
+      "lines": 79,
+      "bytes": 5815,
+      "sha256": "56ff757616e4c6d0db94c965116d7f58292f92160d654d8a183a316af5b7bb48"
+    },
+    {
+      "file": "src/NativeConsonantMergeIO.h",
+      "lines": 30,
+      "bytes": 3377,
+      "sha256": "064b5a6718d7cd4a3d1a193ea23c6b2fa5c0b629f9d1c902ad0b09bb8cb2bd57"
+    },
+    {
+      "file": "src/NativeConsonantMergePlan.h",
+      "lines": 105,
+      "bytes": 11016,
+      "sha256": "2a4178cd646162ee0cec6862404026c5d3c778d3f12f43439a35011658d61e87"
+    },
+    {
+      "file": "src/NativeCoupledSelectionMove.h",
+      "lines": 134,
+      "bytes": 8584,
+      "sha256": "e828f6a854f25ae2c3d1fb63773bba04942680add46610121b093a65ff2bc992"
+    },
+    {
+      "file": "src/NativeLogicalTransitionIO.h",
+      "lines": 46,
+      "bytes": 5244,
+      "sha256": "3dd97cac4cef6736443c656d52285129fd37ea78e75f873a210a0a71ffe9b3d4"
+    },
+    {
+      "file": "src/NativeLogicalTransitionSource.h",
+      "lines": 83,
+      "bytes": 6192,
+      "sha256": "92ac0acf856f35bf983e777b468ecfc5ab35776319454b5f605d83bb1fb097c6"
+    },
+    {
+      "file": "src/NativeMaterialContinuity.h",
+      "lines": 95,
+      "bytes": 5475,
+      "sha256": "4a8e64ff07d144162e8d67c2626b21f06f828a6897a325cee6a26a0040375ee4"
+    },
+    {
+      "file": "src/NativeMaterialSelectionPlan.h",
+      "lines": 131,
+      "bytes": 7772,
+      "sha256": "84b3a5e6aaece0d901f89c4142125e9e4cee471555cbc10f635c91a24664dc75"
+    },
+    {
+      "file": "src/NativeNoteJoin.h",
       "lines": 126,
       "bytes": 10012,
       "sha256": "afc1eef74b749b0af8a0370ae64af6a1860c77979d54ceb7df45bb29dcfe0a08"
     },
     {
-      "file": "juce/src/NativeNoteTiming.h",
-      "lines": 339,
-      "bytes": 20476,
-      "sha256": "d7e63254e747d6c182bed7b575d6ab94e8600eb15672f24ceee942fce847a228"
+      "file": "src/NativeNoteTiming.h",
+      "lines": 579,
+      "bytes": 36474,
+      "sha256": "e76599e630291989ebdca29e264075ed00b32bd01f2c1f7203d16f46f479d331"
     },
     {
-      "file": "juce/src/NativePitchIdentity.h",
+      "file": "src/NativeOverlapConnection.h",
+      "lines": 78,
+      "bytes": 5394,
+      "sha256": "5cc0b52b2fa05849037ab9da437a31b26a98e4496c15b824ae0f0ddf9e78387c"
+    },
+    {
+      "file": "src/NativePitchIdentity.h",
       "lines": 39,
       "bytes": 1901,
       "sha256": "0dad7fed65647eb77204589918a02b2d8b29e9cf5813511003d99ccaff99794d"
     },
     {
-      "file": "juce/src/NativePitchVoicingDisplay.cpp",
+      "file": "src/NativePitchVoicingDisplay.cpp",
       "lines": 310,
       "bytes": 14265,
       "sha256": "7d7ad5276e8000fe2326565ef3452b736bbcc792a3b6f78324620746c0c01cdf"
     },
     {
-      "file": "juce/src/NativePitchVoicingDisplay.h",
+      "file": "src/NativePitchVoicingDisplay.h",
       "lines": 53,
       "bytes": 2646,
       "sha256": "c1fcdd4a0ca416d99c1542f041b90de33b2dba4b56c199aaec8e95201355acf7"
     },
     {
-      "file": "juce/src/NativeSharedEnvelope.h",
+      "file": "src/NativeScoreMaterialReplacement.inc",
+      "lines": 137,
+      "bytes": 16163,
+      "sha256": "be0fc41aaf5edd9fd54ae7fa91434f2aa85b5953c16c26c400191c3014007542"
+    },
+    {
+      "file": "src/NativeSharedEnvelope.h",
       "lines": 113,
       "bytes": 5639,
       "sha256": "198c52c99438e36d5e9cc178991d7816ed500beb576fd55e7e8100dff270cec9"
     },
     {
-      "file": "juce/src/NativeSourceTimeMap.h",
+      "file": "src/NativeSourceEdgePlan.cpp",
+      "lines": 184,
+      "bytes": 12333,
+      "sha256": "1c76a63fc4225644f9131667297d7a916b42a0212ea9ed3b3665e945596d28ff"
+    },
+    {
+      "file": "src/NativeSourceEdgePlan.h",
+      "lines": 36,
+      "bytes": 1546,
+      "sha256": "0bbbedf0048f533ab34302ea53348cd5578379e9bea303b56aefc781c0684c8a"
+    },
+    {
+      "file": "src/NativeSourceReplacementPlan.h",
+      "lines": 143,
+      "bytes": 10530,
+      "sha256": "50ab33b1c71a559aa90729e6b6b2848e0926c20885233c44e7bed9636515a83c"
+    },
+    {
+      "file": "src/NativeSourceTimeMap.h",
       "lines": 112,
       "bytes": 5111,
       "sha256": "c5556ce3849c9b117b7f9bd6128f8bed37d933ce63539d4eba4c91c2df926056"
     },
     {
-      "file": "juce/src/NativeTrimSource.h",
+      "file": "src/NativeSplitTransitionDetection.h",
+      "lines": 123,
+      "bytes": 9270,
+      "sha256": "109a840d6b34cc0b049200625c68ba636fd088a7450b07900f908eae460e3d46"
+    },
+    {
+      "file": "src/NativeSplitTransitionPlan.h",
+      "lines": 105,
+      "bytes": 9124,
+      "sha256": "863a05928bb95265788e28a33759fe70a03f1ffae2166979021d83a31e5f5b95"
+    },
+    {
+      "file": "src/NativeTransitionDetection.h",
+      "lines": 78,
+      "bytes": 5466,
+      "sha256": "4edfb542b8b5cc6957435e1332ff6c2fb1a13a61bde0f85839d5aa8e53a0b8db"
+    },
+    {
+      "file": "src/NativeTrimSource.h",
       "lines": 189,
       "bytes": 10247,
       "sha256": "db028ae2ac5964a072e37126d1e710f4cd1908c025a8dcac8d96aedaabc5fe59"
     },
     {
-      "file": "juce/src/NativeUnpitchedRegions.h",
+      "file": "src/NativeUnpitchedRegions.h",
       "lines": 118,
       "bytes": 5797,
       "sha256": "30639aa5aed0c580f65d8b006306b42c4b6cd23dbd4d43f22b3f50dd5e8f119f"
     },
     {
-      "file": "juce/src/NoteDanceAnimation.h",
+      "file": "src/NativeVirtualAutoConnect.h",
+      "lines": 89,
+      "bytes": 5553,
+      "sha256": "d2e4db44d2c5280f0956b0384e6f29000048f2f21c8635d3f22823475535c78a"
+    },
+    {
+      "file": "src/NativeVirtualChainExtension.h",
+      "lines": 89,
+      "bytes": 5930,
+      "sha256": "80714cf24b4ab48cd5ca98532b79d48e7a79da6fc1590821b0fd3a58cb6683c4"
+    },
+    {
+      "file": "src/NativeVirtualConnectionPlan.h",
+      "lines": 299,
+      "bytes": 18085,
+      "sha256": "4645575f95e2587801b5fee1d315ac9dad3246e09e618278a3c43377a10e873d"
+    },
+    {
+      "file": "src/NativeVirtualCurveCodec.h",
+      "lines": 113,
+      "bytes": 7323,
+      "sha256": "0a576835dec0534b326962f6403d25d51d81920fbd8735fc25503dfd7a86c79a"
+    },
+    {
+      "file": "src/NativeVirtualGroupIO.h",
+      "lines": 142,
+      "bytes": 11903,
+      "sha256": "86843fa0a213eee70ac96acfcb3095aa5850c8db21b57894a5c54014895cf2cd"
+    },
+    {
+      "file": "src/NativeVirtualGroupPlan.h",
+      "lines": 160,
+      "bytes": 11236,
+      "sha256": "b9681d421a8b3e027f967e82c37e9b76e0cf8d6eb13f246053340f9ba097e160"
+    },
+    {
+      "file": "src/NativeVirtualHandoverWindow.h",
+      "lines": 67,
+      "bytes": 4275,
+      "sha256": "c61c04e59517979502698c78c0b80521d3a4015f10bfc19cede3d89b08f67960"
+    },
+    {
+      "file": "src/NativeVirtualPitchPlan.h",
+      "lines": 298,
+      "bytes": 21677,
+      "sha256": "2067a068ab1a3d627ad390b702210327a23621df1599a99f0ac2d6e9536cd17b"
+    },
+    {
+      "file": "src/NativeVirtualRenderPlan.h",
+      "lines": 124,
+      "bytes": 7505,
+      "sha256": "b5ecf75b403f12ea569475379183d586a7be0e7133eb922171dfcb249206254f"
+    },
+    {
+      "file": "src/NativeVirtualSharedPitch.h",
+      "lines": 44,
+      "bytes": 2339,
+      "sha256": "197a33897d2ce1be6914f19be0df42f71cd9fe98c7fe97738a7fcc38e50fe62f"
+    },
+    {
+      "file": "src/NativeVirtualSinglePitch.h",
+      "lines": 108,
+      "bytes": 7628,
+      "sha256": "171bc3c030c1b588205de0227398b81a501d8f53eefd4177520d736f523ac45b"
+    },
+    {
+      "file": "src/NativeVirtualWaveformContext.h",
+      "lines": 51,
+      "bytes": 3111,
+      "sha256": "7b82522606276cdc780b66e115a5ae65808bdc2d495aedafc1a4add590753e85"
+    },
+    {
+      "file": "src/NoteDanceAnimation.h",
       "lines": 65,
       "bytes": 2418,
       "sha256": "02a7a616edb556bd64cd6f029dced8dde273f119f3f83201315b998e17a06ad2"
     },
     {
-      "file": "juce/src/OtoRegionGuides.h",
+      "file": "src/OtoRegionGuides.h",
       "lines": 46,
       "bytes": 1759,
       "sha256": "42674e976144bbc3ede9cbd642c8f5ca8df3f4de15dd41cf77c8414471b9b3eb"
     },
     {
-      "file": "juce/src/OtoWaveformEditorComponent.cpp",
-      "lines": 1664,
-      "bytes": 75035,
-      "sha256": "8a91beecd5de9263738f5231473b110e06df945e93575a288b6dbbaa58632373"
+      "file": "src/OtoWaveformEditorComponent.cpp",
+      "lines": 3081,
+      "bytes": 172150,
+      "sha256": "648a9e018d04cf51912f6def2eb024c2bb504fe1d6960f8c9d53f6b567ceb919"
     },
     {
-      "file": "juce/src/OtoWaveformEditorComponent.h",
-      "lines": 436,
-      "bytes": 22146,
-      "sha256": "6caa9b4f5b2c960727e4e2481673fddd3275cd740c73d77427c278568dfeae27"
+      "file": "src/OtoWaveformEditorComponent.h",
+      "lines": 621,
+      "bytes": 34230,
+      "sha256": "807c4040fdade34e0c2711ab5bbd2d0ea26af251815c81aa211d399631235406"
     },
     {
-      "file": "juce/src/PianoRollComponent.cpp",
-      "lines": 10909,
-      "bytes": 563452,
-      "sha256": "14b666e91b1892f5069193b0c7d8155aa668caf5207e17ed899d4a816caac08c"
+      "file": "src/OttoMaterialIO.cpp",
+      "lines": 837,
+      "bytes": 42982,
+      "sha256": "ef385f85463dddd9862c45a02cd77fad413bc8d21fb9ba59a236216f8c1e4e1a"
     },
     {
-      "file": "juce/src/PianoRollComponent.h",
-      "lines": 1484,
-      "bytes": 81926,
-      "sha256": "50331c71d313b4c122edd0c4cb1114955a82a54fedb17fdc7168312f1f5a9cd2"
+      "file": "src/OttoMaterialIO.h",
+      "lines": 59,
+      "bytes": 3351,
+      "sha256": "d0a0c233f388c7de91a91a988fec6554cc2bd010a5c12b2cd2ea1ebea3a33403"
     },
     {
-      "file": "juce/src/PianoRollCvvcEnvelope.h",
-      "lines": 602,
-      "bytes": 34014,
-      "sha256": "f0bd9487934ba72cf0bd50b9ac434e0d3ed241cd4186b72cd32ed7fef255cd94"
+      "file": "src/OttoMaterialMigration.cpp",
+      "lines": 578,
+      "bytes": 29216,
+      "sha256": "07b153244080029bfe0ecab352ded81fd7238cc2b8a3a334bf99184d5a04c3f7"
     },
     {
-      "file": "juce/src/PianoRollDiffSingerOffset.h",
-      "lines": 238,
-      "bytes": 13391,
-      "sha256": "ac54146a153eee384954757e37e12dbfe3c5ce8ea8bf1ea0c7326f78f08d0403"
+      "file": "src/OttoMaterialMigration.h",
+      "lines": 45,
+      "bytes": 2402,
+      "sha256": "65b040f3d0f4c9abaad64089c5766e0ca749ef5f32655a2b9f97801df924e914"
     },
     {
-      "file": "juce/src/PianoRollPointGroup.h",
-      "lines": 251,
-      "bytes": 15603,
-      "sha256": "ccbb4c12f47d05e24460196ba61f9ef74b77bf6c2734eaca9118a74edcfbf00b"
+      "file": "src/PianoRollComponent.cpp",
+      "lines": 12265,
+      "bytes": 651354,
+      "sha256": "68267f864db658a6715b8a2bdf33e67afae57f21638a552da92f11cb9c3b01f2"
     },
     {
-      "file": "juce/src/Pinyin.cpp",
+      "file": "src/PianoRollComponent.h",
+      "lines": 1683,
+      "bytes": 95529,
+      "sha256": "169a22abde9a7dc8d139f67d7c32f40e464afa5f241480c7e7bdee8fd5f6871d"
+    },
+    {
+      "file": "src/PianoRollCvvcEnvelope.h",
+      "lines": 614,
+      "bytes": 35066,
+      "sha256": "0d2f53d89ca38307b092c565fab054d0c32a5e2b4b0e4add6d87b2c3ca6ec572"
+    },
+    {
+      "file": "src/PianoRollDiffSingerOffset.h",
+      "lines": 240,
+      "bytes": 13477,
+      "sha256": "311288f2c2f1f12eb67094c7741ff52a21014a73b1c56c02836de4aec3b1b360"
+    },
+    {
+      "file": "src/PianoRollPointGroup.h",
+      "lines": 277,
+      "bytes": 17551,
+      "sha256": "21310c97069c3bff5a78b29e2a25bf7a4548d7f1c8662e01781e38860a6521c8"
+    },
+    {
+      "file": "src/Pinyin.cpp",
       "lines": 46,
       "bytes": 1184,
       "sha256": "13676e6e32bf67a4a7495fb189e758f34fabf9b82407666ef76121f177cba5bb"
     },
     {
-      "file": "juce/src/Pinyin.h",
+      "file": "src/Pinyin.h",
       "lines": 18,
       "bytes": 759,
       "sha256": "3cf021d36e16aa1ccac7adce8871326358bd78d6ac10e943c5768dc9819ff8bc"
     },
     {
-      "file": "juce/src/PinyinTable.inc",
+      "file": "src/PinyinTable.inc",
       "lines": 2709,
       "bytes": 367401,
       "sha256": "3f46aa809025f11ce2c352606668f29f1c4d528c5a1e53a37bc74c9d81dbca35"
     },
     {
-      "file": "juce/src/PointGroupEdit.h",
+      "file": "src/PointGroupEdit.h",
       "lines": 36,
       "bytes": 1856,
       "sha256": "bbd93a85e63e1e3cb069c24a2a83eb53339eb5638a618a68236d710a81a8941d"
     },
     {
-      "file": "juce/src/ProjectFileIO.h",
+      "file": "src/ProjectFileIO.h",
       "lines": 68,
       "bytes": 3442,
       "sha256": "5881922f0bd6abb71c690d67584f6c74ac3e8b9622d982f0d278c115bea271fd"
     },
     {
-      "file": "juce/src/ProjectModel.cpp",
-      "lines": 8790,
-      "bytes": 451300,
-      "sha256": "689f42570e8d9bdbc2f27e85fcd6e1c7363494145a7dcab4728b977b98ad4169"
+      "file": "src/ProjectMaterialRegistration.cpp",
+      "lines": 626,
+      "bytes": 35398,
+      "sha256": "2fd14c16df6334520198bb061a8b2f2929e6aeee3abbadfceb6a20789f64cc7d"
     },
     {
-      "file": "juce/src/ProjectModel.h",
-      "lines": 1324,
-      "bytes": 74238,
-      "sha256": "70c8d6964431714a4b600d2219c9c8e6104ca8d34b9e281c439a8f3d6cc63350"
+      "file": "src/ProjectMaterialRegistration.h",
+      "lines": 120,
+      "bytes": 5709,
+      "sha256": "9c1ca489a5e4ecdfb415d963e0a8d3500070c24530dd1b0a3bdbfa6e4311c852"
     },
     {
-      "file": "juce/src/ProjectRecovery.h",
+      "file": "src/ProjectMaterialRegistrationFacts.cpp",
+      "lines": 253,
+      "bytes": 16334,
+      "sha256": "18c3684746e4cc3b90c0fc58d27c5943ee89a951cf0173373abee1cf8039b0a9"
+    },
+    {
+      "file": "src/ProjectMaterialRegistrationFacts.h",
+      "lines": 29,
+      "bytes": 1349,
+      "sha256": "4d313fdd4f500555c733928e53a1307aa1d8afa072480b05e317e37d9516ffab"
+    },
+    {
+      "file": "src/ProjectMaterialRegistrationModel.inc",
+      "lines": 257,
+      "bytes": 14235,
+      "sha256": "fa4f5d6c062df8ce2b6e4da17a88a0f56f64f089a59ffbefe0b4f80dd85e9601"
+    },
+    {
+      "file": "src/ProjectMaterialRegistrationTypes.h",
+      "lines": 32,
+      "bytes": 1199,
+      "sha256": "5b03ac184f7272e21afa93c948fb4c808d8374308bb37e977f0e722a9ba3a872"
+    },
+    {
+      "file": "src/ProjectModel.cpp",
+      "lines": 11875,
+      "bytes": 671460,
+      "sha256": "81e4f191811e733be7670ec3f7fc690971bf61e1cf24e3e7035a1faf9911dab7"
+    },
+    {
+      "file": "src/ProjectModel.h",
+      "lines": 1722,
+      "bytes": 100715,
+      "sha256": "8317d8a8d3582017391dd2ace606f1b3fadf077576d6ba6f5d8ce8b40be31132"
+    },
+    {
+      "file": "src/ProjectRecovery.h",
       "lines": 114,
-      "bytes": 5007,
-      "sha256": "57d134db6565601e8373120477a16cdb20e4d0c6cd98fb2d3e94cf79f78b6cbe"
+      "bytes": 5017,
+      "sha256": "6f912b3cb3d711ff0045cafe65149a0429ce6a96ec1c130c57e0efa7255cb361"
     },
     {
-      "file": "juce/src/RenderedWaveformPeaks.h",
-      "lines": 46,
-      "bytes": 1771,
-      "sha256": "40200ebfc6fc2e0e11eddf4549636c6f18d2d2eddaeb17daacd91d99b172c9e7"
+      "file": "src/PronunciationCandidateBox.cpp",
+      "lines": 209,
+      "bytes": 10672,
+      "sha256": "d2f71529be6bc693bf4e3d26182f062b045d9b5587bfb94463479a0096ed2f28"
     },
     {
-      "file": "juce/src/SampleSettings.cpp",
-      "lines": 1982,
-      "bytes": 94019,
-      "sha256": "ac32f3b9e1ac557ef4b84ac4e36d863f503bb44f50b2928794af1cd2e0aa19c5"
+      "file": "src/PronunciationCandidateBox.h",
+      "lines": 68,
+      "bytes": 2866,
+      "sha256": "a3b63054871b69382a8181ee6c0f95afa3574147b69aaa6a83d655d5307289d3"
     },
     {
-      "file": "juce/src/SampleSettings.h",
-      "lines": 226,
-      "bytes": 12205,
-      "sha256": "0aad2d20133c28680a250f3ed4ff1227a889b5b53d442407c24f1585c10bf07b"
+      "file": "src/PronunciationTiming.cpp",
+      "lines": 537,
+      "bytes": 32036,
+      "sha256": "41844e49be870b5f0f762396bf6298c2e9f6bfb7137378c7720c26afdb84f751"
     },
     {
-      "file": "juce/src/SettingsComponent.cpp",
-      "lines": 589,
-      "bytes": 31564,
-      "sha256": "8799a8245f2bdc83c78e7ceeb5d73d01e27e9f8fea05522cf344da91d6ea0f9f"
+      "file": "src/PronunciationTiming.h",
+      "lines": 96,
+      "bytes": 5454,
+      "sha256": "7158a339fe9453077401a6f1abde36aa6eb0412fd5a992e02c254eb8b7909ea3"
     },
     {
-      "file": "juce/src/SettingsComponent.h",
-      "lines": 126,
-      "bytes": 4702,
-      "sha256": "8f75a0d848b1b36486f4c47c2d6e4839f940052feb4bbe10c59c0b41ca5216ee"
+      "file": "src/RenderedWaveformPeaks.h",
+      "lines": 51,
+      "bytes": 2345,
+      "sha256": "bcfa20b9b59478abccb2eca62e13cd33e45df88c59848a0fe6b3da0bae865f72"
     },
     {
-      "file": "juce/src/SourceWaveformPreview.h",
-      "lines": 121,
-      "bytes": 6262,
-      "sha256": "b3d16e82709fb2a37ea458f7621440618cf24d916684b1814cd1f486bf0f0668"
+      "file": "src/SampleSettings.cpp",
+      "lines": 2076,
+      "bytes": 99072,
+      "sha256": "ec7c08198bfa3a4f4d2d18608ec6cd8c6bbfd1d2cd9655e599a1c7aecbe9293c"
     },
     {
-      "file": "juce/src/StartupLog.h",
+      "file": "src/SampleSettings.h",
+      "lines": 257,
+      "bytes": 14345,
+      "sha256": "3b142a50e179e34bbbfca393c17bd79540b3d278f70b9a951d1ee83076fa5ba4"
+    },
+    {
+      "file": "src/SettingsComponent.cpp",
+      "lines": 695,
+      "bytes": 40192,
+      "sha256": "261ec1f6f7b73bd57b060b9b9520876093673054f68d9b909b04b63a64321c68"
+    },
+    {
+      "file": "src/SettingsComponent.h",
+      "lines": 135,
+      "bytes": 5435,
+      "sha256": "85dde6b0382e16ffb034f25b325b6ef61b7ce168696c335f3e041853595d55e1"
+    },
+    {
+      "file": "src/SourceWaveformPreview.h",
+      "lines": 108,
+      "bytes": 5771,
+      "sha256": "f9cf8767c18eede2a1ac35d84fb28f8ea52dc5d85dda0e0ee64c631e80f27d30"
+    },
+    {
+      "file": "src/StartupLog.h",
       "lines": 15,
       "bytes": 546,
       "sha256": "c7ee5de9c5c06e97e2b65ca821277e70c9d22e89afc93d1afdf2e4bef1b92bb6"
     },
     {
-      "file": "juce/src/TailFadePresetStore.h",
+      "file": "src/TailFadePresetStore.h",
       "lines": 99,
       "bytes": 7353,
       "sha256": "b2b4ace66ed7c4b78d8cb7831cf6884bf6482d3756f9f7c2619e174599484908"
     },
     {
-      "file": "juce/src/Theme.cpp",
-      "lines": 308,
-      "bytes": 16449,
-      "sha256": "7d0b3e68df0518939b2593652ba8fb6dcc742b5a64e3e9c9cb5518679e8fd11e"
+      "file": "src/Theme.cpp",
+      "lines": 512,
+      "bytes": 28780,
+      "sha256": "9242222d2f71eec3da4251d7bd55a12f5d064c4af79f58c39762a1016479c6da"
     },
     {
-      "file": "juce/src/Theme.h",
-      "lines": 53,
-      "bytes": 2049,
-      "sha256": "6d713bdf6d507e9d4e14a8ac3b0f50c1e3e0bfe5aa64e942440588f1e3d2b77d"
+      "file": "src/Theme.h",
+      "lines": 69,
+      "bytes": 3182,
+      "sha256": "abf186c974083388ea14cf059b7711946bf0a98de1e4bc1a95f80b42c8d5aece"
     },
     {
-      "file": "juce/src/TimelineComponent.cpp",
-      "lines": 1173,
-      "bytes": 59972,
-      "sha256": "060187a3bb0137fe9c1fb208ee3262e233d38e89217de04146b1a2bdc95da463"
+      "file": "src/TimelineComponent.cpp",
+      "lines": 1187,
+      "bytes": 61250,
+      "sha256": "72b543259e8dba722c205c00646b24fda398ffab75bdf8c4137e6000863ab3d3"
     },
     {
-      "file": "juce/src/TimelineComponent.h",
+      "file": "src/TimelineComponent.h",
       "lines": 160,
       "bytes": 8524,
       "sha256": "d28019582d51773112610e742b8125b29f932404ae0de3efb820eaec57b6a3a9"
     },
     {
-      "file": "juce/src/TimelineGainEnvelope.h",
-      "lines": 136,
-      "bytes": 8168,
-      "sha256": "a151b8a8b10c849a7254a72e1c9c840dbbbdcfbb6f81e95083bb21bd6d874ac5"
+      "file": "src/TimelineGainEnvelope.h",
+      "lines": 150,
+      "bytes": 9073,
+      "sha256": "2ed8027200100ed84a3bad45092f09ebf23950be024152c3cd496ba898324af2"
     },
     {
-      "file": "juce/src/TrackGainEnvelope.h",
+      "file": "src/TrackGainEnvelope.h",
       "lines": 98,
       "bytes": 4928,
       "sha256": "bf616e4a365948e7fd63d2eb5ad24acdbe698834fd771bcdde109b0fa2df3628"
     },
     {
-      "file": "juce/src/TrackListComponent.cpp",
-      "lines": 473,
-      "bytes": 22589,
-      "sha256": "1fb13fd4d6824cc44a9d67b075e9806d98ed6a6de509cf27891dc309f4c7d6ee"
+      "file": "src/TrackListComponent.cpp",
+      "lines": 484,
+      "bytes": 23442,
+      "sha256": "2b66a808d0ddd78fa3be541db58f1949dba3d40ba17cfbfc7b8ee0c7c5b53920"
     },
     {
-      "file": "juce/src/TrackListComponent.h",
+      "file": "src/TrackListComponent.h",
       "lines": 137,
       "bytes": 6080,
       "sha256": "24b606c3b91cd6ecf700e29c4c2615128115d5004aece413e1b4aa1ef7c1b4a4"
     },
     {
-      "file": "juce/src/UtauOutputEnginePanel.h",
+      "file": "src/UiLiterals.inc",
+      "lines": 424,
+      "bytes": 16707,
+      "sha256": "c141b06e642398a2e3b8155c89f6d65baa48691d571407ca3928dfd53b357767"
+    },
+    {
+      "file": "src/UtauOutputEnginePanel.h",
       "lines": 90,
       "bytes": 4566,
       "sha256": "62f9b0881ad8932d7b89b0608c77d28615482f3804b79f08b94f17a46f9bd910"
     },
     {
-      "file": "juce/src/VoicebankSettingsComponent.cpp",
+      "file": "src/VoicebankSettingsComponent.cpp",
       "lines": 712,
-      "bytes": 32581,
-      "sha256": "4f688b309a18b64fda057fdcbb122be0afa1ced2b04d00bf59904e214e6e34d1"
+      "bytes": 32613,
+      "sha256": "f23844bce10f8289b9d0586fd5333109bd8ceee85851b7eaf165575005d6592b"
     },
     {
-      "file": "juce/src/VoicebankSettingsComponent.h",
+      "file": "src/VoicebankSettingsComponent.h",
       "lines": 120,
       "bytes": 5711,
       "sha256": "38b88d7a331e05be301cf1a3c8a107b90bd70cec7813528430086fb648eddd65"
     },
     {
-      "file": "juce/src/WavExportOptions.h",
+      "file": "src/WavExportOptions.h",
       "lines": 26,
       "bytes": 908,
       "sha256": "8393b55933f5312691848f5554256eea124525d21884064fbe0d25af6a0debd7"
     },
     {
-      "file": "juce/src/ZoomScrollBar.h",
+      "file": "src/ZoomScrollBar.h",
       "lines": 132,
       "bytes": 5582,
       "sha256": "dced7ebbde36d1c3cbdbc40453bfd3029d391f00e6e3bc027427a291534f240f"
+    },
+    {
+      "file": "src/backend/AdvancedEnvelope.h",
+      "lines": 122,
+      "bytes": 7358,
+      "sha256": "f243f1d80df9a3610761f6244b09482f1174d53e0ce41ff1bfc6449eae351c2e"
+    },
+    {
+      "file": "src/backend/AmplitudeEnvelopeCurve.h",
+      "lines": 53,
+      "bytes": 2378,
+      "sha256": "779874b68f85d0b919633318cc19a8be7416c34169eac27c727daa32bd9d09d5"
+    },
+    {
+      "file": "src/backend/AnalysisService.cpp",
+      "lines": 449,
+      "bytes": 20698,
+      "sha256": "67753881649ffcc12f4fb94f0087944cb2f0a298966b3a7e920d977c17f2a735"
+    },
+    {
+      "file": "src/backend/AnalysisService.h",
+      "lines": 73,
+      "bytes": 2953,
+      "sha256": "251207cd14e61f14b993cafdcf03dfb13907a93ec332dc688be0d42121e146d9"
+    },
+    {
+      "file": "src/backend/AnnotationOrtCancellation.h",
+      "lines": 32,
+      "bytes": 973,
+      "sha256": "efe83e4b181e07a0c7a064415ec6fd19521e3c156dbea56fac4ad6dfe4799447"
+    },
+    {
+      "file": "src/backend/AudioFileReader.cpp",
+      "lines": 91,
+      "bytes": 3778,
+      "sha256": "4a8442dabe59a3a30b04cd518938ff35b07e758060b1f9464f8588149694e81d"
+    },
+    {
+      "file": "src/backend/AudioFileReader.h",
+      "lines": 10,
+      "bytes": 261,
+      "sha256": "c96886af354f0b4a1383511b0eca10506cac39716a32b1ca68f1623f75e47ccd"
+    },
+    {
+      "file": "src/backend/ChineseCvvcPhonemizer.h",
+      "lines": 470,
+      "bytes": 25457,
+      "sha256": "09190447dd847be6ac541d71e9b091d53c1ad6bbed27b0e01af67c548cd4b65f"
+    },
+    {
+      "file": "src/backend/CvvcEnvelope.h",
+      "lines": 143,
+      "bytes": 7526,
+      "sha256": "4aee01a05f284a902e8851003046f34a26ac6f5e7673af98b73624160b2c2f71"
+    },
+    {
+      "file": "src/backend/CvvcPhonemeCache.h",
+      "lines": 73,
+      "bytes": 3709,
+      "sha256": "1c0e664b9efe8121c6290c74d95d73732c573661c69722fbf96aba4a874d1b2c"
+    },
+    {
+      "file": "src/backend/CvvcTiming.h",
+      "lines": 56,
+      "bytes": 2242,
+      "sha256": "ecf01cbec58985883a1531f38649fa3450f6a473f151eda3351a3d71bcae8f35"
+    },
+    {
+      "file": "src/backend/DiffSingerOptions.h",
+      "lines": 53,
+      "bytes": 2573,
+      "sha256": "3a32adda447c03ce14bcbfd7ce0a52b6cd31c58ceed5ef55e57410fca4ca4924"
+    },
+    {
+      "file": "src/backend/DiffSingerProjectCache.h",
+      "lines": 154,
+      "bytes": 9789,
+      "sha256": "643f115a28169e07699a4ac9232144b6b6ebfe521fd3d45c605755395012d07d"
+    },
+    {
+      "file": "src/backend/DiffSingerRenderer.cpp",
+      "lines": 363,
+      "bytes": 17908,
+      "sha256": "02fefc855b07e650fe18a54bb6e336d730ba5f43f4ec7f655e0fceebd3eb5db4"
+    },
+    {
+      "file": "src/backend/DiffSingerRenderer.h",
+      "lines": 24,
+      "bytes": 955,
+      "sha256": "2739ac254462ea02b6b7ef0a49005524b6a49221800f6f0f0401f869603959b7"
+    },
+    {
+      "file": "src/backend/DiffSingerTiming.h",
+      "lines": 26,
+      "bytes": 897,
+      "sha256": "635f38e49cc44153b7e91723aca2fa956288f4d366a65e1ed26516bc9b9a8149"
+    },
+    {
+      "file": "src/backend/FcpeAnalyzer.cpp",
+      "lines": 400,
+      "bytes": 17165,
+      "sha256": "4b046ccb742e1c4e15bb277e56e6e1b02f1ac58fcdb533850552415b064e1b6d"
+    },
+    {
+      "file": "src/backend/FcpeAnalyzer.h",
+      "lines": 26,
+      "bytes": 742,
+      "sha256": "033c35cdb617d9b01cee190dce5ba61aa8aea8cf01a81614d88d0f38ddd36788"
+    },
+    {
+      "file": "src/backend/GameAnalyzer.cpp",
+      "lines": 733,
+      "bytes": 33991,
+      "sha256": "6229441f1357aa3c4a267be91d12e3e1c92e9520feefaafdc890326bfe1ab3b8"
+    },
+    {
+      "file": "src/backend/GameAnalyzer.h",
+      "lines": 40,
+      "bytes": 1265,
+      "sha256": "54131951dda2d64ec651902bd48ca3cf27f3cffb4d9afb6bb599f2a3cb2a1a5c"
+    },
+    {
+      "file": "src/backend/HifisamplerDsp.inc",
+      "lines": 596,
+      "bytes": 36121,
+      "sha256": "38e5288c8025e055ca2cd59db803026e0818577b5cfbe232a29cea056f7c2640"
+    },
+    {
+      "file": "src/backend/HifisamplerFlags.h",
+      "lines": 120,
+      "bytes": 5672,
+      "sha256": "7733b01317eae90f5f4c75dbd855a1531e3fb94b226511f3a8c5979a43769e15"
+    },
+    {
+      "file": "src/backend/HnsepDiskCache.inc",
+      "lines": 97,
+      "bytes": 4913,
+      "sha256": "b2d7fe3c2788b84a3959320df036d092eb484b3318f95c58f5bcfae0c7644864"
+    },
+    {
+      "file": "src/backend/JapaneseAnnotationAudio.cpp",
+      "lines": 76,
+      "bytes": 4235,
+      "sha256": "494118b0a8b313aeaa5693e8bcd148ab2cb99e42e28b7ac47e7d940b4049b562"
+    },
+    {
+      "file": "src/backend/JapaneseAnnotationAudio.h",
+      "lines": 20,
+      "bytes": 641,
+      "sha256": "73c01c5aa51dcba61de03bbc26e4d770e79fdc719bf63e1b667fb4bc5bbe52a9"
+    },
+    {
+      "file": "src/backend/JapanesePhonemeAsr.cpp",
+      "lines": 117,
+      "bytes": 6707,
+      "sha256": "7f8a366f846bb9fbaf8159d9ffaa83ebd9e4c41544680121809d0ac795202441"
+    },
+    {
+      "file": "src/backend/JapanesePhonemeAsr.h",
+      "lines": 21,
+      "bytes": 573,
+      "sha256": "1093c19e987fa713fbf4b13d86819265ac9c4924550532d7e84600c2c7afbb30"
+    },
+    {
+      "file": "src/backend/LegacyTextCodec.h",
+      "lines": 142,
+      "bytes": 10567,
+      "sha256": "0962ea9bec930a45a0c2ff378d21a4be9f38c508c4553ace88c807de15f50706"
+    },
+    {
+      "file": "src/backend/LiveMcpBridge.cpp",
+      "lines": 164,
+      "bytes": 8564,
+      "sha256": "9e402fc2d4864b42d607ea05064b70bf6fe38b84f90708e3a70578a9eb611728"
+    },
+    {
+      "file": "src/backend/LiveMcpBridge.h",
+      "lines": 27,
+      "bytes": 882,
+      "sha256": "87b38f477e61e577abd30fa05af7e906a60a4ff2ae72d8413f1de6fda3eee342"
+    },
+    {
+      "file": "src/backend/Llsm2Renderer.cpp",
+      "lines": 374,
+      "bytes": 19428,
+      "sha256": "f115e4fcceb808ce2717a8958a9f8c1add3ca2314e7e5df0f1c0c213e547ff16"
+    },
+    {
+      "file": "src/backend/Llsm2Renderer.h",
+      "lines": 27,
+      "bytes": 903,
+      "sha256": "d3a54b15265aee8dc8a359defa2cf445636b7b73e90556117e04e81ac59168d1"
+    },
+    {
+      "file": "src/backend/McpServer.cpp",
+      "lines": 2164,
+      "bytes": 127885,
+      "sha256": "2f8f56f86a38038674dcbf80c9ebe964e84651ccd010bbd13d36bd698a705740"
+    },
+    {
+      "file": "src/backend/McpServer.h",
+      "lines": 67,
+      "bytes": 3382,
+      "sha256": "e8db23247ccdfdbcb079eb905d514b6c37b0fb2593b95cdd3fcc51bc61894a4b"
+    },
+    {
+      "file": "src/backend/MelodyneImporter.cpp",
+      "lines": 1186,
+      "bytes": 64126,
+      "sha256": "ffed151e86c9eb800dd3dbb067a74f8bd4907f1d6826a8aeb03733fdb70e0bd4"
+    },
+    {
+      "file": "src/backend/MelodyneImporter.h",
+      "lines": 64,
+      "bytes": 2375,
+      "sha256": "b4de01ab9cbb1b7fd6bba968f3f267a40488f78816748ef7e5870e6ccd7953c3"
+    },
+    {
+      "file": "src/backend/MelodyneProvider.cpp",
+      "lines": 153,
+      "bytes": 5112,
+      "sha256": "a51272337115dda33acf51034f0ab6392d48b8e0b1b00aec3d5f205a3c19c298"
+    },
+    {
+      "file": "src/backend/MelodyneProvider.h",
+      "lines": 54,
+      "bytes": 1853,
+      "sha256": "215eb3cb5eff68c4c743dc68dbb1260331f1432fa5ab766238c97c7e73e2e1ed"
+    },
+    {
+      "file": "src/backend/MixedEnvelopeIO.h",
+      "lines": 50,
+      "bytes": 2631,
+      "sha256": "ebc4043f61efd5cdbc302f21520846019a666afa5afb72e65c347d33676065ba"
+    },
+    {
+      "file": "src/backend/Mld3Renderer.cpp",
+      "lines": 285,
+      "bytes": 14028,
+      "sha256": "52b69847e6e0c2ce13bcf8d69bf7d20225b96e33159255c96a63740730b56dd7"
+    },
+    {
+      "file": "src/backend/Mld3Renderer.h",
+      "lines": 39,
+      "bytes": 1428,
+      "sha256": "ec5a67fdd777aad66d26ec5d8deb354cb09141d2775177f2aa4c9d75ddd4f6f9"
+    },
+    {
+      "file": "src/backend/Mld5Renderer.cpp",
+      "lines": 847,
+      "bytes": 42206,
+      "sha256": "3140321e7ba26918445609c591fb917634344a50f696098f0f26fb722dc458c4"
+    },
+    {
+      "file": "src/backend/Mld5Renderer.h",
+      "lines": 45,
+      "bytes": 1633,
+      "sha256": "4ef66291195e4125add342565825d35f4edb322695e51b090238831b599c6edf"
+    },
+    {
+      "file": "src/backend/NativeAnalyzer.cpp",
+      "lines": 516,
+      "bytes": 23633,
+      "sha256": "941a0dd25427b2bbebdb231baf39093e90d1a8dd0d0339a8d9d2e8a87bb20223"
+    },
+    {
+      "file": "src/backend/NativeAnalyzer.h",
+      "lines": 36,
+      "bytes": 1630,
+      "sha256": "bc7789a26210cbd88063c176d7ca3436bc6f0666125998e2c90654d1c36cb05b"
+    },
+    {
+      "file": "src/backend/NativeEnvelope.h",
+      "lines": 95,
+      "bytes": 6657,
+      "sha256": "e70a60f79a4d0e74b29d18da9cc014e50f51bd91819b89a6feb1d7d432bd4e5c"
+    },
+    {
+      "file": "src/backend/NativeExpression.h",
+      "lines": 130,
+      "bytes": 6788,
+      "sha256": "68baa80267ae1fffa53a144cd60a1087369806d9575b053f96a1187e120aa878"
+    },
+    {
+      "file": "src/backend/NsfHifiganRenderer.cpp",
+      "lines": 2195,
+      "bytes": 113567,
+      "sha256": "0c70b0feaa57c86cdb3ed55c4f51a873fbcd99832be33dfede165136cd1cbba2"
+    },
+    {
+      "file": "src/backend/NsfHifiganRenderer.h",
+      "lines": 224,
+      "bytes": 9920,
+      "sha256": "9bee1ff6fde7325694334ab306838bfddb33670ad46b17684f6761a6eb835dfd"
+    },
+    {
+      "file": "src/backend/NsfRenderChunkCache.h",
+      "lines": 61,
+      "bytes": 2201,
+      "sha256": "4484e6ddcbf6d4849a196d897898707479e55f57ce7c5107dc6fb7096ac6e1b4"
+    },
+    {
+      "file": "src/backend/OrtExecution.cpp",
+      "lines": 71,
+      "bytes": 2966,
+      "sha256": "cab00ddffd715419d48357b7ef2d8a6173beb9dcbe719d49eacc3818fc1cca14"
+    },
+    {
+      "file": "src/backend/OrtExecution.h",
+      "lines": 35,
+      "bytes": 938,
+      "sha256": "03bfaa81d2d4e950eff18d6beb80e93c8646ff9a4aa0fc8aea228675ec8daa29"
+    },
+    {
+      "file": "src/backend/OtoAudioAnalysis.cpp",
+      "lines": 223,
+      "bytes": 10630,
+      "sha256": "403ad26d39732ed8941d6a029f7abfddc73f9c45b2fed50f24f197e9faa3a4f8"
+    },
+    {
+      "file": "src/backend/OtoAudioAnalysis.h",
+      "lines": 40,
+      "bytes": 1156,
+      "sha256": "8078e0e975d37a62323f49cc8491e463dd3e0cb26644b331dbf76a6c87cc8bdc"
+    },
+    {
+      "file": "src/backend/PlaybackRenderPriority.h",
+      "lines": 54,
+      "bytes": 1864,
+      "sha256": "4988da2f93999a5d1bf68312989d6aeb07ef0186958d1263efab8a9c0c59c6ba"
+    },
+    {
+      "file": "src/backend/PlaybackRenderQueue.h",
+      "lines": 158,
+      "bytes": 6235,
+      "sha256": "9cbc2a75ad1b5603c788ddff68c50bf4ec48d1af68e7fe12f3b7f87006da658e"
+    },
+    {
+      "file": "src/backend/RenderService.cpp",
+      "lines": 1124,
+      "bytes": 59058,
+      "sha256": "d638ccbd8ab7c6dfc69b94a2923d7c183a92823adaca286a8a13340194768429"
+    },
+    {
+      "file": "src/backend/RenderService.h",
+      "lines": 126,
+      "bytes": 5275,
+      "sha256": "e52e1ac0a070c2fd71b3897c181c712a01e58e6954d7bd2f603d595acda396c7"
+    },
+    {
+      "file": "src/backend/SourceBreathiness.h",
+      "lines": 140,
+      "bytes": 8055,
+      "sha256": "ef077143ba0eb67c63fd416d403ad05a9f9db7e8ab4664e921cfd0456c60809c"
+    },
+    {
+      "file": "src/backend/SourceVoicing.h",
+      "lines": 105,
+      "bytes": 5082,
+      "sha256": "4038c84d972a1a0bc5ef48ad437046cf257ba3ddeb8556b237d3dad51cdae6ea"
+    },
+    {
+      "file": "src/backend/TailFadeSettings.h",
+      "lines": 114,
+      "bytes": 5834,
+      "sha256": "a7bfe56cea06a708773c6ecbe46bbff7ff18b33a437a31e5959b1a8e131ec363"
+    },
+    {
+      "file": "src/backend/TifaJapaneseAligner.cpp",
+      "lines": 313,
+      "bytes": 19397,
+      "sha256": "71d15bc93605d6b8d085440396c09dce1851f6d1009252efb57f2fdc74467335"
+    },
+    {
+      "file": "src/backend/TifaJapaneseAligner.h",
+      "lines": 30,
+      "bytes": 839,
+      "sha256": "154fb85d8e28409dbebca821de97a7285a54bdb248a1b7b4d456e93ffcfc7d8b"
+    },
+    {
+      "file": "src/backend/UstExchange.h",
+      "lines": 204,
+      "bytes": 17772,
+      "sha256": "b1c2f162f62772bb2f651ded8b55c685ff7afa71811d1268003dc6603586c4e6"
+    },
+    {
+      "file": "src/backend/UstImporter.cpp",
+      "lines": 407,
+      "bytes": 16304,
+      "sha256": "95f37951e7b655eaf4d1955c7f756333b4cf9b107c05ffd120444ff675f045c1"
+    },
+    {
+      "file": "src/backend/UstImporter.h",
+      "lines": 153,
+      "bytes": 6821,
+      "sha256": "0f4a1cca4f2e11f6c625024dc64788fd073b7e351f970b6c20774584284ca01e"
+    },
+    {
+      "file": "src/backend/UstText.h",
+      "lines": 68,
+      "bytes": 3016,
+      "sha256": "fcdc064d0a422b56ead3a0aeb6d6a0de54e6f80f020491524c5f05a3d6e50452"
+    },
+    {
+      "file": "src/backend/UstxImporter.cpp",
+      "lines": 496,
+      "bytes": 26888,
+      "sha256": "2080c37b6e1fd3af7d7a1ed8f7d6e05f76c6899d2b00d1d90d1a842d061ace1d"
+    },
+    {
+      "file": "src/backend/UstxImporter.h",
+      "lines": 25,
+      "bytes": 1105,
+      "sha256": "74c1c1a6ba58d3ef0eb163b8471728da2550bd7d420794d428cdb50717de1ac9"
+    },
+    {
+      "file": "src/backend/UtauMixEnvelope.h",
+      "lines": 69,
+      "bytes": 2917,
+      "sha256": "10155ec2208b53857d0081cd6057d7494e6c1145a7d5bde3b8343391690c1a0f"
+    },
+    {
+      "file": "src/backend/UtauOtoOverride.h",
+      "lines": 49,
+      "bytes": 1912,
+      "sha256": "60cae7ae73f3c1821b47483f72e9a6b4d0b30a8949a0ad72003b910710fbb04c"
+    },
+    {
+      "file": "src/backend/UtauRenderer.cpp",
+      "lines": 2835,
+      "bytes": 137908,
+      "sha256": "089e3985b385b57c8c7afea1ede8d763ef028600885130a22c3022c109826c09"
+    },
+    {
+      "file": "src/backend/UtauRenderer.h",
+      "lines": 412,
+      "bytes": 22025,
+      "sha256": "858926b817fa958e91df3e9d47f932fb4b8c709359cf568ebdb3be063c504ffe"
+    },
+    {
+      "file": "src/backend/WcsNonLoopFeatures.cpp",
+      "lines": 358,
+      "bytes": 17858,
+      "sha256": "22f2dfe5443254e638de3b3e475cc2833671cec451c1ba8b5896d8a53e388065"
+    },
+    {
+      "file": "src/backend/WcsNonLoopFeatures.h",
+      "lines": 40,
+      "bytes": 1407,
+      "sha256": "81774d631bc7fb41442bcb3aae79577e7ac8b1021bcf4432af34e37aaa267002"
+    },
+    {
+      "file": "src/backend/WorldRenderer.cpp",
+      "lines": 368,
+      "bytes": 22544,
+      "sha256": "f4c36d15dad5e710affe875ad69e3ba0787acf8a10adb80ff13063634fd52fb2"
+    },
+    {
+      "file": "src/backend/WorldRenderer.h",
+      "lines": 39,
+      "bytes": 1275,
+      "sha256": "ea3f383fa2114f4f71881403ca5bdeb2ffe10e3289c2f71146e3aa0aa741b384"
     }
   ]
 }

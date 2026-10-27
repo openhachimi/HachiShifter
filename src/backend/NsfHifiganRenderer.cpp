@@ -1220,7 +1220,8 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
     const OrtExecutionConfig& execution, NsfHifiganStretchOrder stretchOrder,
     bool normalizeVolume, const NsfHifiganEdgeGuard& edgeGuard,
     const std::function<bool()>& cancelled, bool protectNativeNoise, bool smoothPitchTransitions,
-    bool incrementalNativeRender, const std::vector<float>& sourceMidi)
+    bool incrementalNativeRender, const std::vector<float>& sourceMidi,
+    const NsfHifiganSourceAssembly* sourceAssembly)
 {
     NsfHifiganRenderResult result;
 #if defined(HACHI_HAS_ONNX_ANALYSIS) && HACHI_HAS_ONNX_ANALYSIS
@@ -1244,6 +1245,13 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
             result.error = "NSF-HiFiGAN ONNX session could not be created";
             return result;
         }
+        const auto assembling = sourceAssembly != nullptr && !sourceAssembly->empty();
+        if (assembling && (stretchOrder == NsfHifiganStretchOrder::wcsNonLoop
+                          || stretchOrder == NsfHifiganStretchOrder::hifiShifterMel))
+        {
+            result.error = "Virtual source assembly does not yet support WCS/HiFiShifter parameter stretch";
+            return result;
+        }
         const auto channels = source.getNumChannels();
         const auto sourceSamples = source.getNumSamples();
         if (channels <= 0 || sourceSamples <= 0 || targetSamples <= 0 || sampleRate <= 0.0)
@@ -1258,10 +1266,10 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
         auto mono = stableMonoInput(source);
         auto modelInput = resample(mono.data(), sourceSamples,
             static_cast<int>(std::llround(sampleRate)), config->sampleRate);
-        const auto voicing = protectNativeNoise
+        const auto voicing = protectNativeNoise && !assembling
             ? SourceVoicing::analyse(modelInput, config->sampleRate, checkNsfCancellation) : SourceVoicing{};
         std::vector<float> sourceNoise;
-        if (protectNativeNoise && config->sampleRate == 44100 && hifiHnsepFile(*files).existsAsFile())
+        if (!assembling && protectNativeNoise && config->sampleRate == 44100 && hifiHnsepFile(*files).existsAsFile())
         {
             auto separated = hifiSeparate(modelInput, *files, execution, false);
             sourceNoise.resize(modelInput.size());
@@ -1290,6 +1298,62 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
         const auto targetFrames = std::max<std::size_t>(1,
             (targetModelSamples + static_cast<std::size_t>(config->hop) - 1)
                 / static_cast<std::size_t>(config->hop));
+        // Each part is analysed on its own immutable source clock. There is no
+        // target/source-ratio PCM resampling and no per-part neural inference.
+        struct PreparedPart
+        {
+            const NsfHifiganSourcePart* part = nullptr;
+            std::vector<float> harmonic, noise;
+            SourceVoicing voicing;
+        };
+        std::vector<PreparedPart> prepared;
+        const auto partSourceAt = [](const NsfHifiganSourcePart& part, double seconds)
+        {
+            const auto& map = part.timeMap;
+            auto right = std::upper_bound(map.begin(), map.end(), seconds,
+                [](double t, const NsfHifiganTimeMapPoint& p) { return t < p.targetSeconds; });
+            if (right == map.begin()) return right->sourceSeconds;
+            if (right == map.end()) return map.back().sourceSeconds;
+            const auto& left = *(right - 1);
+            const auto span = right->targetSeconds - left.targetSeconds;
+            const auto phase = span > 1.e-12 ? juce::jlimit(0.0, 1.0, (seconds-left.targetSeconds)/span) : 0.0;
+            return left.sourceSeconds + (right->sourceSeconds-left.sourceSeconds)*phase;
+        };
+        const auto partGain = [](const NsfHifiganSourcePart& part, double seconds)
+        {
+            if (seconds < part.supportFrom || seconds >= part.supportTo) return 0.f;
+            return part.gainAt ? std::max(0.f, part.gainAt(seconds)) : 1.f;
+        };
+        const auto partDry = [&](const PreparedPart& item, double seconds)
+        {
+            if (item.part->sourceMidiAt && item.part->sourceMidiAt(seconds) <= 0.f) return 1.f;
+            return protectNativeNoise ? item.voicing.at(partSourceAt(*item.part, seconds)) : 0.f;
+        };
+        if (assembling)
+            for (const auto& part : *sourceAssembly)
+            {
+                checkNsfCancellation();
+                if (!part.source || part.source->getNumSamples() <= 0 || part.source->getNumChannels() <= 0
+                    || !std::isfinite(part.sampleRate) || part.sampleRate <= 0 || part.timeMap.size() < 2
+                    || !std::isfinite(part.supportFrom) || !std::isfinite(part.supportTo) || part.supportTo <= part.supportFrom)
+                    throw std::runtime_error("Invalid virtual source assembly part");
+                PreparedPart item; item.part = &part;
+                auto input = stableMonoInput(*part.source);
+                item.harmonic = resample(input.data(), static_cast<int>(input.size()),
+                    static_cast<int>(std::llround(part.sampleRate)), config->sampleRate);
+                if (protectNativeNoise)
+                    item.voicing = SourceVoicing::analyse(item.harmonic, config->sampleRate, checkNsfCancellation);
+                if (protectNativeNoise && config->sampleRate == 44100 && hifiHnsepFile(*files).existsAsFile())
+                {
+                    auto separated = hifiSeparate(item.harmonic, *files, execution, false);
+                    item.noise.resize(item.harmonic.size());
+                    for (std::size_t i=0; i<item.noise.size(); ++i)
+                        item.noise[i] = item.harmonic[i] - separated.harmonic[i];
+                    item.harmonic = std::move(separated.harmonic);
+                    result.usedHarmonicNoise = true;
+                }
+                prepared.push_back(std::move(item));
+            }
         const auto hifiShifter = stretchOrder == NsfHifiganStretchOrder::hifiShifterMel;
         const auto wcsNonLoop = stretchOrder == NsfHifiganStretchOrder::wcsNonLoop;
         std::vector<float> wcsF0;
@@ -1317,14 +1381,14 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
         }
         const auto variableHop = stretchOrder == NsfHifiganStretchOrder::spliceThenShift
             || stretchOrder == NsfHifiganStretchOrder::shiftThenSplice;
-        auto referenceMel = normalizeVolume
+        auto referenceMel = normalizeVolume && !assembling
             ? spliceMelToTimeMap(buildMelWithHop(modelInput, *config, config->hop),
                 config->melBands, targetFrames,
                 static_cast<double>(config->hop) / config->sampleRate,
                 static_cast<double>(config->hop) / config->sampleRate, timeMap,
                 variableHop ? 0.5 : 0.0, variableHop ? 0.5 : 0.0)
             : MelData{};
-        auto mel = wcsNonLoop ? std::move(wcsMel) : hifiShifter
+        auto mel = assembling ? MelData{} : wcsNonLoop ? std::move(wcsMel) : hifiShifter
             ? stretchHiFiShifterMel(buildMelWithHop(modelInput, *config, config->hop),
                 config->melBands, static_cast<double>(sourceSamples) / sampleRate,
                 static_cast<double>(targetSamples) / sampleRate, timeMap)
@@ -1337,6 +1401,40 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
                     config->melBands, targetFrames,
                     static_cast<double>(config->hop) / config->sampleRate,
                     static_cast<double>(config->hop) / config->sampleRate, timeMap);
+        if (assembling)
+        {
+            mel.frames = targetFrames;
+            // Same amplitude-domain exp/sum/log operation as the existing
+            // variable-hop seam splice, with the author's actual contribution.
+            // Group routing is always splice-first, independent of track order.
+            std::vector<double> amplitude(static_cast<std::size_t>(config->melBands) * targetFrames, 0.0);
+            for (const auto& item : prepared)
+            {
+                auto partMel = buildVariableHopSplicedMel(item.harmonic, *config, targetFrames, item.part->timeMap);
+                if (item.part->formantAt)
+                {
+                    std::vector<float> partFormant(targetFrames, 0.f);
+                    for (std::size_t frame=0;frame<targetFrames;++frame)
+                        partFormant[frame]=item.part->formantAt((double(frame)+.5)*double(config->hop)/config->sampleRate);
+                    shiftMelFormants(partMel,*config,partFormant,framePeriodMs);
+                }
+                if (partMel.frames != targetFrames) throw std::runtime_error("Virtual part Mel extraction failed");
+                for (std::size_t frame=0; frame<targetFrames; ++frame)
+                {
+                    const auto seconds = (double(frame)+0.5) * double(config->hop)/config->sampleRate;
+                    const auto gain = partGain(*item.part, seconds) * (1.f-partDry(item, seconds));
+                    if (gain <= 0) continue;
+                    for (int band=0; band<config->melBands; ++band)
+                    {
+                        const auto index = std::size_t(band)*targetFrames+frame;
+                        amplitude[index] += std::exp(double(partMel.values[index])) * gain;
+                    }
+                }
+            }
+            mel.values.resize(amplitude.size());
+            for (std::size_t i=0; i<amplitude.size(); ++i)
+                mel.values[i] = float(std::log(std::max(1.e-9, amplitude[i])));
+        }
         if (mel.frames == 0)
         {
             result.error = "NSF-HiFiGAN mel extraction returned no frames";
@@ -1348,7 +1446,7 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
         // Splice-first and fixed-hop orders shift the whole joined Mel once,
         // after the segments are blended; the shift-first order already applied
         // the formant curve inside buildVariableHopSplicedMel per segment.
-        if (stretchOrder != NsfHifiganStretchOrder::shiftThenSplice)
+        if (assembling || stretchOrder != NsfHifiganStretchOrder::shiftThenSplice)
             shiftMelFormants(mel, *config, formantSemitones, framePeriodMs);
         if (referenceMel.frames != 0)
             shiftMelFormants(referenceMel, *config, formantSemitones, framePeriodMs);
@@ -1367,7 +1465,16 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
         }
         const auto requestedF0 = f0;
         if (!wcsNonLoop) conditionNsfPitchTransitions(f0, smoothPitchTransitions);
-        if (protectNativeNoise)
+        if (assembling)
+            for (std::size_t frame=0; frame<f0.size(); ++frame)
+            {
+                const auto seconds=frame*hopSeconds;
+                bool voiced=false;
+                for (const auto& item:prepared)
+                    if (partGain(*item.part,seconds)>0 && partDry(item,seconds)<.999f) {voiced=true;break;}
+                if (!voiced || requestedF0[frame]<=0) {f0[frame]=0; ++result.protectedUnvoicedFrames;}
+            }
+        else if (protectNativeNoise)
             for (std::size_t frame=0;frame<f0.size();++frame)
                 if (requestedF0[frame] <= 0 || voicing.at(sourceAt(frame*hopSeconds)) >= .999f)
                 {
@@ -1434,7 +1541,28 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
             // Applying it after the mix would also filter natural frication.
             if (protectNativeNoise)
                 conditionNeuralBoundary(destination,targetSamples,sampleRate,0,0);
-            if (protectNativeNoise)
+            if (assembling)
+                for (int sample=0; sample<targetSamples; ++sample)
+                {
+                    if ((sample & 1023)==0) checkNsfCancellation();
+                    const auto seconds=double(sample)/sampleRate;
+                    float residual=0; bool voiced=false;
+                    for (const auto& item:prepared)
+                    {
+                        const auto gain=partGain(*item.part,seconds); if (gain<=0) continue;
+                        const auto dry=partDry(item,seconds);
+                        const auto sourceSeconds=partSourceAt(*item.part,seconds);
+                        if (dry<.999f) voiced=true;
+                        const auto& pcm=*item.part->source;
+                        const auto ch=std::min(channel,pcm.getNumChannels()-1);
+                        residual += gain * (dry*sampleAt(pcm.getReadPointer(ch),std::size_t(pcm.getNumSamples()),sourceSeconds*item.part->sampleRate)
+                            + (1.f-dry)*sampleAt(item.noise.data(),item.noise.size(),sourceSeconds*config->sampleRate));
+                    }
+                    // The single decoder owns only the assembled harmonic Mel;
+                    // unvoiced sources retain their own PCM/noise and weights.
+                    destination[sample]=(voiced?destination[sample]:0.f)+residual;
+                }
+            else if (protectNativeNoise)
                 for (int sample=0;sample<targetSamples;++sample)
                 {
                     if ((sample & 1023)==0) checkNsfCancellation();
@@ -1472,7 +1600,7 @@ NsfHifiganRenderResult NsfHifiganRenderer::render(
     juce::ignoreUnused(source, sampleRate, targetSamples, framePeriodMs, targetMidi,
                        formantSemitones, timeMap, configuredModelDirectory, execution,
                        stretchOrder, normalizeVolume, edgeGuard, cancelled, protectNativeNoise, smoothPitchTransitions,
-                       incrementalNativeRender, sourceMidi);
+                       incrementalNativeRender, sourceMidi, sourceAssembly);
     result.error = "NSF-HiFiGAN ONNX runtime is not included";
 #endif
     if (!result.usedModel) result.buffer.setSize(0, 0);

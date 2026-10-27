@@ -4,6 +4,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <functional>
 #include <vector>
+#include <optional>
 
 namespace hachi
 {
@@ -13,6 +14,7 @@ struct MaterialPronunciationCandidate
     juce::String audioId, regionId, alias;
     double startSeconds = 0, endSeconds = 0;
     PronunciationKind pronunciationKind = PronunciationKind::normal;
+    juce::StringArray regionIds, aliases; // ordered exact chain, empty for legacy single-row choices
 };
 
 // A source-disambiguating native-material picker. Owns no audio device and
@@ -27,6 +29,8 @@ public:
         std::function<void(const Candidate&)> onChosen, std::function<void()> onCancelled);
     ~PronunciationCandidateBox() override;
     void setQuery(juce::String);
+    void setSequenceContext(const juce::StringArray& remaining);
+    std::optional<Candidate> diagnosticCandidate(int visibleRow) const;
     bool keyPressed(const juce::KeyPress&) override;
     void paint(juce::Graphics&) override;
     void resized() override;

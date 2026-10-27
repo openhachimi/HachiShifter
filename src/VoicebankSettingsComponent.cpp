@@ -9,7 +9,7 @@ namespace hachi
 {
 namespace
 {
-juce::String utf8(const char* text) { return juce::String::fromUTF8(text); }
+juce::String utf8(const char* text) { return I18n::uiText(text); }
 
 constexpr std::array<const char*, 9> detailNames {
     "文件名", "别名", "偏移", "辅音", "截止", "先行声音", "重叠", "oto.ini",

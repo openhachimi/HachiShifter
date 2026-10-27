@@ -4,6 +4,7 @@ param(
     [string]$OutputDirectory = 'dist',
     [string]$ModelArchive = '',
     [string]$ModelArchiveSha256 = '',
+    [string]$DisplayVersion = 'dev',
     [switch]$WithModels
 )
 $ErrorActionPreference = 'Stop'
@@ -19,6 +20,23 @@ foreach ($file in @('HachiShifter Next.exe','onnxruntime.dll','onnxruntime_provi
     if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing runtime: $source" }
     Copy-Item -LiteralPath $source -Destination (Join-Path $stage $file)
 }
+# Language files are required runtime data, not optional source documentation.
+# Copying only the EXE would leave new controls displaying [key].
+$catalog = Join-Path $release 'lang/translations.tsv'
+if (-not (Test-Path -LiteralPath $catalog -PathType Leaf)) { throw 'Missing external translation catalog' }
+$langStage = Join-Path $stage 'lang'
+New-Item -ItemType Directory -Force $langStage | Out-Null
+Copy-Item -LiteralPath $catalog -Destination (Join-Path $langStage 'translations.tsv')
+$rows = Import-Csv -LiteralPath $catalog -Delimiter "`t" -Encoding utf8
+foreach ($key in @('mpd.options.thisImport','mpd.options.autoTransitions','mpd.options.autoConnections','mpd.options.autoPitch','mpd.options.autoConsonants')) {
+    $entry = @($rows | Where-Object key -eq $key)
+    if ($entry.Count -ne 1) { throw "Missing or duplicated required translation: $key" }
+    foreach ($language in @('zh-CN','zh-TW','ja-JP','ko-KR','en-US')) {
+        if ([string]::IsNullOrWhiteSpace($entry[0].$language)) { throw "Empty required translation: $key / $language" }
+    }
+}
+$exeVersion = (Get-Item -LiteralPath (Join-Path $stage 'HachiShifter Next.exe')).VersionInfo.ProductVersion
+if ($exeVersion -ne $DisplayVersion) { throw "Executable version '$exeVersion' differs from package '$DisplayVersion'" }
 # Engine scripts and pronunciation dictionaries are runtime resources. Large
 # weights, including the optional English G2P checkpoint, belong to the model zip.
 $engineRoot = Join-Path $release 'engines'
@@ -104,7 +122,7 @@ if ($WithModels) {
         if (-not (Test-Path -LiteralPath (Join-Path $stage "models/$group") -PathType Container)) { throw "Missing required model group: $group" }
     }
 }
-$info = [ordered]@{ source=$sourceUrl; publicVersion='0.25'; wcsndmVersion='0.0803'; variant=$name; portablePython='3.11.9'; portablePythonSha256=$pythonHash; llvm=(& clang-cl --version | Select-Object -First 1); sdk=$env:WindowsSDKVersion; msvc=$env:VCToolsVersion; models=$WithModels.IsPresent; sourceBaseline='r/HachiShifter-0.2.6-dev/source'; annotationFeatureInThisBaseline=$false }
+$info = [ordered]@{ source=$sourceUrl; publicVersion=$DisplayVersion; displayVersion=$DisplayVersion; channel='dev'; numericVersion='0.0.0'; wcsndmVersion='0.0803'; variant=$name; portablePython='3.11.9'; portablePythonSha256=$pythonHash; llvm=(& clang-cl --version | Select-Object -First 1); sdk=$env:WindowsSDKVersion; msvc=$env:VCToolsVersion; models=$WithModels.IsPresent; sourceBaseline='dev/rolling'; sourceCommit=$env:GITHUB_SHA; translationRows=@($rows).Count; translationSHA256=(Get-FileHash -LiteralPath $catalog -Algorithm SHA256).Hash.ToLowerInvariant(); annotationFeatureInThisBaseline=$true; annotationModelCompatibility='requires compatible ASR/TIFA resources; resource presence alone is not a runtime test' }
 $info | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stage 'build-info.json') -Encoding utf8
 $zipPath = Join-Path $out "$name.zip"
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zipPath -CompressionLevel Optimal

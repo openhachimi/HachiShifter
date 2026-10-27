@@ -1,5 +1,6 @@
 #pragma once
 #include "ProjectModel.h"
+#include "I18n.h"
 #include "Theme.h"
 #include "ZoomScrollBar.h"
 #include "PointGroupEdit.h"
@@ -171,7 +172,7 @@ public:
     }
 private:
     friend class MainComponent; // Existing panel smoke checks exercise real graph gestures.
-    static juce::String text(const char* s){return juce::String::fromUTF8(s);}
+    static juce::String text(const char* s){return I18n::uiText(s);}
     const PreviewNote* current() const {const auto i=preview.getSelectedId()-1;return i>=0&&i<(int)previews.size()?&previews[(size_t)i]:nullptr;}
     void adjustLimits(size_t changed)
     {

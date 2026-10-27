@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_core/juce_core.h>
 #include <vector>
+#include <optional>
 
 namespace hachi
 {
@@ -12,6 +13,51 @@ struct SourceTimePoint;
 enum class PronunciationKind { normal, transition, breath };
 [[nodiscard]] juce::String pronunciationKindName(PronunciationKind);
 [[nodiscard]] PronunciationKind parsePronunciationKind(const juce::String&);
+
+// A transition has one e/g-style interior boundary, not C/V/P metadata.
+// Edge overlap/fade windows remain solely NativePronunciationEdges below.
+struct NativeTransitionShape
+{
+    int version=1;
+    double boundarySourceSeconds=0;
+    juce::String provenance;
+    bool operator==(const NativeTransitionShape&) const = default;
+};
+bool validateNativeTransitionShape(const NativeTransitionShape&,double sourceBegin,double sourceEnd,juce::String& error);
+[[nodiscard]] juce::var nativeTransitionShapeValue(const NativeTransitionShape&);
+bool nativeTransitionShapeFromValue(const juce::var&,NativeTransitionShape&,juce::String& error);
+bool editNativeTransitionShape(SampleRegionSetting&,double boundarySourceSeconds,juce::String& error);
+
+// Optional audible boundary windows, NOT a replacement for native syllable
+// coverage or the existing P/C/overlap authority. Absence is legacy behaviour.
+struct NativePronunciationEdges
+{
+    int version = 1;
+    double entryFromSourceSeconds = 0, entryToSourceSeconds = 0;
+    double exitFromSourceSeconds = 0, exitToSourceSeconds = 0;
+    double terminationSourceSeconds = 0;
+    juce::String provenance;
+    bool operator==(const NativePronunciationEdges&) const = default;
+};
+bool validateNativePronunciationEdges(const NativePronunciationEdges&, double sourceBegin,
+                                      double sourceEnd, juce::String& error);
+// Strict versioned array; shared by OTTO and binary ValueTree serialization.
+[[nodiscard]] juce::var nativePronunciationEdgesValue(const NativePronunciationEdges&);
+bool nativePronunciationEdgesFromValue(const juce::var&, NativePronunciationEdges&, juce::String& error);
+// Pure edit planners: validate the old profile first; output is unchanged on
+// failure. No source PCM, project clocks or user musical curves participate.
+bool affineNativePronunciationEdges(const std::optional<NativePronunciationEdges>&,
+    double oldBegin,double oldEnd,double newBegin,double newEnd,
+    std::optional<NativePronunciationEdges>& output,juce::String& error);
+bool clipNativePronunciationEdges(const std::optional<NativePronunciationEdges>&,
+    double oldBegin,double oldEnd,double newBegin,double newEnd,
+    std::optional<NativePronunciationEdges>& output,juce::String& error);
+bool mergeNativePronunciationEdges(const std::vector<SampleRegionSetting>& orderedRows,
+    std::optional<NativePronunciationEdges>& output,juce::String& error);
+bool defaultNativePronunciationEdges(const SampleRegionSetting&,NativePronunciationEdges&,juce::String& error);
+bool defaultNativeTransitionEdges(const SampleRegionSetting&,NativePronunciationEdges&,juce::String& error);
+bool editNativePronunciationEdges(SampleRegionSetting&,bool enabled,double entryToSourceSeconds,
+                                  double exitFromSourceSeconds,juce::String& error);
 
 // Start/end/alignment/C-end positions are ABSOLUTE seconds in the unchanged
 // recording. overlapSeconds alone remains the signed OTO offset from start;

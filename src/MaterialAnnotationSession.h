@@ -79,6 +79,7 @@ public:
     bool canRedo() const { return !redoStates.empty(); }
     bool save(juce::String& error);
     const juce::File& sourceAudio() const { return audioFile; }
+    const juce::String& audioVariantId() const { return audioId; }
     const juce::File& manifestFile() const { return manifest; }
     const juce::String& revisionToken() const { return fingerprint; }
     // Called before publication, e.g. to reject an unsafe project remapping.

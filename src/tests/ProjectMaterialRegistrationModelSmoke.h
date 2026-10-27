@@ -144,7 +144,8 @@ inline bool compareRegistrationPcm(const juce::File& baseline, const juce::File&
 }
 inline bool runProjectMaterialRegistrationRealProjectGate(const juce::File& originalProject,
     const juce::File& outputPrefix, const std::vector<ProjectMaterialRegistration::VariantFacts>& explicitFacts,
-    const RegistrationRealRender& render, juce::String& error)
+    const RegistrationRealRender& render, juce::String& error,
+    const std::function<bool(const ProjectMaterialRegistration::Plan&,juce::String&)>& onPrepared = {})
 {
     using R = ProjectMaterialRegistration;
     error.clear();
@@ -160,6 +161,7 @@ inline bool runProjectMaterialRegistrationRealProjectGate(const juce::File& orig
     const auto plan = R::prepare(before, revision, output, "registered-material", explicitFacts,
         ProjectModel::registrationMusicSourceFingerprint);
     if (!plan.ready) { error = plan.diagnostics.joinIntoString("\n"); return false; }
+    if(onPrepared&&!onPrepared(plan,error))return false;
     const auto beforeWav = output.getChildFile("before.wav");
     if (!render(before, beforeWav, error)) return false;
     auto lease = R::stage(plan, error); if (!lease || !lease->publish(error)) return false;

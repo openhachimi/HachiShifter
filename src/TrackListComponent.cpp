@@ -42,7 +42,7 @@ TrackListComponent::TrackListComponent(ProjectModel& modelToUse, I18n& stringsTo
     : model(modelToUse), strings(stringsToUse), snapshot(model.snapshot())
 {
     model.addChangeListener(this);
-    consonantVelocityLabel.setText(juce::String::fromUTF8("辅音速度"),
+    consonantVelocityLabel.setText(I18n::uiText("辅音速度"),
                                    juce::dontSendNotification);
     consonantVelocityLabel.setFont(juce::FontOptions(9.0f));
     consonantVelocityLabel.setColour(juce::Label::textColourId, Palette::textMuted);
@@ -52,11 +52,11 @@ TrackListComponent::TrackListComponent(ProjectModel& modelToUse, I18n& stringsTo
     consonantVelocityEditor.setMultiLine(false);
     consonantVelocityEditor.setInputRestrictions(0, "-0123456789");
     consonantVelocityEditor.setJustification(juce::Justification::centred);
-    consonantVelocityEditor.setTooltip(juce::String::fromUTF8(
+    consonantVelocityEditor.setTooltip(I18n::uiText(
         "UTAU 辅音速度：100 为原速；大于 100 更快，小于 100 更慢；支持负数且不限制上下限"));
     addAndMakeVisible(consonantVelocityEditor);
 
-    globalFlagsLabel.setText(juce::String::fromUTF8("全局 Flags"),
+    globalFlagsLabel.setText(I18n::uiText("全局 Flags"),
                              juce::dontSendNotification);
     globalFlagsLabel.setFont(juce::FontOptions(9.0f));
     globalFlagsLabel.setColour(juce::Label::textColourId, Palette::textMuted);
@@ -64,7 +64,7 @@ TrackListComponent::TrackListComponent(ProjectModel& modelToUse, I18n& stringsTo
     addAndMakeVisible(globalFlagsLabel);
 
     globalFlagsEditor.setMultiLine(false);
-    globalFlagsEditor.setTooltip(juce::String::fromUTF8(
+    globalFlagsEditor.setTooltip(I18n::uiText(
         "应用到此轨道全部 UTAU 音符的 Flags；每个音符自己的 Flags 会追加在后面"));
     addAndMakeVisible(globalFlagsEditor);
 

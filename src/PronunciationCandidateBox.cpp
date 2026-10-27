@@ -6,8 +6,7 @@ namespace hachi
 {
 juce::String PronunciationCandidateBox::tr(const char* zh, const char* en) const
 {
-    const auto language = strings.getLanguage();
-    return juce::String::fromUTF8(language == I18n::Language::zhCN || language == I18n::Language::zhTW ? zh : en);
+    return I18n::pairText(zh, en, strings.getLanguage());
 }
 
 PronunciationCandidateBox::PronunciationCandidateBox(I18n& i18n, std::vector<Candidate> sources,
@@ -35,6 +34,7 @@ PronunciationCandidateBox::PronunciationCandidateBox(I18n& i18n, std::vector<Can
     help.setColour(juce::Label::textColourId, Palette::textMuted);
     chooseButton.setButtonText(tr("选择", "Choose"));
     previewButton.setButtonText(tr("试听", "Preview"));
+    previewButton.setComponentID("material.candidate.preview");
     previewButton.setTooltip(tr("由宿主提供原音试听，不启动音频设备。", "Recording preview is provided by the host; no audio device is opened here."));
     cancelButton.setButtonText(strings.text("dialog.cancel"));
     chooseButton.onClick = [this] { choose(list.getSelectedRow()); };
@@ -55,6 +55,11 @@ void PronunciationCandidateBox::setQuery(juce::String text)
     filter();
 }
 
+void PronunciationCandidateBox::setSequenceContext(const juce::StringArray& remaining)
+{if(remaining.size()>1)help.setText(remaining.joinIntoString(" → "),juce::dontSendNotification);}
+std::optional<PronunciationCandidateBox::Candidate> PronunciationCandidateBox::diagnosticCandidate(int row) const
+{if(!juce::isPositiveAndBelow(row,static_cast<int>(visible.size())))return {};return candidates[visible[std::size_t(row)]];}
+
 void PronunciationCandidateBox::filter()
 {
     const auto text = query.getText().trim();
@@ -63,7 +68,7 @@ void PronunciationCandidateBox::filter()
         if (text.isEmpty()) return 3;
         if (candidate.alias.equalsIgnoreCase(text)) return 0;
         if (candidate.alias.startsWithIgnoreCase(text)) return 1;
-        if (candidate.alias.containsIgnoreCase(text)) return 2;
+        if (candidate.alias.containsIgnoreCase(text) || candidate.aliases.joinIntoString(" ").containsIgnoreCase(text)) return 2;
         return -1;
     };
     visible.clear();
@@ -72,7 +77,7 @@ void PronunciationCandidateBox::filter()
     // Stable original order breaks equal-rank ties. Never collapse aliases or
     // pronunciation IDs: IDs are scoped by audio, not globally unique.
     std::stable_sort(visible.begin(), visible.end(), [&](std::size_t a, std::size_t b)
-        { return rank(candidates[a]) < rank(candidates[b]); });
+        {const auto ra=rank(candidates[a]),rb=rank(candidates[b]);if(ra!=rb)return ra<rb;return candidates[a].regionIds.size()>candidates[b].regionIds.size();});
     list.updateContent();
     if (visible.empty()) list.deselectAllRows();
     else { list.selectRow(0); list.scrollToEnsureRowIsOnscreen(0); }
@@ -85,7 +90,7 @@ int PronunciationCandidateBox::getNumRows() { return static_cast<int>(visible.si
 
 juce::String PronunciationCandidateBox::candidateLabel(const Candidate& candidate) const
 {
-    return candidate.alias + juce::String::fromUTF8(" — ") + candidate.audio.getFileName() + " ("
+    return (candidate.aliases.isEmpty()?candidate.alias:candidate.aliases.joinIntoString(" → ")) + juce::String::fromUTF8(" — ") + candidate.audio.getFileName() + " ("
         + candidate.audio.getParentDirectory().getFullPathName() + ") ["
         + juce::String(candidate.startSeconds * 1000, 1) + ", "
         + juce::String(candidate.endSeconds * 1000, 1) + " ms]"
@@ -101,12 +106,13 @@ void PronunciationCandidateBox::paintListBoxItem(int row, juce::Graphics& g, int
     const auto number = row < 9 ? juce::String(row + 1) + ". " : juce::String();
     const auto kind = candidate.pronunciationKind == PronunciationKind::transition ? " [T]"
         : candidate.pronunciationKind == PronunciationKind::breath ? " [B]" : "";
-    g.drawText(number + candidate.alias + kind + "  ["
+    const auto display=candidate.aliases.isEmpty()?candidate.alias:candidate.aliases.joinIntoString(" → ");
+    g.drawText(number + display + kind + "  ["
         + juce::String(candidate.startSeconds * 1000, 1) + ", " + juce::String(candidate.endSeconds * 1000, 1) + " ms]",
         6, 1, width - 12, 20, juce::Justification::centredLeft, true);
     g.setColour(Palette::textMuted); g.setFont(11.0f);
     g.drawText(candidate.audio.getFileName() + " (" + candidate.audio.getParentDirectory().getFullPathName()
-        + ")  " + candidate.audioId + "/" + candidate.regionId,
+        + ")  " + candidate.audioId + "/" + (candidate.regionIds.isEmpty()?candidate.regionId:candidate.regionIds.joinIntoString(" → ")),
         6, 21, width - 12, std::max(1, height - 22), juce::Justification::centredLeft, true);
 }
 

@@ -1,5 +1,6 @@
 #include "ProjectMaterialRegistrationFacts.h"
 #include "NativeNoteTiming.h"
+#include "NativeLogicalTransitionSource.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -164,6 +165,27 @@ ProjectMaterialRegistrationFacts::Result ProjectMaterialRegistrationFacts::deriv
             result.variants[i].rows[r].nextRowKey = next->id;
             sourceLinkedFrom.insert(&note); sourceLinkedTo.insert(next); join(i, j);
         }
+    std::vector<const NativeLogicalTransition*> logicalRows;
+    for(const auto& annotation:project.logicalTransitions)
+    {
+        NativeLogicalTransition checked;juce::String issue;
+        if(!nativeLogicalTransitionFromTree(nativeLogicalTransitionTree(annotation),checked,issue))
+        {result.diagnostics.add(issue);continue;}
+        std::vector<std::pair<std::size_t,std::size_t>> front,back;
+        for(std::size_t i=0;i<owners.size();++i)for(std::size_t j=0;j<owners[i].members.size();++j)
+        {const auto& id=owners[i].members[j]->id;if(id==annotation.evidence.frontNoteId)front.emplace_back(i,j);if(id==annotation.evidence.backNoteId)back.emplace_back(i,j);}
+        if(front.empty()||back.empty())
+        {result.warnings.add("Logical transition is outside the selected owner scope: "+annotation.evidence.logicalId);continue;}
+        if(front.size()!=1||back.size()!=1)
+        {result.diagnostics.add("Ambiguous logical transition member identity");continue;}
+        const auto [a,ar]=front[0];const auto [b,br]=back[0];
+        const auto& first=result.variants[a].rows[ar].annotation;const auto& last=result.variants[b].rows[br].annotation;
+        if(owners[a].owner->sourceFile!=owners[b].owner->sourceFile
+            ||std::abs(first.regionStartSeconds-annotation.sourceFromSeconds)>1.e-6||std::abs(last.regionEndSeconds-annotation.sourceToSeconds)>1.e-6
+            ||std::abs(first.regionEndSeconds-annotation.middleSourceSeconds)>1.e-6||std::abs(last.regionStartSeconds-annotation.middleSourceSeconds)>1.e-6)
+        {result.diagnostics.add("Logical transition source bounds no longer match the exact carried halves");continue;}
+        join(a,b);logicalRows.push_back(&annotation);
+    }
     for (std::size_t i = 0; i < owners.size(); ++i)
     {
         const auto& view = owners[i];
@@ -200,6 +222,30 @@ ProjectMaterialRegistrationFacts::Result ProjectMaterialRegistrationFacts::deriv
         }
     }
     result.variants = std::move(grouped);
+    for(const auto* annotation:logicalRows)
+    {
+        bool merged=false;
+        for(auto& variant:result.variants)
+        {
+            const auto front=std::find_if(variant.rows.begin(),variant.rows.end(),[&](const auto& row){return row.key==annotation->evidence.frontNoteId;});
+            const auto back=std::find_if(variant.rows.begin(),variant.rows.end(),[&](const auto& row){return row.key==annotation->evidence.backNoteId;});
+            if(front==variant.rows.end()||back==variant.rows.end())continue;
+            R::RowFacts row;row.key="logical:"+annotation->evidence.logicalId;
+            juce::String issue;if(!nativeLogicalTransitionSourceRow(*annotation,row.annotation,issue))
+            {result.diagnostics.add(issue);break;}
+            row.members=front->members;row.members.insert(row.members.end(),back->members.begin(),back->members.end());
+            row.nextRowKey=back->nextRowKey;
+            if(row.nextRowKey==front->key||row.nextRowKey==back->key)
+            {result.diagnostics.add("Logical transition would contain a cyclic source-row link");break;}
+            const auto firstKey=front->key,lastKey=back->key;
+            for(auto& other:variant.rows)if(other.key!=firstKey&&other.key!=lastKey&&(other.nextRowKey==firstKey||other.nextRowKey==lastKey))other.nextRowKey=row.key;
+            std::erase_if(variant.rows,[&](const auto& other){return other.key==firstKey||other.key==lastKey;});
+            variant.rows.push_back(std::move(row));
+            std::stable_sort(variant.rows.begin(),variant.rows.end(),[](const auto& a,const auto& b){return a.annotation.regionStartSeconds<b.annotation.regionStartSeconds;});
+            merged=true;break;
+        }
+        if(!merged)result.diagnostics.add("Logical transition could not be represented as one source annotation variant");
+    }
     if (result.variants.empty()) result.diagnostics.add("No eligible carried native physical-source placements");
     result.ready = !result.variants.empty() && result.diagnostics.isEmpty();
     return result;

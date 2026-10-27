@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 
-# Public version changes require an explicit user request; small updates use docs/updates.md.
-project(HachiShifterNext VERSION 0.25 LANGUAGES C CXX)
+# The owner designated this rolling development build "dev" (2026-10-27).
+# CMake/Windows retain a legal numeric tuple; every public version string is dev.
+project(HachiShifterNext VERSION 0.0.0 LANGUAGES C CXX)
+set(HACHI_DISPLAY_VERSION "dev" CACHE STRING "Public rolling development version label")
 
 option(HACHI_ENABLE_ASAN "Enable AddressSanitizer for native crash diagnosis" OFF)
 
@@ -236,6 +238,14 @@ juce_add_gui_app(HachiShifterNext
 if(WIN32)
     get_target_property(HACHI_JUCE_CODE HachiShifterNext JUCE_GENERATED_SOURCES_DIRECTORY)
     get_target_property(HACHI_JUCE_INFO HachiShifterNext JUCE_INFO_FILE)
+    # JUCE's numeric VERSION is required for legal CMake/Windows tuples. Its
+    # generated resource supports replacing only VERSIONINFO while retaining icons.
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/HachiVersion.rc.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/HachiVersion.rc" @ONLY)
+    target_compile_definitions(HachiShifterNext PRIVATE
+        JUCE_USER_DEFINED_RC_FILE="${CMAKE_CURRENT_BINARY_DIR}/HachiVersion.rc")
+    set_property(SOURCE "${HACHI_JUCE_CODE}/HachiShifterNext_resources.rc"
+        APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/HachiVersion.rc")
     add_custom_command(OUTPUT "${HACHI_JUCE_CODE}/HachiShifterNext_resources.rc"
         APPEND DEPENDS "${HACHI_JUCE_INFO}")
 endif()
@@ -290,6 +300,8 @@ target_sources(HachiShifterNext PRIVATE
     src/SampleSettings.cpp
     src/PronunciationTiming.cpp
     src/PronunciationTiming.h
+    src/NativeSourceEdgePlan.cpp
+    src/NativeSourceEdgePlan.h
     src/OttoMaterialIO.cpp
     src/OttoMaterialIO.h
     src/OttoMaterialMigration.cpp
@@ -300,6 +312,21 @@ target_sources(HachiShifterNext PRIVATE
     src/CommunityDatasetIO.h
     src/CommunityDatasetImportDialog.cpp
     src/CommunityDatasetImportDialog.h
+    src/MainCommunityDatasetImport.cpp
+    src/JapaneseAutoAnnotation.cpp
+    src/JapaneseAutoAnnotation.h
+    src/JapaneseAnnotationBatch.cpp
+    src/JapaneseAnnotationBatch.h
+    src/JapaneseAutoAnnotationDialog.cpp
+    src/JapaneseAutoAnnotationDialog.h
+    src/MainJapaneseAutoAnnotation.cpp
+    src/backend/JapaneseAnnotationAudio.cpp
+    src/backend/JapaneseAnnotationAudio.h
+    src/backend/JapanesePhonemeAsr.cpp
+    src/backend/JapanesePhonemeAsr.h
+    src/backend/TifaJapaneseAligner.cpp
+    src/backend/TifaJapaneseAligner.h
+    src/backend/AnnotationOrtCancellation.h
     src/ProjectMaterialRegistration.cpp
     src/ProjectMaterialRegistration.h
     src/ProjectMaterialRegistrationFacts.cpp
@@ -378,7 +405,7 @@ endif()
 
 target_compile_definitions(HachiShifterNext PRIVATE
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:HachiShifterNext,JUCE_PRODUCT_NAME>"
-    JUCE_APPLICATION_VERSION_STRING="${PROJECT_VERSION}"
+    JUCE_APPLICATION_VERSION_STRING="${HACHI_DISPLAY_VERSION}"
     JUCE_DISPLAY_SPLASH_SCREEN=0
     JUCE_REPORT_APP_USAGE=0
     JUCE_USE_CURL=0
@@ -458,6 +485,16 @@ add_custom_command(TARGET HachiShifterNext POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/english_g2p.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/engines/diffsinger/requirements.txt"
         "$<TARGET_FILE_DIR:HachiShifterNext>/engines/diffsinger")
+
+# Translations are external runtime data, never compiled into the executable.
+# Use a dependency-tracked target so TSV-only edits also reach local builds.
+add_custom_target(HachiTranslations ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:HachiShifterNext>/lang"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/lang/translations.tsv"
+        "$<TARGET_FILE_DIR:HachiShifterNext>/lang/translations.tsv"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/lang/translations.tsv")
+add_dependencies(HachiShifterNext HachiTranslations)
 
 # Model staging is explicit: ordinary application builds never copy weights.
 set(HACHI_MODEL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/models" CACHE PATH

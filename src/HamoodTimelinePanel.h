@@ -35,13 +35,13 @@ public:
     ~HamoodTimelinePanel() override {cancel->store(true);}
     const char* field()const{return kind.getSelectedId()==2?"sections":"chords";}
     int getNumRows() override{return state[field()].getArray()->size();}
-    void updateHelp(){message.setText(juce::String::fromUTF8(kind.getSelectedId()==1?"和弦示例：C、Am、Bbmaj7、G7/B；分数为模型指标，不是概率。":"段落示例：主歌、副歌、桥段。保存名称、范围和人工确认状态。"),juce::dontSendNotification);}
+    void updateHelp(){message.setText(I18n::uiText(kind.getSelectedId()==1?"和弦示例：C、Am、Bbmaj7、G7/B；分数为模型指标，不是概率。":"段落示例：主歌、副歌、桥段。保存名称、范围和人工确认状态。"),juce::dontSendNotification);}
     void paintListBoxItem(int row,juce::Graphics& g,int width,int height,bool selected)override
     {
         if(row<0||row>=getNumRows())return;if(selected)g.fillAll(Palette::selection);const auto v=(*state[field()].getArray())[row];
         auto text=juce::String(data.secondsForQuarterPosition((double)v["start_quarter"]),3)+" – "+juce::String(data.secondsForQuarterPosition((double)v["end_quarter"]),3)+" s   |   "+v["label"].toString();
         if(kind.getSelectedId()==1)text+="   |   "+juce::String((double)v.getProperty("score",1.0),2);
-        text+=juce::String::fromUTF8((bool)v["confirmed"]?"   已确认":"   待确认");g.setColour(selected?Palette::contrastingText(Palette::selection):Palette::text);g.drawText(text,8,0,width-16,height,juce::Justification::centredLeft);
+        text+=I18n::uiText((bool)v["confirmed"]?"   已确认":"   待确认");g.setColour(selected?Palette::contrastingText(Palette::selection):Palette::text);g.drawText(text,8,0,width-16,height,juce::Justification::centredLeft);
     }
     void selectedRowsChanged(int row)override
     {

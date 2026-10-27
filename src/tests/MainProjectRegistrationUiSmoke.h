@@ -58,7 +58,7 @@ inline bool MainComponent::diagnosticProjectRegistrationUi(const juce::File& out
     }
     seed.tracks={track};ProjectModel fixture;fixture.resetDocument(seed);const auto input=root.getChildFile("input.hjpx");check("existing_HJPX_saved_fixture",fixture.save(input,error));
     const auto inputHash=juce::SHA256(input).toHexString(),sourceHash=juce::SHA256(source).toHexString();
-    const auto firstLoaded=loadProjectFile(input);const auto firstPrompt=firstLoaded&&wait([&]{return prompt()!=nullptr;},30000);
+    const auto firstLoaded=loadProjectFile(input);const auto firstPrompt=firstLoaded&&wait([&]{return registrationInfoBar.isVisible();},30000); // 198: automatic offer is a non-modal strip
     const auto autoTrace="first_auto_load="+juce::String(firstLoaded?1:0)+" prompt="+juce::String(firstPrompt?1:0)+" registration_active="+juce::String(projectRegistrationOperation?1:0)+" main_showing="+juce::String(isShowing()?1:0)
         +" modal="+(juce::Component::getCurrentlyModalComponent()?juce::Component::getCurrentlyModalComponent()->getComponentID():juce::String("none"))+"\n"+projectRegistrationTrace;
     log+=autoTrace+"\n";std::cout<<autoTrace<<std::endl;root.getChildFile("first-auto-offer-trace.txt").replaceWithText(autoTrace);
@@ -67,7 +67,7 @@ inline bool MainComponent::diagnosticProjectRegistrationUi(const juce::File& out
     check("constructor_picker_notifications_do_not_rewrite_loaded_WORLD_track",afterInitialPump.tracks.size()==1&&afterInitialPump.tracks[0].pitchAlgorithm==PitchAlgorithm::world);
     const auto music=ProjectModel::registrationMusicSourceFingerprint(project.snapshot());
     const auto loaded=project.contentFingerprint();const auto loadedRevision=project.revisionNumber();
-    if(auto* p=prompt())p->exitModalState(0);
+    if(registrationInfoLater.onClick)registrationInfoLater.onClick();
     check("decline_keeps_successfully_loaded_project_no_undo_no_copy",wait([&]{return !projectRegistrationOperation;},5000)&&project.contentFingerprint()==loaded&&project.revisionNumber()==loadedRevision);
     std::function<void(const juce::File&)> folderResult;int folderRequests=0;
     projectRegistrationFolderPickerForTest=[&](auto callback){++folderRequests;folderResult=std::move(callback);};
@@ -88,10 +88,10 @@ inline bool MainComponent::diagnosticProjectRegistrationUi(const juce::File& out
     const auto saved=root.getChildFile("user-saved.hjpx");check("explicit_user_save_persists_new_refs",saveProjectTo(saved));
     check("already_bound_reopen_never_reprompts_or_recopies",loadProjectFile(saved)&&wait([&]{return !projectRegistrationOperation;},30000)&&prompt()==nullptr&&folderRequests==2);
     // Stale editing is a real UI-time project change, not a forged ticket.
-    closeWarnings();check("reload_original_for_stale_case",loadProjectFile(input)&&wait([&]{return prompt()!=nullptr;},30000));if(auto* p=prompt())p->exitModalState(1);wait([&]{return bool(folderResult);},5000);
+    closeWarnings();check("reload_original_for_stale_case",loadProjectFile(input)&&wait([&]{return registrationInfoBar.isVisible();},30000));if(registrationInfoRegister.onClick)registrationInfoRegister.onClick();wait([&]{return bool(folderResult);},5000);
     if(folderResult)folderResult(destination);project.setTrackVolume(track.id,.75f);
     check("stale_snapshot_rejects_without_overwriting_live_user_edit",wait([&]{return !projectRegistrationOperation;},120000)&&project.snapshot().tracks[0].volume==.75f&&project.snapshot().tracks[0].clips[1].sourceFile==source);closeWarnings();folderResult={};
-    check("reload_original_for_preference_failure",loadProjectFile(input)&&wait([&]{return prompt()!=nullptr;},30000));if(auto* p=prompt())p->exitModalState(1);wait([&]{return bool(folderResult);},5000);
+    check("reload_original_for_preference_failure",loadProjectFile(input)&&wait([&]{return registrationInfoBar.isVisible();},30000));if(registrationInfoRegister.onClick)registrationInfoRegister.onClick();wait([&]{return bool(folderResult);},5000);
     projectRegistrationRootWriterForTest=[](const juce::File&,juce::String& error){error="Injected preference persistence failure";return false;};
     if(folderResult)folderResult(destination);check("adopted_folder_permanent_despite_preference_failure",wait([&]{return !projectRegistrationOperation;},120000)&&projectRegistrationRetryRoots.size()==1);
     const auto retained=project.snapshot().tracks[0].clips[1].sourceFile;check("preference_failure_never_deletes_adopted_audio_OTTO",retained.existsAsFile()&&retained.getParentDirectory().getChildFile("otto.ini").existsAsFile());closeWarnings();

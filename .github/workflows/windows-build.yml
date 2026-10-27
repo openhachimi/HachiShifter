@@ -56,12 +56,15 @@ jobs:
         run: |
           $env:HACHI_TEST_SETTINGS_DIR = "$env:RUNNER_TEMP\hachi-ci-settings"
           $exe = '${{ steps.app.outputs.stage }}\HachiShifter Next.exe'
-          foreach ($case in @('smoke-track-types','smoke-engine-view-capabilities')) {
+          if ((Get-Item -LiteralPath $exe).VersionInfo.ProductVersion -ne 'dev') { throw 'Expected rolling dev executable metadata' }
+          if (-not (Test-Path -LiteralPath '${{ steps.app.outputs.stage }}\lang\translations.tsv')) { throw 'Packaged external translations are missing' }
+          foreach ($case in @('smoke-track-types','smoke-engine-view-capabilities','smoke-focused-defaults','smoke-transition-pair-import-options','smoke-translation-file','smoke-translation-no-file')) {
             $out = Join-Path $env:RUNNER_TEMP $case
             New-Item -ItemType Directory -Force $out | Out-Null
             $process = Start-Process -FilePath $exe -ArgumentList @("--$case", $out) -PassThru -RedirectStandardOutput "$out\stdout.txt" -RedirectStandardError "$out\stderr.txt"
+            $handle = $process.Handle
             if (-not $process.WaitForExit(180000)) { $process.Kill(); throw "$case timed out" }
-            if ($process.ExitCode) { Get-Content "$out\stderr.txt"; throw "$case failed: $($process.ExitCode)" }
+            if ($null -eq $process.ExitCode -or $process.ExitCode -ne 0) { Get-Content "$out\stderr.txt" -Encoding utf8; throw "${case} failed: $($process.ExitCode)" }
             Get-Content "$out\stdout.txt"
           }
       - name: Upload app-only package
@@ -104,5 +107,9 @@ jobs:
             build-windows/*.map
             ${{ runner.temp }}/smoke-track-types/
             ${{ runner.temp }}/smoke-engine-view-capabilities/
+            ${{ runner.temp }}/smoke-focused-defaults/
+            ${{ runner.temp }}/smoke-transition-pair-import-options/
+            ${{ runner.temp }}/smoke-translation-file/
+            ${{ runner.temp }}/smoke-translation-no-file/
           if-no-files-found: ignore
           retention-days: 14

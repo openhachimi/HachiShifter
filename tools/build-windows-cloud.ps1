@@ -28,7 +28,7 @@ if (Test-Path -LiteralPath $cache) {
 }
 $configure = @('-S', $source, '-B', $build, '-G', 'Ninja',
     '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_C_COMPILER=$clang", "-DCMAKE_CXX_COMPILER=$clang",
-    '-DHACHI_ENABLE_ONNX_ANALYSIS=ON', '-DHACHI_COPY_ANALYSIS_MODELS=OFF')
+    '-DHACHI_ENABLE_ONNX_ANALYSIS=ON', '-DHACHI_COPY_ANALYSIS_MODELS=OFF', '-DHACHI_DISPLAY_VERSION=dev')
 if ($FetchDirectory) {
     $fetch = if ([IO.Path]::IsPathRooted($FetchDirectory)) { $FetchDirectory } else { Join-Path $source $FetchDirectory }
     $configure += "-DFETCHCONTENT_BASE_DIR=$([IO.Path]::GetFullPath($fetch))"

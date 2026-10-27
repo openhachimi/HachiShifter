@@ -1,4 +1,5 @@
 #include "MelodyneImporter.h"
+#include "../NativeSourceTimeMap.h"
 
 #include <juce_core/juce_core.h>
 #include <algorithm>
@@ -697,6 +698,44 @@ juce::var MelodyneImporter::inspectTracks(const juce::File& file, juce::String& 
     return tracks;
 }
 
+juce::var MelodyneImporter::inspectJoinGraph(const juce::File& file,juce::String& error)
+{
+    error.clear();auto bytes=decodeGraph(file,error,{});if(!bytes)return {};
+    Graph graph;if(!graph.parse(std::move(*bytes),error))return {};
+    juce::Array<juce::var> records;std::map<std::string,int> classes;
+    for(std::uint32_t id=0;id<graph.objectCount();++id)
+    {
+        const auto* schema=graph.objectClass(id);if(!schema)continue;
+        const auto name=juce::String(schema->name);
+        if(schema->name!="MUElement"&&!name.containsIgnoreCase("join")
+            &&schema->name!="MUAudioSourceItem"&&schema->name!="MUAudioSourceElement"
+            &&schema->name!="MUAudioSourceDescription")continue;
+        auto* record=new juce::DynamicObject;record->setProperty("objectId",int(id));record->setProperty("class",name);
+        auto* fields=new juce::DynamicObject;
+        for(const auto& field:schema->fields)
+        {
+            const auto value=graph.value(id,field.name);if(!value)continue;
+            juce::var decoded;
+            switch(value->kind)
+            {
+                case RawValue::Kind::boolean:decoded=value->boolean;break;
+                case RawValue::Kind::integer:decoded=juce::int64(value->integer);break;
+                case RawValue::Kind::number:if(std::isfinite(value->number))decoded=value->number;break;
+                case RawValue::Kind::reference:
+                    if(value->reference!=nullReference)
+                    {auto* reference=new juce::DynamicObject;reference->setProperty("objectId",int(value->reference));reference->setProperty("class",juce::String(graph.className(value->reference)));decoded=juce::var(reference);}break;
+            }
+            fields->setProperty(juce::Identifier(juce::String(field.name)),decoded);
+        }
+        record->setProperty("fields",juce::var(fields));records.add(juce::var(record));++classes[schema->name];
+        if(records.size()>20000){error="Join diagnostic record limit exceeded";return {};}
+    }
+    auto* output=new juce::DynamicObject;auto* counts=new juce::DynamicObject;
+    for(const auto& [name,count]:classes)counts->setProperty(juce::Identifier(juce::String(name)),count);
+    output->setProperty("readOnly",true);output->setProperty("classification","raw facts only; no partial-cut semantics inferred");
+    output->setProperty("counts",juce::var(counts));output->setProperty("records",juce::var(records));return juce::var(output);
+}
+
 std::optional<MelodyneImportResult> MelodyneImporter::importProject(
     const juce::File& file, juce::String& error, Progress progress,
     MelodyneImportOptions options)
@@ -884,12 +923,37 @@ std::optional<MelodyneImportResult> MelodyneImporter::importProject(
             if (note.label.isEmpty()) note.label = graph.stringField(item, "label");
             note.startSeconds = 0.0;
             note.durationSeconds = duration;
-            // On Melodyne import the consonant line defaults to the note's
-            // preutterance (which is zero for a fresh import), so it sits on the
-            // note start rather than at Melodyne's attackDuration; the start and
-            // cutoff region lines default to zero (no trim).  The user tunes
-            // these by hand afterwards.  UTAU import/timing is untouched.
-            note.consonantSeconds = std::max(0.0, note.utauPreutteranceSeconds);
+            // startTime is the audio-support origin, not its synchronization
+            // point. anchorPoint is the explicit element-local alignment edited
+            // by Melodyne; attackDuration, sibilant limits and voiced F0 onset
+            // are different facts. Carry P in the existing SOURCE-offset field,
+            // through the original warp (never put target seconds in source P).
+            // The source clock stays authoritative when exposing C=P as native
+            // metadata. Missing/out-of-support anchors do not justify a guess.
+            note.consonantSeconds = 0.0;
+            if (const auto anchor = graph.number(element, "anchorPoint");
+                anchor && *anchor >= 0.0 && *anchor <= duration)
+            {
+                const auto sourceP = itemStart + (timeFunction
+                    ? graph.evaluate(*timeFunction, *anchor) : *anchor);
+                if (std::isfinite(sourceP) && sourceP >= sourceStart - 1.0e-9
+                    && sourceP <= sourceEnd + 1.0e-9)
+                {
+                    note.utauPreutteranceOverrideEnabled = true;
+                    note.utauPreutteranceSeconds = std::clamp(sourceP, sourceStart, sourceEnd) - sourceStart;
+                    // Freeze a missing linear clock before C=P, so C cannot
+                    // become an accidental attack-speed render instruction.
+                    if (clip.sourceTimeMap.empty())
+                        clip.sourceTimeMap = nativeSourceTimeMap(clip);
+                    note.consonantSeconds = nativeTargetTimeAt(clip.sourceTimeMap,
+                        note.utauPreutteranceSeconds);
+                    result.alignmentEvidence.push_back({ note.id, *anchor,
+                        std::clamp(sourceP, sourceStart, sourceEnd), sourceStart });
+                }
+            }
+            if (const auto attack = graph.number(element, "attackDuration");
+                attack && *attack > 0.0 && std::isfinite(*attack))
+                note.melodyneAttackSeconds = std::min(duration, *attack);
             const auto targetCenter = static_cast<float>(graph.numberAlias(
                 element, { "pitchCenter", "targetPitchCenter" }).value_or(6000.0));
             auto sourceCenter = static_cast<float>(graph.number(item, "pitchCenter").value_or(targetCenter));
@@ -1043,6 +1107,45 @@ std::optional<MelodyneImportResult> MelodyneImporter::importProject(
             clip.notes.push_back(std::move(note));
             importedSourceUses.emplace(element,std::make_pair(source,track.clips.size()));
             track.clips.push_back(std::move(clip));
+        }
+        // Preserve verifiable graph facts before disposal. They are NOT a
+        // partial-cut/transition classifier: that decision needs source clocks,
+        // two-half context and audio evidence in the shared candidate detector.
+        for(const auto& use:importedSourceUses)
+        {
+            const auto join=graph.reference(use.first,"followingJoin");if(!join)continue;
+            const auto preceding=graph.reference(*join,"precedingElement"),following=graph.reference(*join,"followingElement");
+            if(!preceding||!following||*preceding!=use.first)continue;
+            const auto next=importedSourceUses.find(*following);if(next==importedSourceUses.end()||next->second.first!=use.second.first)continue;
+            const auto reverse=graph.reference(*following,"precedingJoin");if(!reverse||*reverse!=*join)continue;
+            const auto uniqueSource=[&](std::uint32_t element)
+            {
+                const auto components=graph.reference(element,"audioComponents");
+                const auto count=components?graph.list(*components).size():0;
+                if(count>1||(!count&&!graph.reference(element,"principalAudioComponent")))return false;
+                const auto chain=sourceChain(graph,element);if(!chain)return false;
+                const auto [source,item,description]=*chain;juce::ignoreUnused(description);
+                const auto rate=graph.number(source,"sampleRate"),start=graph.number(item,"startSampleIndex"),duration=graph.number(element,"duration");
+                const auto function=graph.reference(element,"sourceTimeForElementTimeFunction");
+                if(!rate||*rate<=0||!start||*start<0||!duration||*duration<=0||!function)return false;
+                const auto pointsRef=graph.reference(*function,"points");if(!pointsRef)return false;
+                const auto pointIds=graph.list(*pointsRef);const auto points=graph.functionPoints(*function);
+                if(points.size()<2||pointIds.size()!=points.size())return false;
+                for(std::size_t i=0;i<points.size();++i)
+                    if(!std::isfinite(points[i].first)||!std::isfinite(points[i].second)
+                        ||(i&&(points[i].first<=points[i-1].first||points[i].second<=points[i-1].second)))return false;
+                const auto first=graph.evaluate(*function,0.),last=graph.evaluate(*function,*duration);
+                return std::isfinite(first)&&std::isfinite(last)&&first>=0&&last-first>=.001;
+            };
+            if(!uniqueSource(use.first)||!uniqueSource(*following))continue;
+            const auto& front=track.clips[use.second.second];const auto& back=track.clips[next->second.second];
+            if(front.sourceFile!=back.sourceFile||front.notes.size()!=1||back.notes.size()!=1)continue;
+            NativeSplitTransitionEvidence facts;facts.logicalId=makeId("melodyne-join-candidate");facts.frontNoteId=front.notes[0].id;facts.backNoteId=back.notes[0].id;
+            facts.sourceObjectIdentity=facts.frontSourceObjectIdentity=facts.backSourceObjectIdentity="source-object-"+juce::String(use.second.first);
+            facts.precedingElementIdentity=facts.frontElementIdentity="element-object-"+juce::String(use.first);
+            facts.followingElementIdentity=facts.backElementIdentity="element-object-"+juce::String(*following);
+            facts.joinsPitches=graph.boolean(*join,"joinsPitches");facts.joinsAmplitudes=graph.boolean(*join,"joinsAmplitudes");facts.joinsPhases=graph.boolean(*join,"joinsPhases");
+            result.continuousSourceJoins.push_back(std::move(facts));
         }
         // Group only actual MUSuccessiveJoin endpoints from this import and
         // the same physical recording/source identity. Never enumerate possible

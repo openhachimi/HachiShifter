@@ -44,7 +44,28 @@ public:
         for(const auto& item:windows)if((key.isEmpty()||item.key==key)&&item.window->isVisible()&&dynamic_cast<Content*>(item.window->getContentComponent())!=nullptr)return item.window.get();
         return nullptr;
     }
+    juce::String keyForContent(const juce::Component* content) const
+    {for(const auto& item:windows)if(item.window->getContentComponent()==content)return item.key;return {};}
+    bool canRekeyContent(const juce::Component* content,const juce::String& key) const
+    {
+        bool owned=false;
+        for(const auto& item:windows)
+        {
+            if(item.window->getContentComponent()==content)owned=true;
+            else if(item.key==key&&item.window->isVisible())return false;
+        }
+        return owned&&key.isNotEmpty();
+    }
+    bool rekeyContent(juce::Component* content,const juce::String& key)
+    {
+        if(!canRekeyContent(content,key))return false;
+        for(auto& item:windows)if(item.window->getContentComponent()==content){item.key=key;return true;}
+        return false;
+    }
     size_t size() const {return windows.size();}
+    // Visit visible window contents (e.g. to tell editors their source changed).
+    template<class Content,class Fn> void forEachVisible(Fn&& fn) const
+    {for(const auto& item:windows)if(item.window->isVisible())if(auto* c=dynamic_cast<Content*>(item.window->getContentComponent()))fn(*c);}
 private:
     void componentVisibilityChanged(juce::Component& c) override {if(!c.isVisible())triggerAsyncUpdate();}
     void handleAsyncUpdate() override {removeClosed();}

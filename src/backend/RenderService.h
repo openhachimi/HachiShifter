@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Mld5Renderer.h"
+#include "NsfHifiganRenderer.h"
 #include "UtauRenderer.h"
 #include "OrtExecution.h"
 #include "PlaybackRenderQueue.h"
@@ -23,6 +24,12 @@ enum class PitchRenderBackend
 struct Mld5FileRenderRequest
 {
     juce::File sourceFile;
+    // Optional immutable in-memory source on its ORIGINAL sample clock. This is
+    // not target-time stretched PCM. When present it is authoritative: invalid
+    // memory input must fail, never reopen sourceFile or bake a temporary WAV.
+    std::shared_ptr<const juce::AudioBuffer<float>> sourceBuffer;
+    double sourceRate = 0.0;
+    std::shared_ptr<const NsfHifiganSourceAssembly> sourceAssembly;
     double sourceOffsetSeconds = 0.0;
     double sourceDurationSeconds = 0.0;
     double targetDurationSeconds = 0.0;

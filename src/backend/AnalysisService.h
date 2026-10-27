@@ -13,6 +13,7 @@ struct AnalysisConfig
     juce::String gameModel { "medium" };
     InferenceBackend inference = InferenceBackend::automatic;
     int deviceIndex = -1;
+    bool preserveFullSourcePitch = false; // never enabled by ordinary import defaults
 };
 
 struct AnalysisStatus
@@ -35,6 +36,8 @@ struct AnalysisResult
     std::vector<NoteData> notes;
     AnalysisStatus status;
     juce::String warning;
+    std::vector<NoteData> sourcePitchNotes; // opt-in full-file acoustic reference, not segmentation
+    std::size_t sourcePitchVoicedPoints = 0;
 };
 
 // Single entry point for ordinary audio analysis, Melodyne source-F0

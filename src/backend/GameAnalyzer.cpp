@@ -495,6 +495,34 @@ float median(std::vector<float> values, float fallback)
     return *middle;
 }
 
+std::vector<NoteData> fullSourcePitch(const std::vector<FcpeFrame>& frames,double duration)
+{
+    if(frames.empty()||!std::isfinite(duration)||duration<=0)return {};
+    NoteData note;note.id="source-f0-full-file";note.startSeconds=0;note.durationSeconds=duration;
+    note.sourcePitchMeasured=true;
+    std::vector<std::optional<std::pair<float,float>>> pitches;std::vector<float> voiced;
+    const auto count=static_cast<std::size_t>(std::ceil(duration/.005));
+    pitches.reserve(count+1);voiced.reserve(count+1);
+    for(std::size_t i=0;i<=count;++i)
+    {
+        const auto pitch=pitchAt(frames,std::min(duration,double(i)*.005));
+        if(pitch)voiced.push_back(pitch->first);pitches.push_back(pitch);
+    }
+    // No measured pitch means no invented C4 reference. The zero centre below
+    // is only a relative-data origin; all those contour points stay unvoiced.
+    const auto centre=median(voiced,0.0f);
+    note.sourceMidiCenter=voiced.empty()?-1.0f:juce::jlimit(0.0f,127.0f,centre/100.0f);
+    note.midiNote=voiced.empty()?0.0f:note.sourceMidiCenter;
+    note.contour.reserve(pitches.size());
+    for(std::size_t i=0;i<pitches.size();++i)
+    {
+        PitchPoint point;point.timeSeconds=std::min(duration,double(i)*.005);point.voiced=pitches[i].has_value();
+        if(pitches[i]){point.relativeCents=pitches[i]->first-centre;point.withoutVibratoCents=pitches[i]->second-centre;}
+        note.contour.push_back(point);
+    }
+    return {std::move(note)};
+}
+
 std::vector<NoteData> combineRegions(const std::vector<GameRegion>& regions,
                                      const std::vector<NoteData>& acoustic,
                                      const std::vector<FcpeFrame>& fcpe)
@@ -616,6 +644,14 @@ GameAnalyzer::Result GameAnalyzer::analyse(const juce::File& audioFile,
     }
     auto decoded = decodeMono(audioFile, error);
     if (decoded.mono.empty()) return result;
+    if(options.preserveFullSourcePitch)
+    {
+        // Reuse the one FCPE run above, including its existing SourceVoicing
+        // decisions. GAME's stochastic semantic mask must not erase these facts.
+        result.sourcePitchNotes=fcpe.empty()?acoustic:fullSourcePitch(fcpe,double(decoded.mono.size())/decoded.sampleRate);
+        for(const auto& note:result.sourcePitchNotes)for(const auto& point:note.contour)
+            if(point.voiced)++result.sourcePitchVoicedPoints;
+    }
     try
     {
         auto& shared = cache();

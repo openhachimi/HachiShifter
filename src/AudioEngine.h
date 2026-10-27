@@ -13,6 +13,7 @@
 
 namespace hachi
 {
+struct NativeVirtualConnectionPlan;
 // One rendered UTAU note, summarised for drawing.
 //
 // A UTAU note has no source file to take a thumbnail of: what there is to
@@ -129,6 +130,9 @@ public:
     void stop();
     void setPosition(double seconds);
     [[nodiscard]] double position() const;
+    // Derived negative head support for explicit score-aligned native material.
+    // Musical beat zero is unchanged; playback/export may include this preroll.
+    [[nodiscard]] double nativeScorePrerollStart() const { return nativeScorePrerollStartSeconds.load(); }
     [[nodiscard]] float trackPeak(const juce::String& trackId) const;
     [[nodiscard]] std::optional<double> renderProgress() const;
     // Playback only waits for current audio near the transport. Export still
@@ -236,7 +240,11 @@ public:
     void refreshUtauWaveforms();
     void refreshNativeWaveforms();
     [[nodiscard]] std::shared_ptr<const std::vector<NativeRenderedWaveform>> nativeClipWaveforms() const;
-    [[nodiscard]] static std::uint64_t nativeClipWaveformHash(const ClipData&, const TrackData&);
+    // Virtual groups change the rendered audio without touching the clip, so
+    // the drawn waveform must follow them too. Callers that know the project
+    // pass its groups; passing none keeps the plain per-clip identity.
+    [[nodiscard]] static std::uint64_t nativeClipWaveformHash(const ClipData&, const TrackData&,
+        const std::vector<NativeVirtualGroup>* virtualGroups = nullptr);
 
     // The note as the render cache sees it, in one number: two notes with the
     // same value render the same audio.  Public because the roll asks it of a
@@ -268,6 +276,7 @@ public:
                    const juce::String& trackId = {},
                    double fromSeconds = 0.0, double toSeconds = 0.0,
                    WavExportOptions options = {});
+    [[nodiscard]] std::optional<float> diagnosticNativeSourceEdgeGain(const juce::String& clipId,double localSeconds) const;
     [[nodiscard]] double playbackSampleRate() const { return outputSampleRate.load(); }
     [[nodiscard]] bool isPlaying() const { return playing.load(); }
     [[nodiscard]] juce::AudioDeviceManager& devices() { return deviceManager; }
@@ -311,14 +320,30 @@ private:
         std::shared_ptr<const NativeRenderedPeaks> nativePeaks;
     };
 
+    struct NativeSourceEdgeSpan
+    {
+        double begin=0,end=0;
+        bool entryWindowActive=false,exitWindowActive=false;
+        double entryFrom=0,entryTo=0,exitFrom=0,exitTo=0,termination=0;
+    };
+    struct NativeVirtualBinding
+    {
+        std::shared_ptr<const NativeVirtualConnectionPlan> plan;
+        std::size_t member=0;
+    };
     struct LoadedClip
     {
         ClipData clip;
+        std::vector<NativeVirtualBinding> virtualBindings;
+        std::vector<NativeSourceEdgeSpan> sourceEdges; // ephemeral, never serialized or baked into render buffers
         std::string trackId;
         std::uint64_t nativeWaveformHash = 0;
+        std::shared_ptr<const NativeRenderedPeaks> contributionPeaks; // control thread only
+        const RenderedClip* contributionPeaksEntry=nullptr;
         bool smoothOverlaps = false;
         bool diffSinger = false;
         bool accompaniment = false;
+        bool nativeScoreMaterial = false;
         float trackGain = 1.0f;
         float trackPan = 0.0f;
         std::shared_ptr<std::atomic<float>> meter;
@@ -329,6 +354,13 @@ private:
     };
 
     static float fadeEnvelope(const ClipData& clip, double localSeconds);
+    static const NativeSourceEdgeSpan* sourceEdgeAt(const LoadedClip&,double localSeconds);
+    static const NativeVirtualBinding* virtualBindingAt(const LoadedClip&,double localSeconds,
+        double absoluteSeconds=std::numeric_limits<double>::quiet_NaN());
+    static float virtualContribution(const LoadedClip&,double localSeconds,double absoluteSeconds);
+    static float fadeEnvelope(const LoadedClip&,double localSeconds,
+        double absoluteSeconds=std::numeric_limits<double>::quiet_NaN());
+    juce::String nativeSourceEdgeError;
     void rebuildLoadedClips(const ProjectData& project, bool diffSingerExport);
     [[nodiscard]] bool pendingAudioInRange(double start, double end) const; // renderLock held
 
@@ -370,6 +402,12 @@ private:
     std::atomic<std::uint64_t> utauWaveformGeneration { 0 };
     std::uint64_t utauWaveformSnapshotGeneration = 0;
     void refreshUtauWaveformSnapshot();
+    struct ContributionPeakCache
+    {
+        std::weak_ptr<RenderedClip> entry;
+        std::weak_ptr<const NativeRenderedPeaks> peaks;
+    };
+    std::unordered_map<std::uint64_t,ContributionPeakCache> contributionPeakCache;
     std::shared_ptr<const std::vector<NativeRenderedWaveform>> nativeWaveformSnapshot;
     mutable juce::CriticalSection nativeWaveformLock;
     std::shared_ptr<std::atomic<std::uint64_t>> nativeWaveformGeneration
@@ -390,6 +428,7 @@ private:
     std::atomic<double> playUntilSeconds { 0.0 };
     std::atomic<double> outputSampleRate { 48'000.0 };
     std::atomic<double> projectDurationSeconds { 0.0 };
+    std::atomic<double> nativeScorePrerollStartSeconds { 0.0 };
     std::atomic<float> masterLimiterGain { 1.0f };
     std::atomic<bool> offlineRendering { false };
 };

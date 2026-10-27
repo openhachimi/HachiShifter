@@ -104,7 +104,12 @@ inline bool MainComponent::diagnosticClipGainKnob(const juce::File& folder)
     if(auto out=folder.getChildFile("compact.png").createOutputStream())
         check("compact_preview_written",juce::PNGImageFormat().writeImageToStream(timeline.createComponentSnapshot(timeline.getLocalBounds()),*out));
     auto narrow=data;narrow.tracks[0].clips[0].durationSeconds=.25;project.replace(narrow);refresh();gesture(knob,24);refresh();
-    check("narrow_region_knob_works",near(clip("a").gain,minus6)&&near(clip("a").durationSeconds,.25));
+    check("overview_narrow_region_has_no_invisible_gain_control",near(clip("a").gain,1.0f)&&!clip("a").muted);
+    // Zoom back in: same source/note, real gain control becomes reachable again.
+    project.replace(narrow);refresh();timeline.setPixelsPerSecond(560);
+    (void)timeline.createComponentSnapshot(timeline.getLocalBounds());
+    gesture({298,101},24);
+    check("zoomed_narrow_region_restores_gain_control",near(clip("a").gain,minus6)&&near(clip("a").durationSeconds,.25));
     for(bool backing:{true,false})
     {
         auto group=data;group.tracks[0].accompaniment=backing;group.tracks[0].clips[0].gain=.25f;

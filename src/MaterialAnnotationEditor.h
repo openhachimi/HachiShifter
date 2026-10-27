@@ -30,7 +30,17 @@ private:
     MaterialAnnotationEditor(std::shared_ptr<MaterialAnnotationSession>, I18n&,
         std::function<void(const std::vector<SampleRegionSetting>&)> onSaved);
     std::function<void(const juce::String&)> onEditPronunciation;
+    std::function<void()> onJapaneseAutoAnnotation;
+    std::function<void()> onPreviewPronunciation;
+    bool hasUnpublishedFields() const;
+    bool edgeFieldsChanged(const SampleRegionSetting&) const;
+    void showEdgeFields(const SampleRegionSetting*);
+    void edgeFieldsEdited();
+    void updateEdgeSummary();
+    static bool applyEdgeFields(SampleRegionSetting&,bool,const juce::String&,const juce::String&,juce::String&);
+
     juce::Component& overviewWaveform();
+    std::optional<juce::Point<float>> overviewEdgeKnob(bool entry) const; // waveform-local centre
     void openDetail(const juce::String& id);
     void createRangeAlias();
     void cancelAlias();
@@ -71,8 +81,12 @@ private:
     std::array<juce::TextEditor, 5> timings;
     juce::ComboBox pronunciationKindChoice;
     juce::ToggleButton adjacentPronunciation;
+    juce::ToggleButton edgeEnabled;
+    juce::Label edgeEntryLabel,edgeExitLabel,edgeSummary;
+    juce::TextEditor edgeEntry,edgeExit;
+
     juce::TextButton applyButton, splitButton, renameButton, mergeButton, deleteButton;
-    juce::TextButton undoButton, redoButton, saveButton, createAliasButton, cancelAliasButton, detailButton;
+    juce::TextButton undoButton, redoButton, saveButton, createAliasButton, cancelAliasButton, detailButton, japaneseAutoButton, previewButton;
     juce::String activeId;
     bool refreshing = false, fieldsDirty = false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MaterialAnnotationEditor)

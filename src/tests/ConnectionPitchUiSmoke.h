@@ -38,7 +38,12 @@ inline bool runConnectionPitchUiSmoke(const juce::File& output)
     TrackData track;track.id="track";track.compose=true;track.pitchAlgorithm=PitchAlgorithm::nsfHifigan;track.nativeNsfAudio=true;track.clips={a,b};
     ProjectData seed;seed.tracks={track};ProjectModel model;model.resetDocument(seed);
     check("actual_model_pitch_only_force",model.setNotesPortamento({"left","right"},true,error,.4));
-    auto forced=model.snapshot();auto graphs=resolvedConnectionPitchCurves(forced.tracks[0],forced.nativeConnections);
+    auto created=model.snapshot();
+    check("new_force_uses_virtual_authority_without_overwriting_authored_source_pitch",created.nativeConnections.empty()&&created.nativeVirtualGroups.size()==1&&nativeVirtualPitchCurvesForTrack(created.tracks[0],created.nativeVirtualGroups).empty());
+    if(created.nativeVirtualGroups.size()!=1)return finish();
+    const auto virtualId=created.nativeVirtualGroups[0].id;
+    check("explicit_manual_virtual_curve_preserves_original_note_controls",model.setNativeVirtualPitchCurve(virtualId,{{.8,57,PitchCurveShape::linear},{1.,60.5f,PitchCurveShape::linear},{1.2,64,PitchCurveShape::linear}},error));
+    auto forced=model.snapshot();auto graphs=nativeVirtualPitchCurvesForTrack(forced.tracks[0],forced.nativeVirtualGroups);
     check("one_resolved_57_to_64_graph",graphs.size()==1&&graphs[0].active&&near(graphs[0].points.front().targetMidi,57)&&near(graphs[0].points.back().targetMidi,64));
     if(graphs.size()!=1||!graphs[0].active)return finish();const auto id=graphs[0].connectionId;
     const auto originalNoteKeys=std::array<std::uint64_t,2>{AudioEngine::utauNoteRenderHash(forced.tracks[0].clips[0].notes[0]),AudioEngine::utauNoteRenderHash(forced.tracks[0].clips[1].notes[0])};
@@ -92,7 +97,7 @@ inline bool runConnectionPitchUiSmoke(const juce::File& output)
         drawSnapshot(tag+"actual-graph-handles-two-sources");
         const auto projectFile=root.getChildFile(tag+"graph.hjpx");check(tag+"actual_project_save",model.save(projectFile,error));ProjectModel reloaded;
         check(tag+"actual_project_reopen",reloaded.load(projectFile,error));const auto reopened=reloaded.snapshot();
-        auto resolved=resolvedConnectionPitchCurves(reopened.tracks[0],reopened.nativeConnections);
+        auto resolved=nativeVirtualPitchCurvesForTrack(reopened.tracks[0],reopened.nativeVirtualGroups);
         check(tag+"reopen_graph_and_source_facts",resolved.size()==1&&resolved[0].active&&sourceFacts(reopened));
         if(!resolved.empty())
         {
@@ -119,7 +124,7 @@ inline bool runConnectionPitchUiSmoke(const juce::File& output)
         const juce::Point<float> from(roll.diagnosticEdgeX(.7),roll.diagnosticYForMidi(59)),to(roll.diagnosticEdgeX(1.3),roll.diagnosticYForMidi(63));
         roll.mouseDown(mouse(from,from));roll.mouseDrag(mouse(to,from));const auto pending=roll.diagnosticConnectionPitchCurves();
         check(tag+"mixed_preview_keeps_model_revision",model.revisionNumber()==mixedRevision&&!pending.empty());roll.mouseUp(mouse(to,from));refresh();
-        check(tag+"actual_mixed_brush_is_one_model_revision",model.revisionNumber()==mixedRevision+1&&model.snapshot().nativeConnections.size()==1);
+        check(tag+"actual_mixed_brush_is_one_model_revision",model.revisionNumber()==mixedRevision+1&&model.snapshot().nativeConnections.empty()&&model.snapshot().nativeVirtualGroups.size()==1);
         check(tag+"mixed_one_undo_restores_graph_and_notes",model.undo()&&model.contentFingerprint()==beforeMixed&&!model.canUndo());refresh();
         (void)addFingerprint;
     }

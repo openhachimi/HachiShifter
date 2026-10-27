@@ -651,46 +651,78 @@ public:
             if (completion) completion(std::move(failure));
             return jobHasFinished;
         }
-        formats.registerBasicFormats();
-        auto reader = std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(request.sourceFile));
-        if (reader == nullptr || reader->sampleRate <= 0.0)
+        if (request.sourceAssembly && (request.sourceAssembly->empty()
+            || (request.pitchBackend != PitchRenderBackend::nsfHifigan && request.pitchBackend != PitchRenderBackend::world)
+            || separate || request.stretchAlgorithm == 5 || request.stretchAlgorithm == 6))
         {
-            if (completion) completion({});
+            RenderedAudio failure;
+            failure.warning = "Virtual source assembly is unsupported for this backend or export component";
+            if (completion) completion(std::move(failure));
             return jobHasFinished;
         }
-        const auto sourceStart = juce::jlimit<juce::int64>(0, reader->lengthInSamples,
-            static_cast<juce::int64>(std::llround(request.sourceOffsetSeconds * reader->sampleRate)));
+        formats.registerBasicFormats();
+        // The file and immutable-memory inputs share all downstream renderers,
+        // time maps and resampling. No filesystem bridge and no second DSP path.
+        auto reader = request.sourceBuffer ? std::unique_ptr<juce::AudioFormatReader>{}
+            : std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(request.sourceFile));
+        const auto sourceRate = request.sourceBuffer ? request.sourceRate : reader ? reader->sampleRate : 0.0;
+        const auto sourceLength = request.sourceBuffer
+            ? static_cast<juce::int64>(request.sourceBuffer->getNumSamples()) : reader ? reader->lengthInSamples : 0;
+        const auto sourceChannels = request.sourceBuffer ? request.sourceBuffer->getNumChannels()
+            : reader ? static_cast<int>(reader->numChannels) : 0;
+        if (!std::isfinite(sourceRate) || sourceRate <= 0.0 || sourceLength <= 0 || sourceChannels <= 0)
+        {
+            RenderedAudio failure;
+            if (request.sourceBuffer) failure.warning = "Invalid immutable in-memory native source";
+            if (completion) completion(std::move(failure));
+            return jobHasFinished;
+        }
+        const auto readSource = [&](juce::AudioBuffer<float>& destination, int count, juce::int64 start)
+        {
+            if (reader) { reader->read(&destination, 0, count, start, true, destination.getNumChannels() > 1); return; }
+            destination.clear();
+            const auto from = std::max<juce::int64>(0, start);
+            const auto offset = static_cast<int>(std::min<juce::int64>(count, from - start));
+            const auto copied = static_cast<int>(std::max<juce::int64>(0,
+                std::min<juce::int64>(count - offset, sourceLength - from)));
+            if (copied <= 0) return;
+            for (int ch = 0; ch < destination.getNumChannels(); ++ch)
+                destination.copyFrom(ch, offset, *request.sourceBuffer, std::min(ch, sourceChannels - 1),
+                                     static_cast<int>(from), copied);
+        };
+        const auto sourceStart = juce::jlimit<juce::int64>(0, sourceLength,
+            static_cast<juce::int64>(std::llround(request.sourceOffsetSeconds * sourceRate)));
         const auto requestedSourceSamples = static_cast<juce::int64>(std::llround(
-            std::max(0.0, request.sourceDurationSeconds) * reader->sampleRate));
+            std::max(0.0, request.sourceDurationSeconds) * sourceRate));
         const auto sourceSamples64 = std::max<juce::int64>(1,
-            std::min(requestedSourceSamples, reader->lengthInSamples - sourceStart));
+            std::min(requestedSourceSamples, sourceLength - sourceStart));
         const auto sourceSamples = static_cast<int>(std::min<juce::int64>(sourceSamples64,
                                                                           std::numeric_limits<int>::max()));
-        const auto channels = juce::jlimit(1, 2, static_cast<int>(reader->numChannels));
+        const auto channels = juce::jlimit(1, 2, sourceChannels);
         juce::AudioBuffer<float> source(channels, sourceSamples);
         source.clear();
-        reader->read(&source, 0, sourceSamples, sourceStart, true, channels > 1);
+        readSource(source, sourceSamples, sourceStart);
         if (shouldExit()) return jobHasFinished;
 
         const auto targetSamples = std::max(1, static_cast<int>(std::llround(
-            std::max(0.0, request.targetDurationSeconds) * reader->sampleRate)));
+            std::max(0.0, request.targetDurationSeconds) * sourceRate)));
         const auto neutral = [](const auto& values, float expected)
         {return std::all_of(values.begin(),values.end(),[&](float value)
             {return std::isfinite(value)&&std::abs(value-expected)<=1.0e-4f;});};
-        if (canPreserveNativeSource(request, reader->sampleRate, sourceSamples, targetSamples))
+        if (!request.sourceAssembly && canPreserveNativeSource(request, sourceRate, sourceSamples, targetSamples))
         {
             // Keep fractional source offset aligned with the timeline mixer.
             // Rounding only the source side otherwise shifts a free crop by
             // up to half a sample even when its time map is the identity.
-            const auto exactStart = std::max(0.0, request.sourceOffsetSeconds * reader->sampleRate);
+            const auto exactStart = std::max(0.0, request.sourceOffsetSeconds * sourceRate);
             const auto floorStart = static_cast<juce::int64>(std::floor(exactStart));
             const auto fraction = static_cast<float>(exactStart - std::floor(exactStart));
             if (fraction > 1.e-7f)
             {
                 juce::AudioBuffer<float> aligned(channels, targetSamples + 1);
-                aligned.clear(); reader->read(&aligned,0,targetSamples+1,floorStart,true,channels>1);
+                aligned.clear(); readSource(aligned,targetSamples+1,floorStart);
                 const auto available = static_cast<int>(std::max<juce::int64>(1,
-                    std::min<juce::int64>(targetSamples+1,reader->lengthInSamples-floorStart)));
+                    std::min<juce::int64>(targetSamples+1,sourceLength-floorStart)));
                 source.setSize(channels,targetSamples);
                 for(int ch=0;ch<channels;++ch)for(int i=0;i<targetSamples;++i)
                 {
@@ -711,10 +743,10 @@ public:
             // Detection and display do not edit audio. Gain/breath edits alone
             // can be applied to PCM without rebuilding its spectrum or phase.
             if (!neutral(request.noteGain,1) || !neutral(request.breath,0))
-                applyExpressionAndTension(source,reader->sampleRate,request.framePeriodMs,
+                applyExpressionAndTension(source,sourceRate,request.framePeriodMs,
                     request.targetMidi,request.noteGain,{},request.breath);
             if (shouldExit()) return jobHasFinished;
-            if (completion) completion({std::move(source),reader->sampleRate,"native-source-preserved"});
+            if (completion) completion({std::move(source),sourceRate,"native-source-preserved"});
             return jobHasFinished;
         }
         // Robust pitch curve is a native analysis stabilizer, not a UTAU flag.
@@ -736,9 +768,13 @@ public:
             worldTimeMap.reserve(request.timeMap.size());
             for (const auto& point : request.timeMap)
                 worldTimeMap.push_back({ point.targetSeconds, point.sourceSeconds });
-            rendered = WorldRenderer::render(source, targetSamples, reader->sampleRate,
-                request.framePeriodMs, request.sourceMidi, request.targetMidi,
-                request.formantSemitones, worldTimeMap, noiseOutput);
+            if(request.sourceAssembly)
+                rendered = WorldRenderer::renderAssembly(*request.sourceAssembly,targetSamples,sourceRate,
+                    request.framePeriodMs,request.targetMidi,request.formantSemitones,noiseOutput);
+            else
+                rendered = WorldRenderer::render(source, targetSamples, sourceRate,
+                    request.framePeriodMs, request.sourceMidi, request.targetMidi,
+                    request.formantSemitones, worldTimeMap, noiseOutput);
             // A malformed or exceptionally constrained source still remains
             // playable through the established model-free route.
             if (rendered.getNumSamples() != targetSamples)
@@ -749,7 +785,7 @@ public:
                 return jobHasFinished;
             }
             else
-                applyExpressionAndTension(rendered, reader->sampleRate, request.framePeriodMs,
+                applyExpressionAndTension(rendered, sourceRate, request.framePeriodMs,
                                           request.targetMidi, request.noteGain, request.tension,
                                           request.breath, noiseOutput);
         }
@@ -760,7 +796,7 @@ public:
             // granular hop), not the previous Signalsmith + finish-wrapper.
             Mld5RenderRequest mld5Request;
             mld5Request.input = &source;
-            mld5Request.sampleRate = reader->sampleRate;
+            mld5Request.sampleRate = sourceRate;
             mld5Request.framePeriodMs = request.framePeriodMs;
             mld5Request.sourceMidi = request.sourceMidi;
             mld5Request.targetMidi = request.targetMidi;
@@ -771,7 +807,7 @@ public:
             mld5Request.targetSamples = targetSamples;
             Mld5Renderer mld5;
             rendered = mld5.render(mld5Request);
-            applyExpressionAndTension(rendered, reader->sampleRate, request.framePeriodMs,
+            applyExpressionAndTension(rendered, sourceRate, request.framePeriodMs,
                 request.targetMidi, {}, request.tension, request.breath);
         }
         else if (request.pitchBackend == PitchRenderBackend::mld3)
@@ -795,7 +831,7 @@ public:
             if (shouldExit()) return jobHasFinished;
             try
             {
-                rendered = Llsm2Renderer::render(source, targetSamples, reader->sampleRate,
+                rendered = Llsm2Renderer::render(source, targetSamples, sourceRate,
                     request.framePeriodMs, request.sourceMidi, request.targetMidi,
                     request.formantSemitones, request.tension, request.timeMap, noiseOutput);
             }
@@ -807,7 +843,7 @@ public:
             if (rendered.getNumSamples() == targetSamples)
             {
                 usedLlsm2 = true;
-                applyExpressionAndTension(rendered, reader->sampleRate,
+                applyExpressionAndTension(rendered, sourceRate,
                     request.framePeriodMs, request.targetMidi, request.noteGain,
                     {}, request.breath, noiseOutput);
             }
@@ -862,11 +898,11 @@ public:
                 edgeGuard.endSeconds = request.neuralGuardEndSeconds;
             edgeGuard.neighborStartF0 = request.neighborEdgeF0Start;
             edgeGuard.neighborEndF0 = request.neighborEdgeF0End;
-            auto neural = NsfHifiganRenderer::render(source, reader->sampleRate,
+            auto neural = NsfHifiganRenderer::render(source, sourceRate,
                 targetSamples, request.framePeriodMs, request.targetMidi,
                 request.formantSemitones, neuralTimeMap, request.hifiganModelDirectory,
                 request.inference, stretchOrder, request.normalizeVolume, edgeGuard,
-                [this] { return shouldExit(); }, request.nsfNoiseProtection, request.nsfSmoothPitchTransitions, request.nsfIncrementalRender, request.sourceMidi);
+                [this] { return shouldExit(); }, request.nsfNoiseProtection, request.nsfSmoothPitchTransitions, request.nsfIncrementalRender, request.sourceMidi, request.sourceAssembly.get());
             if (shouldExit()) return jobHasFinished;
             if (neural.usedModel && neural.buffer.getNumSamples() == targetSamples)
             {
@@ -879,7 +915,7 @@ public:
                 if (request.matchNsfSourceLevel
                     && (request.stretchAlgorithm == 1 || request.stretchAlgorithm == 4))
                     raiseActiveRmsFloor(rendered, source);
-                applyExpressionAndTension(rendered, reader->sampleRate,
+                applyExpressionAndTension(rendered, sourceRate,
                     request.framePeriodMs, request.targetMidi, request.noteGain,
                     request.tension, request.breath);
             }
@@ -903,7 +939,7 @@ public:
             if (completion) completion(std::move(disabled));
             return jobHasFinished;
 #else
-            rendered = renderFormantPreserved(source, targetSamples, reader->sampleRate,
+            rendered = renderFormantPreserved(source, targetSamples, sourceRate,
                 request.framePeriodMs, request.sourceMidi, request.targetMidi,
                 request.formantSemitones, request.noteGain, request.tension, request.breath,
                 request.timeMap, request.pitchBackend, request.stretchAlgorithm);
@@ -931,6 +967,7 @@ public:
             : request.pitchBackend == PitchRenderBackend::world ? juce::String("WORLD")
             : juce::String("vslib");
         if (usedNsfModel && nsfInference.isNotEmpty()) backend << "[" << nsfInference << "]";
+        if (request.sourceAssembly) backend << "+source-assembly-v1";
         if (request.normalizeVolume) backend << "+normalized";
         backend += request.stretchAlgorithm == 5 ? "+hifishifter-mel"
             : request.stretchAlgorithm == 1 ? "+variable-mel-hop-splice-first"
@@ -955,7 +992,7 @@ public:
                     rendered.addFrom(channel, 0, noise, channel, 0, rendered.getNumSamples(), -1.0f);
             backend += request.exportComponent == WavExportComponent::breath ? "+breath" : "+non-breath";
         }
-        RenderedAudio result { std::move(rendered), reader->sampleRate, backend };
+        RenderedAudio result { std::move(rendered), sourceRate, backend };
         if (shouldExit()) return jobHasFinished;
         // AudioEngine publishes the completed buffer through release/acquire
         // atomics, so this completion is thread-safe and does not need the GUI

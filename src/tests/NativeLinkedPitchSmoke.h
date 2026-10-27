@@ -1,5 +1,6 @@
 #pragma once
 #include "../ClipParts.h"
+#include "../NativeAudioLink.h"
 namespace hachi
 {
 inline bool runNativeLinkedPitchSmoke(const juce::File& folder)
@@ -40,6 +41,16 @@ inline bool runNativeLinkedPitchSmoke(const juce::File& folder)
     }
     data.tracks.push_back(track); ProjectModel model; model.replace(data);
     check("native_pitch_link_three_recordings", model.linkNativeAudio({"part0", "part1", "part2"}));
+    const auto modern=model.snapshot();
+    check("new_cross_source_link_is_only_a_shared_virtual_group",modern.nativeVirtualGroups.size()==1
+        &&modern.nativeVirtualGroups[0].sharedPitch&&modern.tracks[0].clips.size()==3&&modern.nativeConnections.empty());
+    // The assertions below exercise LEGACY compound loading/editing, not a
+    // permitted producer of new cross-source compounds. Construct that old
+    // document explicitly as a fixture; do not restore a production bypass.
+    auto legacy=data;juce::String legacyError;
+    if(!stageNativeAudioLink(legacy.tracks[0],{"part0","part1","part2"},legacyError))
+    {check("legacy_shared_owner_fixture_constructed",false);return false;}
+    model.replace(legacy);
     auto linked = model.snapshot(); const auto fingerprint = model.contentFingerprint();
     I18n strings; PianoRollComponent roll(model, strings);
     roll.setBounds(0, 0, 1100, 800); roll.setPixelsPerSecond(300);
@@ -49,6 +60,7 @@ inline bool runNativeLinkedPitchSmoke(const juce::File& folder)
     const auto common = sharedPitchLines(linked.tracks[0]);
     check("native_pitch_one_curve_for_all_parts", common.memberFor("part0") && common.memberFor("part1")
         && common.memberFor("part2") && common.memberFor("part0")->line == common.memberFor("part2")->line);
+    if(!common.memberFor("part0")||!common.memberFor("part1")||!common.memberFor("part2"))return false;
     bool spans = true, seams = true;
     for (int i = 0; i < 2; ++i)
     {

@@ -27,7 +27,16 @@ public:
         bool cancelled = false;
         bool ok() const { return !cancelled && errors.isEmpty(); }
     };
+    struct Sequence { std::vector<Entry> members; };
     using Cancel = std::function<bool()>;
+    // Explicit same-recording/variant source-row prefixes of remaining score
+    // lyrics. Does not split filenames/aliases into invented pronunciation time.
+    // Returns chains of 2+ rows; callers retain ordinary single-row choices.
+    static bool continuousRows(const std::vector<SampleRegionSetting>& completeRows,
+                               const juce::String& leftRegion, const juce::String& rightRegion,
+                               juce::String& error);
+    static bool matchSequences(const std::vector<Entry>&, const juce::StringArray& remainingLyrics,
+                               std::vector<Sequence>&, juce::String& error, Cancel cancel = {});
     // Same normalized root is visited once; conflicting modes reject that root
     // with an error. Deepest registered root owns a nested recording.
     // Order is normalized root/audio path, variant ID, row ID, alias (case sensitive).

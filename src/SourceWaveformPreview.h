@@ -15,7 +15,8 @@ inline constexpr int nativeWaveformSamplesPerPeak = 32;
 enum class NativeWaveformTint { warm, paleBlue };
 template<typename PeakAt>
 inline void drawNativePeakShape(juce::Graphics& g, double durationSeconds, PeakAt peakAt,
-    juce::Rectangle<float> bounds, float opacity, bool selected, NativeWaveformTint tint)
+    juce::Rectangle<float> bounds, float opacity, bool selected, NativeWaveformTint tint,
+    juce::Colour phase=juce::Colour(0xff7f69ca))
 {
     if (durationSeconds <= 1.0e-9 || bounds.getWidth() < 1.0f
         || bounds.getHeight() <= 0.0f) return;
@@ -43,30 +44,16 @@ inline void drawNativePeakShape(juce::Graphics& g, double durationSeconds, PeakA
             body.lineTo(point->x, 2.0f*centre-point->y);
         body.closeSubPath();
         const auto half = std::max(1.0f, peakHeight);
-        const auto colour = [&](juce::uint32 rgb) { return juce::Colour(rgb).withAlpha(opacity); };
-        juce::ColourGradient gradient(colour(0xff7e1935),0,centre-half,
-                                      colour(0xff7e1935),0,centre+half,false);
-        gradient.addColour(.14,colour(0xffb92c38));
-        gradient.addColour(.30,colour(0xffee8136));
-        gradient.addColour(.43,colour(0xffffcf68));
-        gradient.addColour(.50,colour(0xfffff3b5));
-        gradient.addColour(.57,colour(0xffffcf68));
-        gradient.addColour(.70,colour(0xffee8136));
-        gradient.addColour(.86,colour(0xffb92c38));
-        if(tint==NativeWaveformTint::paleBlue)
-        {
-            gradient=juce::ColourGradient(colour(0xff5287b6),0,centre-half,
-                                          colour(0xff5287b6),0,centre+half,false);
-            gradient.addColour(.20,colour(0xff78b9e9));
-            gradient.addColour(.38,colour(0xffb8e5ff));
-            gradient.addColour(.50,colour(0xffe5f7ff));
-            gradient.addColour(.62,colour(0xffb8e5ff));
-            gradient.addColour(.80,colour(0xff78b9e9));
-        }
+        juce::ignoreUnused(tint);
+        // A restrained, single-hue ink envelope belongs to the editor palette.
+        // No red/orange/cream spectral bands or imitation heat-map glow.
+        const auto ink=selected?phase.interpolatedWith(juce::Colours::white,.32f):phase;
+        juce::ColourGradient gradient(ink.darker(.18f).withAlpha(opacity),0,centre-half,
+                                      ink.darker(.18f).withAlpha(opacity),0,centre+half,false);
+        gradient.addColour(.5,ink.interpolatedWith(juce::Colours::white,.30f).withAlpha(opacity));
         g.setGradientFill(gradient);g.fillPath(body);
-        g.setColour(colour(tint==NativeWaveformTint::paleBlue
-            ? (selected ? 0xffeafaff : 0xff72afe0) : (selected ? 0xffffbc70 : 0xff921d35)));
-        g.strokePath(body,juce::PathStrokeType(selected ? 1.6f : 1.0f,
+        g.setColour(ink.interpolatedWith(juce::Colours::white,.60f).withAlpha(opacity));
+        g.strokePath(body,juce::PathStrokeType(selected ? 1.3f : .8f,
             juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
         outline.clear();peakHeight=0.0f;
     };
@@ -86,7 +73,7 @@ inline void drawNativePeakShape(juce::Graphics& g, double durationSeconds, PeakA
 }
 inline void drawNativeSourceWaveform(juce::Graphics& g,juce::AudioThumbnail& thumbnail,
     const ClipData& audioClip,const std::vector<SourceTimePoint>& map,
-    juce::Rectangle<float> bounds,float opacity=0.94f,bool selected=false)
+    juce::Rectangle<float> bounds,float opacity=0.94f,bool selected=false,juce::Colour phase=juce::Colour(0xff7f69ca))
 {
     if(thumbnail.getTotalLength()<=0.0)return;
     const auto peakAt=[&](double from,double to)
@@ -99,10 +86,10 @@ inline void drawNativeSourceWaveform(juce::Graphics& g,juce::AudioThumbnail& thu
         const auto amplitude=std::max(std::abs(low),std::abs(high));
         return amplitude<=1.0f/128.0f ? 0.0f : amplitude;
     };
-    drawNativePeakShape(g,audioClip.durationSeconds,peakAt,bounds,opacity,selected,NativeWaveformTint::warm);
+    drawNativePeakShape(g,audioClip.durationSeconds,peakAt,bounds,opacity,selected,NativeWaveformTint::warm,phase);
 }
 inline void drawNativeRenderedWaveform(juce::Graphics& g,const NativeRenderedPeaks& peaks,
-    double durationSeconds,juce::Rectangle<float> bounds,float opacity=0.94f,bool selected=false)
+    double durationSeconds,juce::Rectangle<float> bounds,float opacity=0.94f,bool selected=false,juce::Colour phase=juce::Colour(0xff7f69ca))
 {
     const auto peakAt=[&](double from,double to)
     {
@@ -115,7 +102,7 @@ inline void drawNativeRenderedWaveform(juce::Graphics& g,const NativeRenderedPea
                                                         std::abs(peaks.maxima[static_cast<std::size_t>(i)])});
         return peak;
     };
-    drawNativePeakShape(g,durationSeconds,peakAt,bounds,opacity,selected,NativeWaveformTint::paleBlue);
+    drawNativePeakShape(g,durationSeconds,peakAt,bounds,opacity,selected,NativeWaveformTint::paleBlue,phase);
 }
 
 }

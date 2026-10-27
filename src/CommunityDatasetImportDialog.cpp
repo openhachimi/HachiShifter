@@ -159,31 +159,31 @@ void appendBounded(String& output, const String& value)
         if (output.length() >= limit) output += "\n[Display truncated; full parsed data is still validated, not silently skipped.]\n";
     }
 }
-String messages(const IO::Report& report)
+String messages(const IO::Report& report, const I18n& strings)
 {
     String result;
-    for (const auto& value : report.errors) appendBounded(result, "ERROR: " + value + "\n");
-    for (const auto& value : report.warnings) appendBounded(result, "WARNING: " + value + "\n");
-    if (report.cancelled && !report.published) result += "Cancelled before publication; no OTTO commit was performed.\n";
+    for (const auto& value : report.errors) appendBounded(result, strings.text("csv.reportError") + value + "\n");
+    for (const auto& value : report.warnings) appendBounded(result, strings.text("csv.reportWarning") + value + "\n");
+    if (report.cancelled && !report.published) result += strings.text("csv.noCommit") + "\n";
     return result;
 }
-String dictionaryChoices(const IO::Dictionary& dictionary)
+String dictionaryChoices(const IO::Dictionary& dictionary, const I18n& strings)
 {
     std::map<String, juce::StringArray> choices;
     for (const auto& rule : dictionary.rules) choices[rule.phones.joinIntoString(" ")].add(rule.alias);
     String result;
     for (const auto& [sequence, aliases] : choices)
-        if (aliases.size() > 1) appendBounded(result, "Alias choice (NO default): " + sequence + " => " + aliases.joinIntoString(" | ") + "\n");
+        if (aliases.size() > 1) appendBounded(result, strings.text("csv.aliasChoice") + sequence + " => " + aliases.joinIntoString(" | ") + "\n");
     return result;
 }
-String datasetFacts(const IO::Dataset& dataset)
+String datasetFacts(const IO::Dataset& dataset, const I18n& strings)
 {
-    String result = "Dataset root: " + dataset.root.getFullPathName() + "\nCSV SHA256: " + dataset.csvFingerprint + "\n";
+    String result = strings.text("csv.root") + dataset.root.getFullPathName() + "\nCSV SHA256: " + dataset.csvFingerprint + "\n";
     std::size_t shown = 0;
     for (const auto& recording : dataset.recordings)
     {
         if (shown++ == 100) { result += "[Additional recordings omitted from display only.]\n"; break; }
-        appendBounded(result, "Recording: " + recording.name + "\n  " + recording.audio.getFullPathName()
+        appendBounded(result, strings.text("csv.recording") + recording.name + "\n  " + recording.audio.getFullPathName()
             + "\n  SHA256: " + recording.audioFingerprint + "\n  phone indices (zero-based): ");
         for (std::size_t i = 0; i < recording.phones.size() && i < 250; ++i)
         {
@@ -215,33 +215,30 @@ struct CommunityDatasetImportDialog::Impl
     juce::uint64 generation = 0;
     bool loading = false, working = false, committing = false;
 
-    String tr(const char* zh, const char* en) const
-    { return strings.getLanguage() == I18n::Language::zhCN ? String::fromUTF8(zh) : String(en); }
     bool hostReady() const { return host.runOnWorker && host.publishing && host.preflight && host.published; }
     Impl(CommunityDatasetImportDialog& o, I18n& s, Host h, const File& initialRoot) : owner(o), strings(s), host(std::move(h))
     {
         owner.setLookAndFeel(&look);
-        title.setText(tr("导入社区 DiffSinger 数据集标注", "Import community DiffSinger dataset annotations"), juce::dontSendNotification);
-        explanation.setText(tr("只读取数据集已有时间标注，不运行语音识别。预览不写文件；导入将原子写入根目录 otto.ini。",
-            "Uses existing dataset timing; no speech recognition. Preview writes nothing; Import atomically publishes root otto.ini."), juce::dontSendNotification);
+        title.setText(strings.text("csv.ui0"), juce::dontSendNotification);
+        explanation.setText(strings.text("csv.ui1"), juce::dontSendNotification);
         explanation.setJustificationType(juce::Justification::centredLeft);
-        rootLabel.setText(tr("数据集根目录", "Dataset root"), juce::dontSendNotification);
-        dictionaryLabel.setText(tr("V / C-V 字典（可选）", "V / C-V dictionary (optional)"), juce::dontSendNotification);
-        mappingLabel.setText(tr("导入选择 JSON（可选）", "Import-choice JSON (optional)"), juce::dontSendNotification);
-        provenanceLabel.setText(tr("来源／许可说明", "Provenance / license notes"), juce::dontSendNotification);
-        choicesLabel.setText(tr("显式选择（非 CSV 字段；无文件时可在此输入）", "Explicit import choices (NOT CSV fields; inline input when no file is selected)"), juce::dontSendNotification);
+        rootLabel.setText(strings.text("csv.ui2"), juce::dontSendNotification);
+        dictionaryLabel.setText(strings.text("csv.ui3"), juce::dontSendNotification);
+        mappingLabel.setText(strings.text("csv.ui4"), juce::dontSendNotification);
+        provenanceLabel.setText(strings.text("csv.ui5"), juce::dontSendNotification);
+        choicesLabel.setText(strings.text("csv.ui6"), juce::dontSendNotification);
         choices.setMultiLine(true); choices.setReturnKeyStartsNewLine(true); choices.setScrollbarsShown(true);
         choices.setTextToShowWhenEmpty("{\"version\":1,\"selections\":[{\"recording\":\"...\",\"alias\":\"...\",\"firstPhone\":0,\"phoneCount\":2,\"nucleusOffset\":1}],\"primaryAliases\":{\"k a\":\"ka\"}}", Palette::textMuted);
         report.setMultiLine(true); report.setReturnKeyStartsNewLine(true); report.setReadOnly(true); report.setScrollbarsShown(true);
-        timing.setButtonText(tr("我确认：将选定元音起点同时作为 P 与 C（CSV 本身没有独立 P/C 标点）", "I confirm: selected nucleus onset becomes BOTH P and C (CSV has no independent P/C markers)"));
-        replace.setButtonText(tr("显式替换本导入器先前生成的登记（不替换其他作者标注）", "Explicitly replace this importer's prior registration, never other authored variants"));
-        sibling.setButtonText(tr("允许同一录音新增独立标注登记（不复制音频、不覆盖原登记）", "Allow a separate same-recording annotation registration (no PCM copy or overwrite)"));
-        specials.addItem(tr("请选择 SP/AP 处理方式…", "Choose SP/AP policy..."), 1);
-        specials.addItem(tr("跳过 SP/AP，并明确报告", "Skip SP/AP with explicit report"), 2);
-        specials.addItem(tr("按数据集声明导入 SP/AP", "Import declared SP/AP"), 3);
+        timing.setButtonText(strings.text("csv.ui7"));
+        replace.setButtonText(strings.text("csv.ui8"));
+        sibling.setButtonText(strings.text("csv.ui9"));
+        specials.addItem(strings.text("csv.ui10"), 1);
+        specials.addItem(strings.text("csv.ui11"), 2);
+        specials.addItem(strings.text("csv.ui12"), 3);
         specials.setSelectedId(1, juce::dontSendNotification);
-        rootBrowse.setButtonText(tr("选择…", "Browse...")); dictionaryBrowse.setButtonText(rootBrowse.getButtonText()); mappingBrowse.setButtonText(rootBrowse.getButtonText());
-        previewButton.setButtonText(tr("只读预览", "Read-only preview")); publishButton.setButtonText(tr("确认导入到 OTTO…", "Import into OTTO...")); cancelButton.setButtonText(tr("取消任务", "Cancel work"));
+        rootBrowse.setButtonText(strings.text("csv.ui13")); dictionaryBrowse.setButtonText(rootBrowse.getButtonText()); mappingBrowse.setButtonText(rootBrowse.getButtonText());
+        previewButton.setButtonText(strings.text("csv.ui14")); publishButton.setButtonText(strings.text("csv.ui15")); cancelButton.setButtonText(strings.text("csv.ui16"));
         for (auto* c : std::initializer_list<juce::Component*>{&title,&explanation,&rootLabel,&dictionaryLabel,&mappingLabel,&provenanceLabel,&choicesLabel,
                 &root,&dictionary,&mappingFile,&provenance,&choices,&report,&rootBrowse,&dictionaryBrowse,&mappingBrowse,&previewButton,&publishButton,&cancelButton,&timing,&replace,&sibling,&specials}) owner.addAndMakeVisible(c);
         for (auto* field : {&root,&dictionary,&mappingFile,&provenance,&choices}) field->onTextChange = [this] { changed(); };
@@ -250,8 +247,8 @@ struct CommunityDatasetImportDialog::Impl
         rootBrowse.onClick = [this] { browse(0); }; dictionaryBrowse.onClick = [this] { browse(1); }; mappingBrowse.onClick = [this] { browse(2); };
         previewButton.onClick = [this] { preview(); }; publishButton.onClick = [this] { confirmPublish(); }; cancelButton.onClick = [this] { cancel(); };
         root.setText(initialRoot == File{} ? String() : initialRoot.getFullPathName(), false);
-        report.setText(hostReady() ? tr("选择根目录、字典或显式分组，确认导入语义后预览。不会默认猜测别名或音节。", "Choose a root and dictionary or explicit spans, confirm import semantics, then preview. No alias or syllable is guessed.")
-                                  : "Host integration missing: worker, publication gate, preflight and completion callbacks are required.", false);
+        report.setText(hostReady() ? strings.text("csv.ui17")
+                                  : strings.text("csv.hostMissing"), false);
         buttons();
     }
     ~Impl()
@@ -275,7 +272,7 @@ struct CommunityDatasetImportDialog::Impl
         if (loading || committing) return;
         ++generation; prepared.reset();
         if (operation) operation->cancelled = true;
-        report.setText(tr("输入已改变；旧预览失效，请重新预览。", "Inputs changed; the previous preview is invalid. Preview again."), false);
+        report.setText(strings.text("csv.ui18"), false);
         buttons();
     }
     Input input() const
@@ -309,22 +306,23 @@ struct CommunityDatasetImportDialog::Impl
     {
         if (!operation) return;
         operation->cancelled = true;
-        report.setText(committing ? tr("正在请求取消；若原子提交已开始，将如实报告提交结果。", "Cancellation requested; an atomic commit already underway will still report its actual result.")
-                                  : tr("正在取消只读预览…", "Cancelling read-only preview..."), false);
+        report.setText(committing ? strings.text("csv.ui19")
+                                  : strings.text("csv.ui20"), false);
     }
     void preview()
     {
         if (working) return;
         prepared.reset();
-        if (!hostReady()) { report.setText("Required Host integration is missing.", false); buttons(); return; }
+        if (!hostReady()) { report.setText(strings.text("csv.hostMissing"), false); buttons(); return; }
         const auto selected = input();
         if (!selected.options.confirmNucleusAsAlignmentAndConsonant || specials.getSelectedId() == 1)
-        { report.setText(tr("必须显式确认 P=C 解释并选择 SP/AP 策略；未写入任何文件。", "Explicit P=C confirmation and SP/AP policy are required; no file was written."), false); buttons(); return; }
+        { report.setText(strings.text("csv.ui21"), false); buttons(); return; }
         working = true; committing = false;
         auto op = std::make_shared<Operation>(); op->host = host; op->generation = generation; operation = op;
-        report.setText(tr("工作线程正在读取／验证数据集；此步骤不会写入 OTTO。", "Worker is reading and validating the dataset; this step does not write OTTO."), false); buttons();
+        report.setText(strings.text("csv.ui22"), false); buttons();
         juce::Component::SafePointer<CommunityDatasetImportDialog> safe(&owner);
-        op->host.runOnWorker([op, selected, safe]
+        const auto localized = strings; // immutable message-thread language snapshot
+        op->host.runOnWorker([op, selected, safe, localized]
         {
             auto candidate = std::make_shared<PreparedImport>(); candidate->generation = op->generation;
             candidate->inputFingerprint = inputFingerprint(selected);
@@ -337,13 +335,13 @@ struct CommunityDatasetImportDialog::Impl
             if (valid)
             {
                 valid = IO::read(selected.root, dataset, outcome, cancel);
-                priorWarnings = messages(outcome);
-                if (valid) details = datasetFacts(dataset);
+                priorWarnings = messages(outcome, localized);
+                if (valid) details = datasetFacts(dataset, localized);
             }
             if (valid && selected.dictionary != File{})
             {
                 valid = IO::readTwoPartDictionary(selected.dictionary, dictionary, outcome, cancel);
-                priorWarnings += messages(outcome); details += dictionaryChoices(dictionary);
+                priorWarnings += messages(outcome, localized); details += dictionaryChoices(dictionary, localized);
             }
             if (valid && !loadChoices(selected, *candidate, selections, options, error))
             { valid = false; outcome.errors.add(error); }
@@ -352,7 +350,7 @@ struct CommunityDatasetImportDialog::Impl
                 valid = IO::planImport(dataset, dictionary, selections, options, candidate->plan, outcome, cancel);
                 if (valid)
                 {
-                    appendBounded(details, "\nREADY (not published): " + String(outcome.recordings) + " recordings, " + String(outcome.pronunciations) + " pronunciations\n");
+                    appendBounded(details, "\n" + localized.text("csv.ready") + String(outcome.recordings) + " / " + String(outcome.pronunciations) + "\n");
                     for (const auto& audio : candidate->plan.audio)
                     {
                         appendBounded(details, audio.audio.getFullPathName() + "\n  registration=" + audio.audioId + "\n");
@@ -360,15 +358,15 @@ struct CommunityDatasetImportDialog::Impl
                     }
                 }
             }
-            candidate->summary = "Provenance notes (supplied by caller): " + selected.provenanceNotes + "\n"
-                + "Deterministic dataset-timing import; no ASR/pitch analysis. No human-recording or legacy-oracle claim is inferred.\n"
-                + priorWarnings + details + "\n" + messages(outcome);
+            candidate->summary = localized.text("csv.provenance") + selected.provenanceNotes + "\n"
+                + localized.text("csv.deterministic") + "\n"
+                + priorWarnings + details + "\n" + messages(outcome, localized);
             juce::MessageManager::callAsync([op,candidate,safe,valid]
             {
                 if (!safe || safe->impl->operation != op) return;
                 auto& ui = *safe->impl; ui.working = false; ui.operation.reset();
                 if (op->cancelled || ui.generation != op->generation)
-                    ui.report.setText("Preview cancelled or input changed; no publication occurred. Preview again.", false);
+                    ui.report.setText(ui.strings.text("csv.cancelled"), false);
                 else
                 {
                     ui.report.setText(candidate->summary, false);
@@ -383,8 +381,8 @@ struct CommunityDatasetImportDialog::Impl
         error.clear();
         if (working || !prepared || !prepared->plan.ready || prepared->generation != generation
             || prepared->inputFingerprint != inputFingerprint(input()))
-            return reject(error, "A current successful read-only preview is required before Import");
-        if (!hostReady()) return reject(error, "Required Host integration is missing");
+            return reject(error, strings.text("csv.previewRequired"));
+        if (!hostReady()) return reject(error, strings.text("csv.hostMissing"));
         const auto candidate = prepared;
         auto op = std::make_shared<Operation>(); op->host = host; op->generation = generation; op->publication = true;
         // Host owns a real revision/edit gate. A bool preflight alone is NOT
@@ -398,7 +396,7 @@ struct CommunityDatasetImportDialog::Impl
         if (working || prepared != candidate || generation != op->generation || candidate->inputFingerprint != inputFingerprint(input()))
         { callbacks.publishing(false); return reject(error, "Inputs changed during preflight; preview again"); }
         working = committing = true; operation = op;
-        report.setText("Publishing guarded root OTTO transaction on the worker...", false); buttons();
+        report.setText(strings.text("csv.publishing"), false); buttons();
         juce::Component::SafePointer<CommunityDatasetImportDialog> safe(&owner);
         op->host.runOnWorker([candidate,op,safe]
         {
@@ -418,8 +416,8 @@ struct CommunityDatasetImportDialog::Impl
                 if (!safe || safe->impl->operation != op) return;
                 auto& ui = *safe->impl; ui.working = ui.committing = false; ui.operation.reset(); ui.prepared.reset();
                 ui.report.setText(candidate->summary + "\n" + (result.published
-                    ? String("PUBLISHED: root OTTO committed; Host completion notified. Source PCM/CSV/dictionary not rewritten.\n")
-                    : String("NOT PUBLISHED.\n")) + messages(result), false);
+                    ? ui.strings.text("csv.published") + "\n"
+                    : ui.strings.text("csv.notPublished") + "\n") + messages(result, ui.strings), false);
                 ui.buttons();
             });
         });
@@ -431,15 +429,14 @@ struct CommunityDatasetImportDialog::Impl
         const auto expected = prepared; const auto epoch = generation;
         juce::Component::SafePointer<CommunityDatasetImportDialog> safe(&owner);
         juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::WarningIcon,
-            tr("确认数据集导入", "Confirm dataset import"), prepared->plan.manifest.getFullPathName() + "\n\n"
-            + tr("将只按预览中的独立登记写入根 OTTO。原音频与 CSV 不变。OTTO 将管辖整个根目录。是否继续？",
-                 "Write only the previewed annotation registrations into root OTTO? Audio and CSV remain unchanged. OTTO becomes authoritative for the whole root."),
-            tr("导入", "Import"), tr("取消", "Cancel"), &owner,
+            strings.text("csv.ui23"), prepared->plan.manifest.getFullPathName() + "\n\n"
+            + strings.text("csv.ui24"),
+            strings.text("csv.ui25"), strings.text("csv.ui26"), &owner,
             juce::ModalCallbackFunction::create([safe,expected,epoch](int accepted)
             {
                 if (!safe || !accepted) return;
                 auto& ui = *safe->impl; String error;
-                if (ui.prepared != expected || ui.generation != epoch) error = "Inputs changed while confirmation was open; preview again";
+                if (ui.prepared != expected || ui.generation != epoch) error = ui.strings.text("csv.previewRequired");
                 else if (ui.publishConfirmed(error)) return;
                 if (safe) safe->impl->report.setText(error, false);
             }));

@@ -107,6 +107,12 @@ SampleRegionSetting authoringRow(const SampleRegionSetting& from)
     row.nativeUnpitched = from.nativeUnpitched;
     row.pronunciationKind = from.pronunciationKind; row.simplifiedConsonant = from.simplifiedConsonant;
     row.vowelSplitsExplicit = from.vowelSplitsExplicit; row.segments = from.segments;
+    row.nativeTransition=from.nativeTransition;row.nativePronunciationEdges=from.nativePronunciationEdges;
+    if(row.pronunciationKind==PronunciationKind::transition&&row.nativeTransition)
+    {
+        juce::String problem;applyPronunciationTiming(row,pronunciationTimingFor(row),problem);
+        if(!row.nativePronunciationEdges){NativePronunciationEdges edges;if(defaultNativeTransitionEdges(row,edges,problem))row.nativePronunciationEdges=edges;}
+    }
     // Use shared C/P and explicit-V policy, not a registration-specific normalizer.
     // Raw invalid facts are validated BEFORE this canonical projection.
     auto local = pronunciationSegmentsFor(row);

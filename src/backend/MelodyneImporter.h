@@ -6,11 +6,25 @@
 
 namespace hachi::backend
 {
+// Read-only provenance for the explicit element synchronization anchor. Target
+// coordinates are clip-local seconds; source coordinates are absolute file seconds.
+struct MelodyneAlignmentEvidence
+{
+    juce::String noteId;
+    double targetSeconds = 0.0;
+    double sourceSeconds = 0.0;
+    double supportSourceSeconds = 0.0;
+};
+
 struct MelodyneImportResult
 {
     ProjectData project;
     juce::StringArray missingFiles;
     juce::StringArray referencedFiles;
+    // Original source-continuous join facts, not a transition classification.
+    // Graph IDs are scoped to this import; no filename or missing-field guesses.
+    std::vector<NativeSplitTransitionEvidence> continuousSourceJoins;
+    std::vector<MelodyneAlignmentEvidence> alignmentEvidence;
 };
 
 struct MelodyneImportOptions
@@ -32,6 +46,9 @@ public:
     // Read-only diagnostics including empty/unresolved tracks, before media
     // filtering. Useful when a named track is absent from an imported project.
     [[nodiscard]] static juce::var inspectTracks(const juce::File& file, juce::String& error);
+    // Raw source/element/join facts for comparing partial vs complete cuts.
+    // No media resolution/copy, analysis, annotations or import optimization.
+    [[nodiscard]] static juce::var inspectJoinGraph(const juce::File& file,juce::String& error);
     using Progress = std::function<void(double, const juce::String&)>;
 
     [[nodiscard]] static std::optional<MelodyneImportResult>
