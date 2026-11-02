@@ -1,6 +1,6 @@
 # Windows cloud build and portable packages
 
-The `dev` branch is the rolling development source through update 204 (2026-10-27), published in the existing flattened format: root `CMakeLists.txt`, `src/`, `engines/`, `resources/`, `third_party/`, `tools/` and `docs/`. Existing cloud-native compiler patches and split package delivery are retained. No README is supplied; the repository owner maintains it separately. Public application/version-resource text is **dev**. CMake and Windows use the legal internal numeric tuple **0.0.0**; this is not a release label. WCSNDM remains **0.0803**.
+The `dev` branch is the rolling development source through update 207 (2026-11-02 lightweight publication), published in the existing flattened format: root `CMakeLists.txt`, `src/`, `engines/`, `resources/`, `third_party/`, `tools/` and `docs/`. Existing cloud-native compiler patches and split package delivery are retained. No README is supplied; the repository owner maintains it separately. Public application/version-resource text is **dev**. CMake and Windows use the legal internal numeric tuple **0.0.0**; this is not a release label. WCSNDM remains **0.0803**.
 
 ## Build
 
@@ -14,8 +14,8 @@ From a VS x64 developer shell:
 
 The workflow runs on pushes to `dev` and supports manual dispatch. It produces:
 
-- `HachiShifterNext-windows-x64-app`: executable, **external `lang/translations.tsv`**, native runtime DLLs, VC CRT, engine scripts/dictionaries, portable Python dependencies and notices; no large analysis/synthesis weights or optional English G2P checkpoint. Packaging checks the dev executable metadata and required five-language import-option entries.
-- `HachiShifterNext-windows-x64-with-models`: the same built application plus the owner-approved checksum-pinned resource bundle. This includes GAME medium, FCPE, NSF-HiFiGAN, the native float32 HNSEP graph, English G2P, and the requested ASR/TIFA resources, dictionaries/configuration and licenses.
+- By default, `HachiShifterNext-windows-x64-app`: executable, **external `lang/translations.tsv`**, three native runtime DLLs, the explicitly selected VC CRT files, notices and exact source/build information. `tools/package-windows-light.ps1` uses a file whitelist, never recursively copies engines/models, and downloads neither portable Python nor weights. There is no DiffSinger engine in this lightweight update.
+- Only on explicit manual dispatch with `include_models=true`, the historical `HachiShifterNext-windows-x64-with-models` route remains available. It uses the existing separately owner-approved checksum-pinned model resource bundle and the legacy full bridge packager. Push builds skip those model/Python steps completely; this publication does not stage or reupload that resource archive.
 
 Each artifact contains a ZIP and its SHA256. Preserve the portable directory layout; do not move only the executable. The app-only package requires model files to be supplied before neural features can be used. Neither package supplies user voicebanks, personal audio/projects, commercial Melodyne, or independently installed third-party engines.
 

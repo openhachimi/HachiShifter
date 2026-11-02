@@ -687,8 +687,9 @@ struct TrackData
     // Opt-in lyric phonemizer; old projects retain literal OTO aliases.
     bool chineseCvvc = false;
     bool cvvcCurveCrossfade = false;
-    // MLD5/MLD3 remain loadable for old projects. New native tracks default
-    // explicitly to NSF-HiFiGAN; a missing model is reported, not substituted.
+    // MLD5 is selectable through the recovered period DSP; MLD3 remains legacy
+    // load-only/disabled. New tracks still default to NSF-HiFiGAN, with missing
+    // models reported rather than silently substituted.
     PitchAlgorithm pitchAlgorithm = defaultPitchAlgorithm();
     // Explicit native picker selection must not reactivate legacy NSF+OTO
     // synthesis merely because a previously selected voicebank is remembered.
@@ -699,6 +700,9 @@ struct TrackData
     RenderOrder renderOrder = defaultRenderOrder();
     // Optional same-source decode continuity, also valid in process order.
     bool mergeContiguousSource = false;
+    // Initial MLD5 choice defaults to continuous same-source processing. Once
+    // initialized, explicit saved/user orders survive switching engines.
+    bool mld5RenderPolicyInitialized = false;
     std::vector<ClipData> clips;
     // Backing audio always uses the source reader; engine fields are inert.
     bool accompaniment = false;
@@ -710,6 +714,7 @@ struct TrackData
     std::optional<TrackType> trackType;
 };
 [[nodiscard]] TrackType effectiveTrackType(const TrackData&);
+void initialiseMld5RenderPolicy(TrackData&);
 
 // One pitch line for UTAU notes whose pitch points reach into one another.
 //

@@ -58,6 +58,9 @@ public:
         result.virtualConnections = virtualConnections.getToggleState();
         result.virtualPitch = virtualPitch.getToggleState();
         result.mergeConsonants = mergeConsonants.getToggleState();
+        // Recognition is a registration-confirmation choice, never an import
+        // optimization. Keep the legacy field inert for old callers/tests.
+        result.autoJapanesePronunciation = false;
         return result;
     }
     void setOptions(const MelodyneImportOptimizationOptions& options)

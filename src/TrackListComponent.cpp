@@ -19,7 +19,7 @@ juce::String algorithmLabel(const TrackData& track, const juce::String& outputNa
         : track.pitchAlgorithm == PitchAlgorithm::llsm2 ? juce::String("llsm2")
         : track.pitchAlgorithm == PitchAlgorithm::utau
             ? utauModeLabel(track.utauMode)
-        : juce::String("mld5 (disabled)");
+        : juce::String("MLD5");
     const auto stretch = track.stretchAlgorithm == StretchAlgorithm::variableMelHop
         ? juce::String("variable-mel-hop")
         : track.stretchAlgorithm == StretchAlgorithm::loop ? juce::String("loop")

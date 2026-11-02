@@ -591,7 +591,7 @@ juce::var McpServer::diagnosticTools()
                   .description = "Whether notes are joined before or after they are processed",
                   .choices = { "process-then-splice", "stretch-splice-then-pitch" } },
                 { .name = "merge_contiguous_source", .type = "boolean",
-                  .description = "Decode explicitly connected same-source clips together, including process order; default false." },
+                  .description = "Render proven continuous same-source material as one session before slicing; new MLD5 selections default true, NSF keeps its existing false default. Combine process-then-splice with false for independent per-clip rendering, or true for source-continuous rendering." },
                 { .name = "utau_global_flags", .type = "string",
                   .description = "Flags handed to the engine for every note of this track" },
                 { .name = "voicebank_directory", .type = "string",
@@ -1209,11 +1209,11 @@ juce::var McpServer::dispatch(const juce::String& name, const juce::var& args)
         if (args.hasProperty("pitch_algorithm"))
         {
             const auto chosen = string(args, "pitch_algorithm").toLowerCase();
-            if (chosen == "mld5" || chosen == "mld3")
+            if (chosen == "mld3")
                 return toolResult(chosen + " is disabled (incomplete algorithm)", true);
             if (chosen == "vslib")
                 return toolResult("vslib native implementation is not integrated", true);
-            if (chosen != "nsf-hifigan" && chosen != "world" && chosen != "llsm2"
+            if (chosen != "mld5" && chosen != "nsf-hifigan" && chosen != "world" && chosen != "llsm2"
                 && chosen != "utau" && chosen != "utau4" && chosen != "utaumou")
                 return toolResult("Unknown pitch algorithm: " + chosen, true);
         }

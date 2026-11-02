@@ -59,7 +59,7 @@ From the repository directory:
 .\build-windows-native.ps1 -Jobs 4
 ```
 
-The script uses `juce/cmake/windows-msys2-xwin-native.cmake`, keeps generated
+The script uses `cmake/windows-msys2-xwin-native.cmake`, keeps generated
 files and dependency downloads under `TOOLCHAIN_ROOT`, and enables ONNX
 Runtime / DirectML. Models are never downloaded or bundled.
 

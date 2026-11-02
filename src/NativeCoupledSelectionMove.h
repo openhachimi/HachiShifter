@@ -13,6 +13,74 @@ inline bool nativeSelectionHasConnectedSeams(const TrackData& track,const std::v
     for(const auto& clip:track.clips)for(const auto& note:clip.notes)if(selected(note.id)&&(clip.nativeAudioLinked||note.connectedToPrevious||note.connectedToNext))return true;
     return false;
 }
+// Crop is deliberately NOT coupled resize/move: only an unconnected directed
+// edge may lose source support. Disabled routes still retain their topology.
+inline bool nativeNoteEdgeHasConnectedSeam(const TrackData& track,
+    const std::vector<NativeVirtualGroup>& groups,const std::vector<NativeConnection>& connections,
+    const juce::String& id,bool left)
+{
+    for(const auto& group:groups)if(group.trackId==track.id)
+    {
+        const auto pos=std::find(group.orderedNoteIds.begin(),group.orderedNoteIds.end(),id);
+        if(pos!=group.orderedNoteIds.end()&&(left?pos!=group.orderedNoteIds.begin():std::next(pos)!=group.orderedNoteIds.end()))return true;
+        const auto bridgeEdge=[&](const NativeSplitTransitionEvidence& bridge)
+        {return left?bridge.backNoteId==id:bridge.frontNoteId==id;};
+        if(group.splitTransition&&bridgeEdge(*group.splitTransition))return true;
+        if(std::any_of(group.extraSplitTransitions.begin(),group.extraSplitTransitions.end(),bridgeEdge))return true;
+    }
+    // Graph direction is authoritative even when compatibility flags are stale.
+    for(const auto& edge:connections)if(left?edge.rightNoteId==id:edge.leftNoteId==id)return true;
+    for(const auto& parent:track.clips)for(const auto& note:parent.notes)if(note.id==id)
+    {
+        if(left?note.connectedToPrevious:note.connectedToNext)return true;
+        // Clip glide flags describe the OUTERMOST note of their physical source,
+        // not every note sharing an owner. Keep nested source-part evidence too.
+        for(const auto& source:expandedClipParts(parent))
+            for(const auto& member:source.notes)if(member.id==id)
+            {
+                const bool outer=std::none_of(source.notes.begin(),source.notes.end(),[&](const auto& other)
+                {return other.id!=id&&(left?other.startSeconds<member.startSeconds-1.e-8
+                    :other.startSeconds+other.durationSeconds>member.startSeconds+member.durationSeconds+1.e-8);});
+                if(outer&&(left?source.glideConnectedFromPrevious:source.glideConnectedToNext))return true;
+            }
+        const bool outer=std::none_of(parent.notes.begin(),parent.notes.end(),[&](const auto& other)
+        {return other.id!=id&&(left?other.startSeconds<note.startSeconds-1.e-8
+            :other.startSeconds+other.durationSeconds>note.startSeconds+note.durationSeconds+1.e-8);});
+        if(outer&&(left?parent.glideConnectedFromPrevious:parent.glideConnectedToNext))return true;
+        if(parent.nativeAudioLinked&&!outer)return true;
+    }
+    return false;
+}
+// The same constrained source crop and retained-route validation serve Model
+// and GUI preview. Never fall back to a resize, dissolve a route or erase edges.
+inline std::optional<NativeNoteMovePlan> planNativeOuterNoteTrim(const TrackData& track,
+    const std::vector<NativeVirtualGroup>& groups,const std::vector<NativeConnection>& connections,
+    const ClipData& clip,const juce::String& id,double delta,bool left)
+{
+    if(nativeNoteEdgeHasConnectedSeam(track,groups,connections,id,left))return {};
+    auto plan=planNativeNoteTrim(clip,id,delta,left,track.allowNativeAudioOverlap);
+    if(!plan)return {};
+    const auto safe=constrainedNativeTrimDelta(track,id,plan->delta,left);
+    if(std::abs(safe-plan->delta)>1.e-12)plan=planNativeNoteTrim(clip,id,safe,left,track.allowNativeAudioOverlap);
+    if(!plan)return {};
+    for(const auto& source:expandedClipParts(plan->clip))
+    {
+        const auto clock=nativeClipClock(source);
+        if(clock.size()<2)return {};
+        for(std::size_t i=0;i<clock.size();++i)
+            if(!std::isfinite(clock[i].targetSeconds)||!std::isfinite(clock[i].sourceSeconds)
+                ||(i&&!(clock[i].targetSeconds>clock[i-1].targetSeconds&&clock[i].sourceSeconds>clock[i-1].sourceSeconds)))return {};
+    }
+    for(const auto& group:groups)if(group.trackId==track.id
+        &&std::find(group.orderedNoteIds.begin(),group.orderedNoteIds.end(),id)!=group.orderedNoteIds.end())
+    {
+        auto proposed=track;
+        for(auto& owner:proposed.clips)if(owner.id==clip.id){owner=plan->clip;break;}
+        NativeVirtualConnectionPlan geometry;juce::String issue;
+        if(!resolveNativeVirtualGroup(proposed,group,geometry,issue))return {};
+    }
+    return plan;
+}
 struct NativeCoupledSelectionMove
 {
     bool applicable=false;

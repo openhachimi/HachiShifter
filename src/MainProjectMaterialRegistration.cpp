@@ -1,5 +1,6 @@
 #include "MainComponent.h"
 #include "ProjectMaterialRegistrationFacts.h"
+#include "MelodyneJapaneseSliceBatch.h"
 #include <thread>
 
 namespace hachi
@@ -13,6 +14,11 @@ struct MainComponent::ProjectRegistrationOperation
     std::atomic_bool cancel{false};
     std::thread worker;
     std::unique_ptr<ProjectMaterialRegistration::Lease> lease;
+    bool japanesePronunciation = false;
+    MelodyneJapaneseSliceBatch::Options japaneseOptions;
+    juce::String japaneseReport;
+    std::map<juce::String,juce::String> recognizedSourceHashes;
+    std::unique_ptr<juce::ToggleButton> japaneseChoice;
     juce::Component::SafePointer<juce::AlertWindow> prompt;
 };
 namespace
@@ -66,6 +72,8 @@ void MainComponent::offerMaterialFolderForImport(const ProjectData& imported,boo
     if(!explicitRequest&&currentProjectFile!=juce::File{}&&preferences->getBoolValue(projectKey,false))return;
     juce::ignoreUnused(imported); // current live snapshot is the one adoption will guard
     auto operation=std::make_shared<ProjectRegistrationOperation>();operation->snapshot=project.snapshot();operation->revision=project.revisionNumber();
+    registrationInfoRegister.setButtonText(strings.text("Register copies..."));
+    registrationInfoLater.setVisible(true);registrationInfoNever.setVisible(true);
     operation->fingerprint=ProjectModel::registrationMusicSourceFingerprint(operation->snapshot);projectRegistrationOperation=operation;
     projectRegistrationTrace="offer_start revision="+juce::String(static_cast<juce::int64>(operation->revision))+" tracks="+juce::String(static_cast<int>(operation->snapshot.tracks.size()));
     juce::Component::SafePointer<MainComponent> safe(this);
@@ -92,7 +100,7 @@ void MainComponent::offerMaterialFolderForImport(const ProjectData& imported,boo
                     // Edits made while the strip was shown make the probe stale:
                     // re-probe the live project explicitly instead of failing.
                     if(safe->projectRegistrationOperation==operation&&safe->project.revisionNumber()==operation->revision)
-                        safe->chooseProjectMaterialRegistrationDestination(operation);
+                     safe->confirmProjectMaterialRegistration(operation);
                     else safe->offerMaterialFolderForImport(safe->project.snapshot(),true);};
                 self->registrationInfoLater.onClick=[safe]{if(!safe)return;safe->registrationInfoBar.setVisible(false);safe->cancelProjectMaterialRegistration();safe->resized();};
                 self->registrationInfoNever.onClick=[safe,projectKey]{if(!safe)return;if(safe->preferences)safe->preferences->setValue(projectKey,true);
@@ -100,22 +108,40 @@ void MainComponent::offerMaterialFolderForImport(const ProjectData& imported,boo
                 self->registrationInfoBar.setVisible(true);self->resized();
                 return;
             }
-            auto* dialog=new juce::AlertWindow(safe->strings.text("Register project source materials"),
-                safe->strings.text("Optionally copy the existing unregistered recordings into a NEW material folder and keep each carried clip/part annotation as an independent variant named '-'. This does not recover words or syllables. Original C/P, source clocks, pitch, envelopes and local edits remain exact. Skip keeps the loaded project unchanged; project files are saved only when you choose Save."),
-                juce::MessageBoxIconType::QuestionIcon,safe.getComponent());
-            operation->prompt=dialog;
-            dialog->setComponentID("project-material-registration-confirm");
-            dialog->addButton(safe->strings.text("Register copies..."),1);
-            dialog->addButton(safe->strings.text("Skip"),0,juce::KeyPress(juce::KeyPress::escapeKey));
-            dialog->enterModalState(true,juce::ModalCallbackFunction::create([safe,operation,dialog](int choice)
-            {
-                std::unique_ptr<juce::AlertWindow> owned(dialog);
-                if(!safe||safe->closingUI||operation->cancel||safe->projectRegistrationOperation!=operation)return;
-                if(choice!=1){safe->cancelProjectMaterialRegistration();return;}
-                safe->chooseProjectMaterialRegistrationDestination(operation);
-            }),false);
+            safe->confirmProjectMaterialRegistration(operation);
         });
     });
+}
+
+void MainComponent::confirmProjectMaterialRegistration(const std::shared_ptr<ProjectRegistrationOperation>& operation)
+{
+    if(closingUI||operation->cancel||projectRegistrationOperation!=operation)return;
+    if(project.revisionNumber()!=operation->revision)
+    {cancelProjectMaterialRegistration();showError(strings.text("The project changed before registration. Reopen the registration action for the current project."));return;}
+    juce::Component::SafePointer<MainComponent> safe(this);
+    auto* dialog=new juce::AlertWindow(strings.text("Register project source materials"),
+        strings.text("registration.confirmWithRecognition"),juce::MessageBoxIconType::QuestionIcon,this);
+    operation->prompt=dialog;
+    dialog->setComponentID("project-material-registration-confirm");
+    operation->japaneseChoice=std::make_unique<juce::ToggleButton>(strings.text("registration.japaneseRecognition"));
+    auto& japanese=*operation->japaneseChoice;
+    japanese.setComponentID("registration-auto-japanese-pronunciation");
+    japanese.setToggleState(false,juce::dontSendNotification); // each registration is an explicit opt-in
+    japanese.setTooltip(strings.text("registration.japaneseRecognitionHelp"));
+    japanese.setSize(560,48);
+    dialog->addCustomComponent(&japanese); // AlertWindow does not own custom components
+    dialog->addButton(strings.text("Register copies..."),1);
+    dialog->addButton(strings.text("Skip"),0,juce::KeyPress(juce::KeyPress::escapeKey));
+    dialog->enterModalState(true,juce::ModalCallbackFunction::create([safe,operation,dialog](int choice)
+    {
+        std::unique_ptr<juce::AlertWindow> owned(dialog);
+        dialog->removeCustomComponent(0);
+        if(!safe||safe->closingUI||operation->cancel||safe->projectRegistrationOperation!=operation)return;
+        if(choice!=1){safe->cancelProjectMaterialRegistration();return;}
+        operation->japanesePronunciation=operation->japaneseChoice->getToggleState();
+        operation->japaneseChoice.reset();
+        safe->chooseProjectMaterialRegistrationDestination(operation);
+    }),false);
 }
 
 void MainComponent::chooseProjectMaterialRegistrationDestination(const std::shared_ptr<ProjectRegistrationOperation>& operation)
@@ -142,18 +168,63 @@ void MainComponent::stageProjectMaterialRegistration(const std::shared_ptr<Proje
     if(operation->worker.joinable())operation->worker.join();
     const auto legal=juce::File::createLegalFileName(operation->snapshot.name);const auto child=(legal.isEmpty()?juce::String("project"):legal)+" materials "+juce::Uuid().toString().substring(0,8);
     juce::Component::SafePointer<MainComponent> safe(this);
+    // Read only: a dedicated Japanese root, never the NSF/vocoder directory.
+    operation->japaneseOptions.modelRoot=JapaneseAutoAnnotation::defaultModelRoot();
+    if(preferences)
+    {
+        const auto root=preferences->getValue("japanese.modelRoot").trim();
+        if(root.isNotEmpty())operation->japaneseOptions.modelRoot=juce::File(root);
+    }
+    if(projectRegistrationJapaneseModelRootForTest)operation->japaneseOptions.modelRoot=projectRegistrationJapaneseModelRootForTest();
+    if(operation->japanesePronunciation)
+    {
+        registrationInfoText.setText(strings.text("registration.recognizing"),juce::dontSendNotification);
+        registrationInfoRegister.setButtonText(strings.text("registration.cancelRecognition"));
+        registrationInfoRegister.onClick=[safe,operation]
+        {if(safe&&safe->projectRegistrationOperation==operation){safe->cancelProjectMaterialRegistration();safe->showStatusText(safe->strings.text("registration.recognitionCancelled"),5000);}};
+        registrationInfoLater.setVisible(false);registrationInfoNever.setVisible(false);
+        registrationInfoBar.setVisible(true);resized();
+    }
     operation->worker=std::thread([safe,operation,destination,child]
     {
         const auto cancel=[operation]{return operation->cancel.load();};
         const ProjectMaterialRegistration::OwnerScope scope=operation->owners;
-        const auto facts=ProjectMaterialRegistrationFacts::derive(operation->snapshot,ProjectMaterialRegistrationFacts::Policy::ConfirmedCarriedPlacements,scope);
+        auto facts=ProjectMaterialRegistrationFacts::derive(operation->snapshot,ProjectMaterialRegistrationFacts::Policy::ConfirmedCarriedPlacements,scope);
         if(!facts.ready)operation->error=facts.diagnostics.joinIntoString("\n");
         else
         {
-            auto plan=ProjectMaterialRegistration::prepare(operation->snapshot,operation->revision,destination,child,facts.variants,
-                ProjectModel::registrationMusicSourceFingerprint,cancel,scope);
-            if(!plan.ready)operation->error=plan.diagnostics.joinIntoString("\n");
-            else operation->lease=ProjectMaterialRegistration::stage(plan,operation->error,cancel);
+            bool recognized=true;
+            if(operation->japanesePronunciation&&!cancel())
+            {
+                MelodyneJapaneseSliceBatch::Result result;
+                const auto progress=[safe,operation](const juce::String& text)
+                {
+                    if(operation->cancel.load())return;
+                    juce::MessageManager::callAsync([safe,operation,text]
+                    {
+                        if(!safe||safe->closingUI||operation->cancel||safe->projectRegistrationOperation!=operation)return;
+                        safe->registrationInfoText.setText(safe->strings.text("registration.recognizing")+"  "+text,juce::dontSendNotification);
+                    });
+                };
+                recognized=MelodyneJapaneseSliceBatch::recognize(operation->snapshot,facts.variants,operation->japaneseOptions,result,operation->error,cancel,progress)&&result.ready;
+                operation->japaneseReport=result.report;
+                if(recognized){facts.variants=std::move(result.variants);operation->recognizedSourceHashes=std::move(result.sourceFingerprints);}
+            }
+            // One candidate, one lease, one OTTO atomic write. No recognition
+            // outputs are published or adopted independently of registration.
+            if(recognized&&!cancel())
+            {
+                auto plan=ProjectMaterialRegistration::prepare(operation->snapshot,operation->revision,destination,child,facts.variants,
+                    ProjectModel::registrationMusicSourceFingerprint,cancel,scope);
+                if(!plan.ready)operation->error=plan.diagnostics.joinIntoString("\n");
+                else
+                {
+                    for(const auto& recording:plan.recordings)for(const auto& alias:recording.aliases)
+                        if(const auto old=operation->recognizedSourceHashes.find(alias.getFullPathName());old!=operation->recognizedSourceHashes.end()&&old->second!=recording.sha256)
+                            operation->error="Source recording changed between Japanese recognition and material staging";
+                    if(operation->error.isEmpty())operation->lease=ProjectMaterialRegistration::stage(plan,operation->error,cancel);
+                }
+            }
         }
         juce::MessageManager::callAsync([safe,operation]
         {
@@ -187,13 +258,19 @@ void MainComponent::publishProjectMaterialRegistration(const std::shared_ptr<Pro
             operation->lease->retainAfterAdoption();
             const auto folder=plan.publishedFolder;
             const bool registered=safe->registerRetainedMaterialRoot(folder,error);
+            safe->registrationInfoBar.setVisible(false);safe->resized();
             safe->projectRegistrationOperation.reset();safe->projectRegistrationChooser.reset();
             if(!registered)
             {
                 if(std::find(safe->projectRegistrationRetryRoots.begin(),safe->projectRegistrationRetryRoots.end(),folder)==safe->projectRegistrationRetryRoots.end())safe->projectRegistrationRetryRoots.push_back(folder);
                 safe->showError(safe->strings.text("Project references and the copied audio/OTTO are safely retained at:\n")+folder.getFullPathName()+safe->strings.text("\nLibrary preference registration failed: ")+error+safe->strings.text("\nUse File > Retry material folder registration. No project file was automatically saved."));
             }
-            else safe->statusLabel.setText(safe->strings.text("Project source materials registered. Musical edits were preserved; choose Save to persist new references."),juce::dontSendNotification);
+            else
+            {
+                safe->statusLabel.setText(safe->strings.text("Project source materials registered. Musical edits were preserved; choose Save to persist new references."),juce::dontSendNotification);
+                if(operation->japaneseReport.isNotEmpty())
+                    juce::Logger::writeToLog(operation->japaneseReport);
+            }
             safe->menuItemsChanged();
         });
     });

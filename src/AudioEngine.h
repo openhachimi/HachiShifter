@@ -200,6 +200,7 @@ public:
 
     // How many phrases the last sync decided to decode in one pass.
     [[nodiscard]] int diagnosticMergedPhraseCount() const;
+    [[nodiscard]] juce::var diagnosticMld5SourceSessions() const;
     [[nodiscard]] std::uint64_t diagnosticScheduledNsfUtauRenders() const { return scheduledNsfUtauRenders.load(); }
     [[nodiscard]] double diagnosticRenderPriorityPosition() const
     { return renderService.playbackPriorityPosition(); }
@@ -300,6 +301,9 @@ private:
         std::atomic<float> progress { 0.0f };
         // Computed on the message thread with this immutable render key.
         bool preservesNativeSource = false;
+        // Absolute-timeline window normalization, applied at the mixer sample
+        // instead of being baked ahead of fractional source reads.
+        std::function<float(double)> contributionNormalization;
         // Under stretchSpliceThenPitch a whole glide chain is decoded in one
         // pass; this entry then holds the phrase, and each target is the span
         // belonging to one clip.  A target is filled the moment the phrase
@@ -309,6 +313,8 @@ private:
             std::shared_ptr<RenderedClip> clip;
             int startSample = 0;
             int sampleCount = 0;
+            double timelineOffsetSeconds = 0;
+            std::function<float(double)> contributionNormalization;
         };
         std::vector<SliceTarget> pendingSlices;
         juce::CriticalSection sliceLock;
@@ -378,6 +384,7 @@ private:
     std::vector<std::unique_ptr<LoadedClip>> loadedClips;
     std::unordered_map<std::string, std::shared_ptr<std::atomic<float>>> trackMeters;
     std::unordered_map<std::string, std::shared_ptr<RenderedClip>> renderCache;
+    juce::Array<juce::var> mld5SourceSessionTrace; // final assignment plus rejected candidates, never hidden fallback
     std::unordered_map<std::string, std::shared_ptr<RenderedClip>> playbackFallbackByClip;
     std::string exportTrackFilter;
     WavExportComponent renderComponent = WavExportComponent::full;

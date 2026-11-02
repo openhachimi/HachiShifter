@@ -68,6 +68,10 @@ struct Mld5FileRenderRequest
     float neighborEdgeF0Start = 0.0f;
     float neighborEdgeF0End = 0.0f;
     bool isGlideMerged = false;
+    // Separate musical intent from an incomplete acoustic voicing sample.
+    // Only MLD5 may recover a missing frame after strong source-PCM evidence.
+    std::vector<float> mld5SourceMidiHint, mld5TargetMidiIntent;
+    bool mld5SpliceBeforePitch = false; // order2 graph-first scheduling; time stretch stays inside native S/dS
     WavExportComponent exportComponent = WavExportComponent::full;
     // Transient per-render diagnostic switch, never a project preference.
     // True preserves current native incremental decoding; false uses legacy

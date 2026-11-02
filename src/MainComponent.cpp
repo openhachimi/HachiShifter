@@ -495,6 +495,7 @@ MainComponent::MainComponent()
     trackViewport.onWheel = wheelFor(trackViewport);
     pianoViewport.onWheel = wheelFor(pianoViewport);
 
+    pitchAlgorithm.addItem("MLD5", 1);
     pitchAlgorithm.addItem("nsf-hifigan", 2);
     pitchAlgorithm.addItem("WORLD", 3);
     pitchAlgorithm.addItem("llsm2", 6);
@@ -539,7 +540,8 @@ MainComponent::MainComponent()
         }
         const auto previousStretch = stretchAlgorithm.getSelectedId();
         refreshStretchAlgorithmItems(previousStretch);
-        const auto algorithm = nsfPickerItem(id) ? PitchAlgorithm::nsfHifigan
+        const auto algorithm = id == 1 ? PitchAlgorithm::mld5
+            : nsfPickerItem(id) ? PitchAlgorithm::nsfHifigan
             : id == 3 ? PitchAlgorithm::world
             : id == 4 ? PitchAlgorithm::vocalShifter
             : id == 6 ? PitchAlgorithm::llsm2
@@ -578,18 +580,26 @@ MainComponent::MainComponent()
     };
     renderOrder.onChange = [this]
     {
-        const auto order = renderOrder.getSelectedId() == 2
-            ? RenderOrder::stretchSpliceThenPitch : RenderOrder::processThenSplice;
+        const auto item = renderOrder.getSelectedId();
+        if (item < 1 || item > 3) return;
         const auto data = project.snapshot();
         const auto selectedTrack = std::find_if(data.tracks.begin(), data.tracks.end(),
             [this](const auto& track)
             {
                 return track.id == selectedTrackId;
             });
-        if (selectedTrack != data.tracks.end())
-            project.setTrackRenderOrder(selectedTrack->id, order, renderOrder.getSelectedId() == 3);
-        else
-            project.setRenderOrder(order);
+        // A track-local picker must never fall back to editing every track, or
+        // apply a stale/hidden native choice to UTAU or DiffSinger.
+        if (selectedTrack == data.tracks.end()
+            || effectiveTrackType(*selectedTrack) != TrackType::hachi
+            || !selectedTrack->compose || selectedTrack->accompaniment || selectedTrack->referenceOnly
+            || trackUsesVoicebankSynthesis(*selectedTrack)
+            || (selectedTrack->pitchAlgorithm != PitchAlgorithm::mld5
+                && selectedTrack->pitchAlgorithm != PitchAlgorithm::nsfHifigan)) return;
+        const auto order = item == 2
+            ? RenderOrder::stretchSpliceThenPitch : RenderOrder::processThenSplice;
+        project.setTrackRenderOrder(selectedTrack->id, order, item == 3);
+        refreshProjectControls();
     };
     stretchAlgorithm.onChange = [this]
     {
@@ -1415,7 +1425,7 @@ void MainComponent::refreshTrackPitchItems(const TrackData* track)
     const auto type=track?effectiveTrackType(*track):TrackType::hachi;
     const auto previous=pitchAlgorithm.getSelectedId();pitchAlgorithm.clear(juce::dontSendNotification);
     if(type==TrackType::hachi)
-    {pitchAlgorithm.addItem("nsf-hifigan",2);pitchAlgorithm.addItem("WORLD",3);pitchAlgorithm.addItem("llsm2",6);}
+    {pitchAlgorithm.addItem("MLD5",1);pitchAlgorithm.addItem("nsf-hifigan",2);pitchAlgorithm.addItem("WORLD",3);pitchAlgorithm.addItem("llsm2",6);}
     else if(type==TrackType::utau)
     {pitchAlgorithm.addItem("UTAU",7);pitchAlgorithm.addItem(utf8("界•UTAU"),8);pitchAlgorithm.addItem(utf8("谋•UTAU"),9);}
     else pitchAlgorithm.addItem("DiffSinger",10);
@@ -1500,12 +1510,13 @@ void MainComponent::refreshProjectControls()
     refreshTrackEditingInterface(selected!=data.tracks.end()?&*selected:nullptr);
     if (selected != data.tracks.end())
     {
-        const auto pitchId = selected->accompaniment ? 0 : effectiveTrackType(*selected)==TrackType::diffSinger ? 10 : selected->pitchAlgorithm == PitchAlgorithm::nsfHifigan ? (trackUsesVoicebankSynthesis(*selected) ? utauModePickerItem(selected->utauMode) : 2)
-            : selected->pitchAlgorithm == PitchAlgorithm::world ? 3
-            : selected->pitchAlgorithm == PitchAlgorithm::vocalShifter ? 4
-            : selected->pitchAlgorithm == PitchAlgorithm::llsm2 ? 6
-            : selected->pitchAlgorithm == PitchAlgorithm::utau
-                ? utauModePickerItem(selected->utauMode) : 6;
+        const auto pitchId = selected->accompaniment ? 0
+            : effectiveTrackType(*selected)==TrackType::diffSinger ? 10
+            : (selected->pitchAlgorithm == PitchAlgorithm::utau
+                || (selected->pitchAlgorithm == PitchAlgorithm::nsfHifigan
+                    && trackUsesVoicebankSynthesis(*selected)))
+                ? utauModePickerItem(selected->utauMode)
+            : pitchAlgorithmPickerItem(selected->pitchAlgorithm);
         const auto stretchId = selected->stretchAlgorithm == StretchAlgorithm::variableMelHop ? 2
             : selected->stretchAlgorithm == StretchAlgorithm::loop ? 3
             : selected->stretchAlgorithm == StretchAlgorithm::soundTouch ? 4
@@ -3750,6 +3761,7 @@ void MainComponent::resized()
         auto inner = registrationInfoBar.getLocalBounds().reduced(8, 4);
         for (auto* button : { &registrationInfoNever, &registrationInfoLater, &registrationInfoRegister })
         {
+            if(!button->isVisible())continue;
             const auto width = juce::roundToInt(button->getLookAndFeel().getTextButtonFont(*button, 26)
                 .getStringWidthFloat(button->getButtonText())) + 24;
             button->setBounds(inner.removeFromRight(width)); inner.removeFromRight(6);
@@ -3796,7 +3808,9 @@ void MainComponent::resized()
     // ---- Track-wide controls live in the dock; their visibility still follows
     // the track type exactly as before. ----
     pitchLabel.setVisible(!ds);pitchAlgorithm.setVisible(!ds);
-    const auto showOrder=hachi&&nsfPickerItem(pitchAlgorithm.getSelectedId());
+    const auto showOrder=projectedTrackEditable&&trackInterfaceOwner==selectedTrackId
+        &&displayedTrackType==TrackType::hachi
+        &&(pitchAlgorithm.getSelectedId()==1||nsfPickerItem(pitchAlgorithm.getSelectedId()));
     renderOrder.setVisible(showOrder);renderOrderLabel.setVisible(showOrder);
     stretchAlgorithm.setVisible(!ds);stretchLabel.setVisible(!ds);
     diffSingerModelButton.setVisible(ds);diffSingerSettingsButton.setVisible(ds);
@@ -7136,6 +7150,7 @@ void MainComponent::presentMelodyneComposeSelection(backend::MelodyneImportResul
         track.trackType = TrackType::hachi;
         track.stretchAlgorithm = importedStretch;
         track.renderOrder = defaultRenderOrder();
+        initialiseMld5RenderPolicy(track);
     }
 
     const auto storedComposeMode = preferences != nullptr
@@ -7213,3 +7228,4 @@ void MainComponent::showError(const juce::String& message)
 #include "tests/MainNativeForceConnectionUiSmoke.h"
 #include "tests/MainFileOnlyTranslationUiSmoke.h"
 #include "tests/MainRealMultiBridgeWindowSmoke.h"
+#include "tests/Mld5RenderOrderUiSmoke.h"

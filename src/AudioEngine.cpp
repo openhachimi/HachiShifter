@@ -1,5 +1,6 @@
 #include "backend/MixedEnvelopeIO.h"
 #include "NativeSourceTimeMap.h"
+#include "Mld5ContinuousSource.h"
 #include "NativePitchIdentity.h"
 #include "NativeSharedEnvelope.h"
 #include "AudioEngine.h"
@@ -105,7 +106,9 @@ void applyNativeSharedPitch(backend::Mld5FileRenderRequest& request, const ClipD
     const auto period = request.framePeriodMs / 1000.0;
     for (std::size_t frame = 0; frame < request.targetMidi.size(); ++frame)
     {
-        if (!(request.targetMidi[frame] > 0.0f)) continue; // retain the unvoiced mask
+        const bool voiced=request.targetMidi[frame]>0;
+        const bool hasIntent=frame<request.mld5TargetMidiIntent.size()&&request.mld5TargetMidiIntent[frame]>0;
+        if (!voiced&&!hasIntent) continue; // never fabricate a source voicing mask
         const auto local = std::min(request.targetDurationSeconds, frame * period) - requestOffset;
         for (const auto& note : clip.notes)
         {
@@ -116,9 +119,11 @@ void applyNativeSharedPitch(backend::Mld5FileRenderRequest& request, const ClipD
             const auto absoluteTime = clip.startSeconds + local;
             if (member->connectionPitchOnly && std::none_of(member->connectionPitchWindows.begin(),member->connectionPitchWindows.end(),
                 [&](const auto& window){return absoluteTime>=window.getStart()-1.0e-9&&absoluteTime<=window.getEnd()+1.0e-9;})) continue;
-            request.targetMidi[frame] = member->line->midiAt(clip.startSeconds + local)
+            const auto target=member->line->midiAt(clip.startSeconds + local)
                 + (member->virtualSinglePitch ? 0.f : static_cast<float>(vibratoCentsAt(note,
                     juce::jlimit(0.0, note.durationSeconds, local - note.startSeconds)) / 100.0));
+            if(voiced)request.targetMidi[frame]=target;
+            if(hasIntent&&target>0)request.mld5TargetMidiIntent[frame]=target;
             break;
         }
     }
@@ -189,6 +194,7 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
     request.nsfSmoothPitchTransitions = track.nsfSmoothPitchTransitions;
     request.nsfNoiseProtection = track.nsfNoiseProtection;
     request.nsfIncrementalRender = track.nsfNoiseProtection;
+    request.mld5SpliceBeforePitch=track.pitchAlgorithm==PitchAlgorithm::mld5&&track.renderOrder==RenderOrder::stretchSpliceThenPitch;
     // Decoding a clip on its own can leave its level below the source's; the
     // phrase-at-a-time order does not have that problem, because the model sees
     // the whole phrase.  The floor was raised in the per-clip order to
@@ -205,6 +211,7 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
                                                                    / framePeriodSeconds)) + 1);
     request.sourceMidi.resize(static_cast<std::size_t>(frameCount), 0.0f);
     request.targetMidi.resize(static_cast<std::size_t>(frameCount), 0.0f);
+    if(track.pitchAlgorithm==PitchAlgorithm::mld5){request.mld5SourceMidiHint.assign(std::size_t(frameCount),0.f);request.mld5TargetMidiIntent.assign(std::size_t(frameCount),0.f);}
     request.formantSemitones.resize(static_cast<std::size_t>(frameCount), 0.0f);
     trace("source-clock-ready");
     const auto ownEnvelopes = sharedEnvelopes ? NativeSharedEnvelopes{} : nativeSharedEnvelopes(track);
@@ -237,8 +244,20 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
             request.robustPitchCurve[static_cast<std::size_t>(frame)] =
                 note.robustPitchCurve ? static_cast<float>(noteIndex + 1) : 0.0f;
             const auto cents = contourAt(note, clampedLocal);
-            if (!cents) break; // Preserve the analysed unvoiced mask.
             const auto sourceCenter = note.sourceMidiCenter >= 0.0f ? note.sourceMidiCenter : note.midiNote;
+            if(track.pitchAlgorithm==PitchAlgorithm::mld5&&!note.nativeUnpitched&&note.sourceMidiCenter>=0&&nativeSourcePitchIsKnown(note)
+                &&note.nativeRole!=NativeSegmentRole::silence&&note.nativeRole!=NativeSegmentRole::noise&&note.nativeRole!=NativeSegmentRole::breath)
+            {
+                // Legacy imports conflated missing sparse-property coverage with
+                // true UV. Preserve its mask here; merely pass SAME-note intent.
+                // Only the source-PCM detector may authorise a render-only repair.
+                std::optional<std::pair<float,float>> intent=cents;
+                if(!intent)for(const auto& point:note.contour)if(point.voiced&&point.timeSeconds<=clampedLocal+1.e-9)
+                    intent=std::pair{point.relativeCents,renderedPitchCents(note,point)};
+                if(intent){request.mld5SourceMidiHint[std::size_t(frame)]=sourceCenter+intent->first/100.f;
+                    request.mld5TargetMidiIntent[std::size_t(frame)]=note.midiNote+(intent->second+vibratoCentsAt(note,clampedLocal))/100.f;}
+            }
+            if (!cents) break; // Preserve the analysed unvoiced mask for all existing backends.
             request.sourceMidi[static_cast<std::size_t>(frame)] = sourceCenter + cents->first / 100.0f;
             // Vibrato is a target-pitch edit, not a display-only decoration.
             // Keep it in the common request so NSF-HiFiGAN and every model-free
@@ -355,6 +374,7 @@ backend::Mld5FileRenderRequest makeRenderRequest(const ClipData& clip, const Tra
     const auto localLines = sharedLines ? SharedPitchLines{} : sharedPitchLines(track);
     trace("shared-lines-ready");
     applyNativeSharedPitch(request, clip, sharedLines ? *sharedLines : localLines);
+    for(std::size_t i=0;i<request.mld5TargetMidiIntent.size();++i)if(request.targetMidi[i]>0)request.mld5TargetMidiIntent[i]=request.targetMidi[i];
     trace("done");
     return request;
 }
@@ -879,6 +899,20 @@ backend::RequestedVoicebankFamily requestedVoicebankFamily(const TrackData& trac
         : backend::RequestedVoicebankFamily::utau;
 }
 
+void writeMld5SourceSessionContext(juce::MemoryOutputStream& stream,const ClipData& clip,const TrackData& track)
+{
+    if(track.pitchAlgorithm!=PitchAlgorithm::mld5)return;
+    stream.writeString("mld5-source-session-context-v2");
+    for(const auto& parent:track.clips)for(const auto& owner:expandedClipParts(parent))if(owner.sourceFile==clip.sourceFile)
+    {
+        stream.writeString(owner.id);stream.writeString(owner.materialSourceUsageGroupId);stream.writeBool(owner.muted);
+        stream.writeDouble(owner.startSeconds-clip.startSeconds);stream.writeDouble(owner.durationSeconds);stream.writeDouble(owner.sourceOffsetSeconds);stream.writeDouble(owner.sourceDurationSeconds);
+        stream.writeDouble(owner.fadeInSeconds);stream.writeDouble(owner.fadeOutSeconds);stream.writeDouble(owner.crossfadeInSeconds);stream.writeDouble(owner.crossfadeOutSeconds);
+        for(const auto& p:owner.sourceTimeMap){stream.writeDouble(p.targetSeconds);stream.writeDouble(p.sourceSeconds);}
+        for(const auto& note:owner.notes)writeNoteRenderFields(stream,note);
+    }
+}
+
 std::string renderKey(const ClipData& clip, const TrackData& track,
                       const juce::File& hifiganModelDirectory,
                       const backend::OrtExecutionConfig& inference,
@@ -889,6 +923,8 @@ std::string renderKey(const ClipData& clip, const TrackData& track,
 {
     juce::MemoryOutputStream stream;
     writeNativePitchContext(stream, clip, track);
+    if(track.pitchAlgorithm==PitchAlgorithm::mld5)stream.writeString(backend::Mld5Renderer::implementationId);
+    writeMld5SourceSessionContext(stream,clip,track);
     if (connections != nullptr && !connections->empty())
     {
         const auto digest = connectionPitchDigest(track, *connections, clip);
@@ -1014,6 +1050,12 @@ std::string mergedRenderKey(const std::vector<const ClipData*>& group, const Tra
     for (const auto* clip : group)
         key += renderKey(*clip, track, hifiganModelDirectory, inference, {}, {},
             UtauOutputEngine::resampler, {}, nullptr, connections) + ";";
+    if(track.pitchAlgorithm==PitchAlgorithm::mld5)
+    {
+        juce::MemoryOutputStream timeline;timeline.writeString("mld5-continuous-source-union-v2");
+        for(const auto* clip:group){timeline.writeDouble(clip->startSeconds-group.front()->startSeconds);timeline.writeDouble(clip->durationSeconds);timeline.writeString(clip->materialSourceUsageGroupId);}
+        key+="timeline="+juce::SHA256(timeline.getData(),timeline.getDataSize()).toHexString().toStdString();
+    }
     return key;
 }
 
@@ -2011,6 +2053,8 @@ std::uint64_t AudioEngine::nativeClipWaveformHash(const ClipData& viewClip, cons
     const auto clip = nativeAudioPreviewClip(viewClip);
     juce::MemoryOutputStream stream;
     writeNativePitchContext(stream, clip, track);
+    if(track.pitchAlgorithm==PitchAlgorithm::mld5)stream.writeString(backend::Mld5Renderer::implementationId);
+    writeMld5SourceSessionContext(stream,clip,track);
     stream.writeString(track.id); stream.writeString(clip.sourceFile.getFullPathName());
     stream.writeDouble(clip.startSeconds); stream.writeDouble(clip.sourceOffsetSeconds);
     stream.writeDouble(clip.sourceDurationSeconds); stream.writeDouble(clip.durationSeconds);
@@ -2221,6 +2265,11 @@ int AudioEngine::diagnosticMergedPhraseCount() const
     for (const auto& [key, entry] : renderCache)
         if (key.rfind("merged|", 0) == 0) ++phrases;
     return phrases;
+}
+
+juce::var AudioEngine::diagnosticMld5SourceSessions() const
+{
+    const juce::ScopedReadLock guard(renderLock);return juce::var(mld5SourceSessionTrace);
 }
 
 std::vector<float> AudioEngine::diagnosticNativeTargetMidi(
@@ -2551,6 +2600,8 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& originalProject, bool di
         for (int channel = 0; channel < channels; ++channel)
             target.clip->buffer.copyFrom(channel, 0, phrase.buffer, channel,
                                          target.startSample, copied);
+        target.clip->contributionNormalization=target.contributionNormalization;
+        target.clip->timelineOffsetSeconds=target.timelineOffsetSeconds;
         auto firstAudible = target.clip->buffer.getNumSamples();
         auto lastAudible = -1;
         constexpr auto audibleThreshold = 1.0e-5f;
@@ -2572,6 +2623,7 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& originalProject, bool di
         target.clip->finished.store(true, std::memory_order_release);
         generation->fetch_add(1, std::memory_order_release);
     };
+    mld5SourceSessionTrace.clear();
     // Tracks sharing a bank share one metadata scan in this update.
     std::unordered_map<std::string, std::string> updateBankStamps;
     std::unordered_set<std::string> changedBanks;
@@ -2713,9 +2765,11 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& originalProject, bool di
         {
             std::vector<const ClipData*> clips;
             std::vector<std::shared_ptr<RenderedClip>> rendered;
+            std::vector<std::shared_ptr<LoadedClip>> loaded;
+            std::optional<backend::Mld5FileRenderRequest> mld5Request;
         };
         std::vector<PendingGroup> pendingGroups;
-        std::vector<bool> inGlideGroup(count, false);
+        std::vector<bool> inGlideGroup(count, false),mld5InnerStart(count,false),mld5InnerEnd(count,false),mld5TouchIn(count,false),mld5TouchOut(count,false);
         const auto mergedMode = track.compose && !track.accompaniment
             && (track.renderOrder == RenderOrder::stretchSpliceThenPitch || track.mergeContiguousSource)
             && track.pitchAlgorithm == PitchAlgorithm::nsfHifigan;
@@ -2735,6 +2789,74 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& originalProject, bool di
                 }
                 pendingGroups.push_back(std::move(group));
             }
+        if(track.compose&&!track.accompaniment&&track.pitchAlgorithm==PitchAlgorithm::mld5
+            &&(track.mergeContiguousSource||track.renderOrder==RenderOrder::stretchSpliceThenPitch))
+        {
+            // MLD5 owns a continuous physical source session, not NSF's legacy
+            // concatenated-duration glide phrase. Overlaps retain timeline time.
+            std::map<juce::String,juce::String> owners;
+            if(original!=sourceProject.tracks.end())for(const auto& parent:original->clips)
+            {
+                if(parent.parts.empty())owners[parent.id]=track.id+":"+parent.id;
+                else for(const auto& part:parent.parts)owners[parent.id+":"+part.id]=track.id+":"+parent.id+(parent.nativeAudioLinked?juce::String{}:":"+part.id); // explicit shared-warp parent is source-use proof
+            }
+            struct Bucket{std::vector<const ClipData*> clips;std::vector<backend::Mld5FileRenderRequest> requests;Mld5ContinuousSourcePlan plan;};
+            std::vector<Bucket> buckets;std::map<juce::String,double> rates;
+            std::map<juce::String,juce::StringArray> rejectedCandidates;
+            for(const auto* clip:orderedClips)
+            {
+                if(clip->muted||clip->notes.empty()||!clip->sourceFile.existsAsFile()||std::any_of(clip->notes.begin(),clip->notes.end(),[&](const auto& n){return virtualBindings.count(n.id)!=0;}))continue;
+                const auto path=clip->sourceFile.getFullPathName();if(!rates.count(path)){std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(clip->sourceFile));rates[path]=reader?reader->sampleRate:48000.;}
+                auto request=makeRenderRequest(*clip,track,hifiganModelDirectory,inferenceConfiguration,false,false,&nativePitchLines,&nativeEnvelopes);request.exportComponent=renderComponent;
+                bool appended=false;
+                for(auto bucket=buckets.rbegin();bucket!=buckets.rend();++bucket)
+                {
+                    if(bucket->clips.front()->sourceFile!=clip->sourceFile)continue;
+                    auto clips=bucket->clips;auto requests=bucket->requests;clips.push_back(clip);requests.push_back(request);
+                    auto plan=planMld5ContinuousSource(clips,requests,owners,rates[path]);if(!plan.ready){rejectedCandidates[clip->id].addIfNotAlreadyThere(bucket->clips.front()->id+" -> "+clip->id+": "+plan.error);continue;}
+                    bucket->clips=std::move(clips);bucket->requests=std::move(requests);bucket->plan=std::move(plan);appended=true;break;
+                }
+                if(!appended)buckets.push_back({{clip},{std::move(request)},{}});
+            }
+            for(const auto& bucket:buckets)for(const auto* member:bucket.clips)
+            {
+                auto* row=new juce::DynamicObject();row->setProperty("track",track.id);row->setProperty("clip",member->id);row->setProperty("file",member->sourceFile.getFullPathName());
+                row->setProperty("physicalOwner",owners[member->id]);row->setProperty("sourceUse",member->materialSourceUsageGroupId);
+                row->setProperty("session",track.id+":"+bucket.clips.front()->id);row->setProperty("continuous",bucket.plan.ready);row->setProperty("members",int(bucket.clips.size()));
+                row->setProperty("assignment",bucket.plan.ready?"continuous-source-session":"standalone-source-request");
+                row->setProperty("targetStart",member->startSeconds);row->setProperty("targetEnd",member->startSeconds+member->durationSeconds);
+                row->setProperty("sourceStart",member->sourceOffsetSeconds);row->setProperty("sourceEnd",member->sourceOffsetSeconds+member->sourceDurationSeconds);
+                row->setProperty("queueStateKnown",false);row->setProperty("componentIdentityOrigin","Hachi source-use; original Melodyne component queue not reconstructed");
+                juce::Array<juce::var> rejected;for(const auto& why:rejectedCandidates[member->id])rejected.add(why);row->setProperty("rejectedCandidates",juce::var(rejected));
+                juce::Array<juce::var> notes;for(const auto& note:member->notes)notes.add(note.id);row->setProperty("notes",juce::var(notes));
+                if(member==bucket.clips.front())
+                {
+                    const auto& request=bucket.plan.ready?bucket.plan.merged:bucket.requests.front();auto* control=new juce::DynamicObject();
+                    control->setProperty("sourceOffset",request.sourceOffsetSeconds);control->setProperty("sourceDuration",request.sourceDurationSeconds);control->setProperty("targetDuration",request.targetDurationSeconds);control->setProperty("framePeriodMs",request.framePeriodMs);
+                    const auto lane=[](const std::vector<float>& values){juce::Array<juce::var> result;for(float value:values)result.add(value);return juce::var(result);};
+                    control->setProperty("sourceMidi",lane(request.sourceMidi));control->setProperty("targetMidi",lane(request.targetMidi));control->setProperty("formant",lane(request.formantSemitones));control->setProperty("gain",lane(request.noteGain));control->setProperty("robust",lane(request.robustPitchCurve));control->setProperty("sourceMidiHint",lane(request.mld5SourceMidiHint));control->setProperty("targetMidiIntent",lane(request.mld5TargetMidiIntent));
+                    juce::Array<juce::var> clock;for(const auto& p:request.timeMap){juce::Array<juce::var> pair;pair.add(p.targetSeconds);pair.add(p.sourceSeconds);clock.add(juce::var(pair));}control->setProperty("timeMap",juce::var(clock));row->setProperty("request",juce::var(control));
+                }
+                mld5SourceSessionTrace.add(juce::var(row));
+            }
+            for(auto& bucket:buckets)if(bucket.plan.ready)
+            {
+                PendingGroup group;group.clips=bucket.plan.clips;group.mld5Request=std::move(bucket.plan.merged);
+                for(const auto* member:group.clips)for(std::size_t i=0;i<count;++i)if(orderedClips[i]==member)
+                {inGlideGroup[i]=true;mld5InnerStart[i]=member->startSeconds>bucket.plan.startSeconds+1.e-9;mld5InnerEnd[i]=member->startSeconds+member->durationSeconds<bucket.plan.endSeconds-1.e-9;}
+                for(std::size_t edge=1;edge<group.clips.size();++edge)
+                {
+                    const auto* left=group.clips[edge-1];const auto* right=group.clips[edge];
+                    if(left->crossfadeOutSeconds<=1.e-9||right->crossfadeInSeconds<=1.e-9||std::abs(left->startSeconds+left->durationSeconds-right->startSeconds)>1.e-7)continue;
+                    // The SAME rendered stream already owns this touching join.
+                    // Applying two disjoint halves of a successive-join crossfade
+                    // would fade to zero twice, not crossfade two overlapping voices.
+                    // Only join weights are redundant; explicit author fades remain.
+                    for(std::size_t i=0;i<count;++i){if(orderedClips[i]==left)mld5TouchOut[i]=true;if(orderedClips[i]==right)mld5TouchIn[i]=true;}
+                }
+                pendingGroups.push_back(std::move(group));
+            }
+        }
         for (std::size_t clipIndex = 0; clipIndex < count; ++clipIndex)
         {
             const auto& clip = *orderedClips[clipIndex];
@@ -2834,15 +2956,17 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& originalProject, bool di
             if (!preservesSource)
             {
                 const auto compactDeclick = std::min(0.0025, loaded->clip.durationSeconds * 0.5);
-                if(!profiledStart&&!(explicitAssembly&&clip.crossfadeInSeconds>1.e-6))loaded->clip.fadeInSeconds = std::max(loaded->clip.fadeInSeconds, compactDeclick);
-                if(!profiledEnd&&!(explicitAssembly&&clip.crossfadeOutSeconds>1.e-6))loaded->clip.fadeOutSeconds = std::max(loaded->clip.fadeOutSeconds, compactDeclick);
+                if(!mld5InnerStart[clipIndex]&&!profiledStart&&!(explicitAssembly&&clip.crossfadeInSeconds>1.e-6))loaded->clip.fadeInSeconds = std::max(loaded->clip.fadeInSeconds, compactDeclick);
+                if(!mld5InnerEnd[clipIndex]&&!profiledEnd&&!(explicitAssembly&&clip.crossfadeOutSeconds>1.e-6))loaded->clip.fadeOutSeconds = std::max(loaded->clip.fadeOutSeconds, compactDeclick);
             }
+            if(mld5TouchIn[clipIndex])loaded->clip.crossfadeInSeconds=0;
+            if(mld5TouchOut[clipIndex])loaded->clip.crossfadeOutSeconds=0;
             // A seam inside a decoded phrase was never cut, so there is nothing
             // there to fade across; the mixer must lay these buffers down flat.
             if (inGlideGroup[clipIndex])
             {
                 loaded->smoothOverlaps = false;
-                if(loaded->sourceEdges.empty()&&!explicitAssemblyClips.count(clip.id)) // explicit assembly preserves its real crossfade and author fades
+                if(track.pitchAlgorithm!=PitchAlgorithm::mld5&&loaded->sourceEdges.empty()&&!explicitAssemblyClips.count(clip.id)) // MLD5 keeps author fades; only its implicit declick was suppressed above
                 {
                     loaded->clip.fadeInSeconds = 0.0;
                     loaded->clip.fadeOutSeconds = 0.0;
@@ -2987,6 +3111,7 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& originalProject, bool di
                         if (member == &clip)
                         {
                             group.rendered.push_back(std::move(slice));
+                            if(group.mld5Request){auto window=std::make_shared<LoadedClip>();window->clip=loaded->clip;window->sourceEdges=loaded->sourceEdges;window->virtualBindings=loaded->virtualBindings;group.loaded.push_back(std::move(window));}
                             break;
                         }
             }
@@ -3449,10 +3574,30 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& originalProject, bool di
             auto targetOffset = 0.0;
             for (std::size_t index = 0; index < group.clips.size(); ++index)
             {
-                const auto start = static_cast<int>(std::llround(targetOffset * fileRate));
-                targetOffset += group.clips[index]->durationSeconds;
-                const auto end = static_cast<int>(std::llround(targetOffset * fileRate));
-                targets.push_back({ group.rendered[index], start, std::max(1, end - start) });
+                if(group.mld5Request)
+                {
+                    const auto origin=group.clips.front()->startSeconds;const auto* clip=group.clips[index];
+                    const auto start=int(std::llround((clip->startSeconds-origin)*fileRate));
+                    RenderedClip::SliceTarget target{group.rendered[index],start,std::max(1,int(std::ceil(clip->durationSeconds*fileRate))+2)};
+                    target.timelineOffsetSeconds=origin+start/fileRate-clip->startSeconds;
+                    target.contributionNormalization=[members=group.loaded](double absolute)
+                    {
+                        float windows=0;
+                        for(const auto& member:members){const auto t=absolute-member->clip.startSeconds;if(t>=0&&t<member->clip.durationSeconds)windows+=fadeEnvelope(*member,t,absolute);}
+                        // One shared phase/audio may overlap itself in several
+                        // retained owners. Never sum it twice; author gains and
+                        // envelopes still apply exactly once in the mixer.
+                        return 1.f/std::max(1.f,windows);
+                    };
+                    targets.push_back(std::move(target));
+                }
+                else
+                {
+                    const auto start = static_cast<int>(std::llround(targetOffset * fileRate));
+                    targetOffset += group.clips[index]->durationSeconds;
+                    const auto end = static_cast<int>(std::llround(targetOffset * fileRate));
+                    targets.push_back({ group.rendered[index], start, std::max(1, end - start) });
+                }
             }
             {
                 const juce::ScopedLock sliceGuard(phrase->sliceLock);
@@ -3465,7 +3610,7 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& originalProject, bool di
             }
             if (!phrase->scheduled.exchange(true))
             {
-                auto request = mergedRequestFor(group.clips, track, hifiganModelDirectory,
+                auto request = group.mld5Request?std::move(*group.mld5Request):mergedRequestFor(group.clips, track, hifiganModelDirectory,
                     inferenceConfiguration, diagnosticLegacyUvCarrier, diagnosticSkipSharedPitch.value_or(false), &nativePitchLines);
                 request.nsfIncrementalRender = diagnosticNsfIncrementalRender.value_or(request.nsfIncrementalRender);
                 renderService.renderMld5File(std::move(request),
@@ -3475,7 +3620,7 @@ void AudioEngine::rebuildLoadedClips(const ProjectData& originalProject, bool di
                         {
                             const juce::ScopedLock sliceGuard(phrase->sliceLock);
                             phrase->warning = result.warning.isNotEmpty() ? result.warning
-                                : "NSF merged render returned no audio";
+                                : "Continuous native source render returned no audio";
                             for (const auto& target : phrase->pendingSlices)
                             {
                                 target.clip->warning = phrase->warning;
@@ -3584,6 +3729,8 @@ float AudioEngine::virtualContribution(const LoadedClip& loaded,double local,dou
 float AudioEngine::fadeEnvelope(const LoadedClip& loaded,double local,double absolute)
 {
     auto gain=fadeEnvelope(loaded.clip,local)*virtualContribution(loaded,local,absolute); // author fades stay separately multiplicative
+    const auto state=loaded.rendered&&loaded.rendered->ready.load(std::memory_order_acquire)?loaded.rendered:loaded.fallbackRendered;
+    if(state&&state->contributionNormalization)gain*=state->contributionNormalization(std::isfinite(absolute)?absolute:loaded.clip.startSeconds+local);
     const auto* span=sourceEdgeAt(loaded,local);if(!span)return gain;
     const auto curve=[](double phase){const auto x=static_cast<float>(juce::jlimit(0.0,1.0,phase));return x*x*(3.0f-2.0f*x);};
     if(span->entryWindowActive)

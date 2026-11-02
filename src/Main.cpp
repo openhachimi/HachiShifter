@@ -42,6 +42,7 @@
 #include "tests/CommunityDatasetImportGuiSmoke.h"
 #include "tests/MainMaterialVariantHandoffSmoke.h"
 #include "tests/MainProjectRegistrationUiSmoke.h"
+#include "tests/RegistrationJapaneseChoiceUiSmoke.h"
 #include "tests/OtoProvenanceSmoke.h"
 #include "tests/ClassicNoteScopeSmoke.h"
 #include "tests/JapaneseAutoAnnotationSmoke.h"
@@ -104,9 +105,21 @@
 #include "tests/NativeVirtualHandoverGestureSmoke.h"
 #include "tests/NativeVirtualSingleLineSmoke.h"
 #include "tests/NativePermanentSeamSmoke.h"
+#include "tests/NativeVirtualOuterTrimSmoke.h"
 #include "tests/LegacyNativeUsageSmoke.h"
 #include "tests/TransitionPairAndImportOptionsSmoke.h"
 #include "tests/FocusedDefaultsSmoke.h"
+#include "tests/Mld5RecoveredSmoke.h"
+#include "tests/Mld5NativeControlSmoke.h"
+#include "tests/Mld5SourcePitchRecoverySmoke.h"
+#include "tests/Mld5FalseUvAudioSmoke.h"
+#include "tests/MelodynePitchSupportSmoke.h"
+#include "tests/Mld5ContinuousSourcePlanSmoke.h"
+#include "tests/Mld5ContinuousAudioSmoke.h"
+#include "tests/Mld5RealRenderOrdersSmoke.h"
+#include "tests/Mld5OriginalAuthoringRender.h"
+#include "MelodyneJapaneseSliceBatch.h"
+#include "tests/MelodyneJapaneseSliceBatchSmoke.h"
 #include "tests/NativeMelodyneYellowSmoke.h"
 #include "tests/NativeSourceAssemblySmoke.h"
 #include "tests/WorldSourceAssemblySmoke.h"
@@ -216,6 +229,7 @@
 #include "tests/OtoOverlapSmoke.h"
 #include "tests/MouToJieSmoke.h"
 #include "tests/NsfPickerSmoke.h"
+#include "tests/Mld5PickerSmoke.h"
 #include "tests/VoicebankSelectionSmoke.h"
 #include "tests/VoicebankImportSmoke.h"
 #include "tests/NativeVibratoSmoke.h"
@@ -398,6 +412,38 @@ public:
         {
             setApplicationReturnValue(hachi::tests::runWorldSourceAssemblySmoke(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;
         }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-melodyne-japanese-slice-contract")
+        {setApplicationReturnValue(runMelodyneJapaneseSliceBatchSmoke(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=2&&arguments[0]=="--smoke-registration-japanese-choice")
+        {MainComponent component;setApplicationReturnValue(component.diagnosticRegistrationJapaneseChoiceUi(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=4&&arguments[0]=="--smoke-melodyne-japanese-slices")
+        {
+            backend::MelodyneImportOptions importOptions;importOptions.recursiveMediaSearch=false;juce::String error;
+            auto imported=backend::MelodyneImporter::importProject(juce::File(arguments[2].unquoted()),error,{},importOptions);bool ok=false;juce::String report;
+            if(!imported&&error.isEmpty())error="Melodyne import returned no project";
+            if(imported)ok=MelodyneJapaneseSliceBatch::run(imported->project,juce::File(arguments[1].unquoted()),juce::File(arguments[3].unquoted()),{},report);
+            if(!ok&&error.isEmpty())error=report.isEmpty()?"Japanese slice batch produced no publishable result":report;juce::File(arguments[1].unquoted()).getChildFile("japanese-slices-report.txt").replaceWithText(report+"\n"+error);setApplicationReturnValue(ok?0:4);juce::MessageManager::callAsync([this]{quit();});return;
+        }
+        if(arguments.size()>=3&&arguments[0]=="--render-mld5-original-authoring")
+        {setApplicationReturnValue(renderMld5OriginalAuthoring(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=3&&arguments[0]=="--render-mld5-orders")
+        {setApplicationReturnValue(renderMld5RealOrders(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=2&&arguments[0]=="--smoke-melodyne-pitch-support")
+        {setApplicationReturnValue(hachi::tests::runMelodynePitchSupportSmoke(juce::File(arguments[1].unquoted()),arguments.size()>2?juce::File(arguments[2].unquoted()):juce::File{}));juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=2&&arguments[0]=="--smoke-mld5-false-uv-audio")
+        {setApplicationReturnValue(runMld5FalseUvAudioSmoke(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=2&&arguments[0]=="--smoke-mld5-source-pitch-recovery")
+        {setApplicationReturnValue(runMld5SourcePitchRecoverySmoke(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=2&&arguments[0]=="--smoke-mld5-native-control")
+        {setApplicationReturnValue(runMld5NativeControlSmoke(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=2&&arguments[0]=="--smoke-mld5-continuous-audio")
+        {setApplicationReturnValue(runMld5ContinuousAudioSmoke(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=2&&arguments[0]=="--smoke-mld5-continuous-plan")
+        {setApplicationReturnValue(runMld5ContinuousSourcePlanSmoke(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=2&&arguments[0]=="--smoke-mld5-render-order-ui")
+        {MainComponent component;setApplicationReturnValue(component.diagnosticMld5RenderOrderUi(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=2&&arguments[0]=="--smoke-mld5-recovered")
+        {setApplicationReturnValue(runMld5RecoveredSmoke(juce::File(arguments[1].unquoted()),arguments.size()>=3?juce::File(arguments[2].unquoted()):juce::File{})?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
         if(arguments.size()>=2&&arguments[0]=="--smoke-focused-defaults")
         {setApplicationReturnValue(runFocusedDefaultsSmoke(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
         if(arguments.size()>=2&&arguments[0]=="--smoke-transition-pair-import-options")
@@ -406,6 +452,8 @@ public:
         {setApplicationReturnValue(runLegacyNativeUsageSmoke(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
         if(arguments.size()>=3&&arguments[0]=="--smoke-native-melodyne-yellow")
         {setApplicationReturnValue(runNativeMelodyneYellowSmoke(juce::File(arguments[1].unquoted()),juce::File(arguments[2].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
+        if(arguments.size()>=2&&arguments[0]=="--smoke-native-virtual-outer-trim")
+        {setApplicationReturnValue(runNativeVirtualOuterTrimSmoke(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
         if(arguments.size()>=2&&arguments[0]=="--smoke-native-permanent-seam")
         {
             setApplicationReturnValue(runNativePermanentSeamSmoke(juce::File(arguments[1].unquoted()))?0:4);
@@ -1301,6 +1349,8 @@ public:
             juce::MessageManager::callAsync([this] { quit(); });
             return;
         }
+        if(arguments.size()>=2&&arguments[0]=="--smoke-mld5-picker")
+        {MainComponent component;setApplicationReturnValue(component.diagnosticMld5Picker(juce::File(arguments[1].unquoted()))?0:4);juce::MessageManager::callAsync([this]{quit();});return;}
         if (!arguments.isEmpty() && arguments[0] == "--smoke-nsf-picker")
         {
             MainComponent component;

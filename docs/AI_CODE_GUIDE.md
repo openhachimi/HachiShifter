@@ -1,5 +1,11 @@
 # HachiShifter 代码功能总览与维护指南
 
+**更新207／实际音高回落与断音：** 真实4秒te定位为稀疏property覆盖误当UV，`MelodyneImporter::melodynePitchSupportDiagnostic`以实际item源支持范围为准，保留显式silent；旧HJPX由`Mld5SourcePitchRecovery`按同note hint＋独立target intent＋真实PCM强周期证据做渲染本地修复，不改作者数据，非稳态不盲补。同一连续stream内部真正touch且成对successive-join权重不能再各fade-to-zero；仅去掉重复join权重，作者fade/gain仍保留。`Mld5NativeControl`保留S/R反馈与UPDATED_R推进，UV载波控制/可听mask分开；第二项不再串联Signalsmith。实际request/拒绝/源session可观测；解析信号、实际输出F0及真实MPD13专项见207记录。不要再把whole-vs-slices相同当全部音质通过，或把原文件EOF当组件队列事实。
+
+**更新206／MLD5连续源：** 同源overlap不再逐片重启DSP或在内缝烘焙末组件淡出；`Mld5ContinuousSource`证明物理身份、源clock和重叠控制相容后一次合成真实timeline union，再按全局网格切回。Mixer按session只贡献一次，保留作者gain/fade，分数边界无重复／漏样。MLD5顺序三项可选，首次默认item3“同源连续合成后拼接”，NSF仍item2；已有明确保存的顺序不重置。`initialiseMld5RenderPolicy`是唯一新默认权威，缺字段旧工程用它，显式旧字段保留。专项及两份真实工程三种全长对照见更新记录206。
+
+**更新205／MLD5：** `backend/Mld5Renderer`现接入用户提供的`third_party/mld5-re`周期同步逆向DSP，替代旧经验频谱重映射；MLD5已恢复菜单／Settings／MCP可选，默认NSF不改。新内核严格FP只作用于自己的库和适配TU，只有MLD5音频及波形cache更新revision。高精度组合与Hachi一般时钟/Q适配的不同边界见 [接入说明](../third_party/mld5-re/HACHI-ADAPTER.md)；虚拟组组源／分离导出仍明确不支持，不能fallback冒充。`--smoke-mld5-recovered OUT [HJPX]`、`--smoke-mld5-picker OUT`是实际DSP／UI专项；保留此前日语与裁切WIP。
+
 **更新204／滚动发布：** 用户2026-10-27授权当前公开版本改为 **dev** 并同步GitHub `dev`。CMake／Windows保持合法内部数值tuple0.0.0，程序、MCP及EXE的版本文字为dev；WCSNDM0.0803不变。旧0.25记录仅为历史。GitHub使用扁平根CMake/src/engines/resources、保留既有Windows云构建和分离模型资源包，不发布用户工程、缓存或模型权重Git blob；EXE与外部lang必须同包。
 
 **更新203：** 普通先行P读取真实Melodyne `anchorPoint`同步锚，不等于齿音或稳定F0起点；经原timeMap投影源秒，显式零／缺锚不猜。默认NSF-HiFiGAN＋处理顺序先拼接后合成，拉伸算法及显式用户设置不改。实际用户G盘运行目录必须与lang目录成套更新，已冷测试验证新选项五语无缺键。新旧专项与架构见 [命令索引](AI_SOURCE_INDEX.md) 和 [更新记录](updates.md)。
@@ -127,11 +133,11 @@
 | 本仓库根目录 | `E:/和声合成新UI/HachiShifter-integrated`，当前维护的整合版源码 |
 | `src/` | 自有 C++ 编辑器、工程模型、音频引擎、后端适配和原生测试 |
 | `engines/diffsinger/` | DiffSinger 的 Python 推理桥、后台运行时、发音和参数处理 |
-| `juce/tests/` | Python 集成、音频、MCP 和真实模型测试 |
+| `tests/` | Python 集成、音频、MCP 和真实模型测试 |
 | `tools/` | 回归、模型准备、打包和开发辅助脚本；部分是历史快照脚本 |
 | `tools/hamood_audio/` | 和声分析工作进程、伴奏分析、KARA2 与具体歌曲验证脚本 |
 | `models/` | 本地模型资源，不保证包含在源码归档中 |
-| `juce/third_party/`、`third_party/` | 算法依赖与来源许可；不是所有同名外部项目的完整源码 |
+| `third_party/`、`third_party/` | 算法依赖与来源许可；不是所有同名外部项目的完整源码 |
 | `build-integrated/`、`.deps/` | 本地构建产物与依赖缓存，不作为业务源码修改入口 |
 | `test-output/`、`integration-tests/` | 测试产物、报告、截图、音频与夹具；不要当作正式源素材 |
 | `../HachiShifter-整合版-0.25-DiffSinger/` | 现用便携配布，EXE、运行库、模型、说明和构建信息 |
@@ -405,7 +411,7 @@ MCP 参数以当前 `tools/list`、`McpServer` 的 schema 和 Live handler 为�
 
 ## 构建和配布
 
-`juce/CMakeLists.txt` 是 C++20／JUCE 8.0.8 构建入口，公开版本定义为 0.25，并管理 ONNX／DirectML、引擎资源和第三方算法依赖。`build-local.ps1` 是当前本机 MSVC 整合版构建脚本，读取已有 CMakeCache，支持 ASCII junction；`build-windows-native.ps1` 和 `juce/cmake/` 是另一条 MSYS2 clang-cl/xwin 构建路线，不要混用同一缓存。
+`CMakeLists.txt` 是 C++20／JUCE 8.0.8 构建入口，公开版本定义为 0.25，并管理 ONNX／DirectML、引擎资源和第三方算法依赖。`build-local.ps1` 是当前本机 MSVC 整合版构建脚本，读取已有 CMakeCache，支持 ASCII junction；`build-windows-native.ps1` 和 `cmake/` 是另一条 MSYS2 clang-cl/xwin 构建路线，不要混用同一缓存。
 
 本机最近成功构建使用：
 
@@ -426,7 +432,7 @@ MCP 参数以当前 `tools/list`、`McpServer` 的 schema 和 Live handler 为�
 
 ## 验证入口和已有证据
 
-测试有三层：`Main.cpp` 内联 CLI 分支、`src/tests/*Smoke.h` 原生验证、`juce/tests/*.py` / `tools/` 集成验证。逐项命令见 [索引](AI_SOURCE_INDEX.md)。执行前读命令分支，某些测试还需要模型、音源、输入 WAV 或探针 EXE，不是所有命令都只有输出目录一个参数。
+测试有三层：`Main.cpp` 内联 CLI 分支、`src/tests/*Smoke.h` 原生验证、`tests/*.py` / `tools/` 集成验证。逐项命令见 [索引](AI_SOURCE_INDEX.md)。执行前读命令分支，某些测试还需要模型、音源、输入 WAV 或探针 EXE，不是所有命令都只有输出目录一个参数。
 
 | 修改范围 | 优先查看的验证 |
 | --- | --- |
@@ -437,7 +443,7 @@ MCP 参数以当前 `tools/list`、`McpServer` 的 schema 和 Live handler 为�
 | 原音 F0／保真／还原／波形 | `NativeSourcePitch*`、`NativeWaveformPreviewSmoke.h`、`NativeRenderedWaveformSmoke.h` 与相应 Python 测试 |
 | 原生音频包络 | `NativeEnvelopeSmoke.h`，`--smoke-native-envelope 输出目录` |
 | OTO／包络／FLAG | `AdvancedEnvelope*`、`Oto*`、`ContinuousFlagSmoke.h`、`hifisampler_curve_smoke.py` |
-| DS | `DiffSinger*Smoke.h` 与 `juce/tests/diffsinger_*.py`；替身测试不能取代真实音源验证 |
+| DS | `DiffSinger*Smoke.h` 与 `tests/diffsinger_*.py`；替身测试不能取代真实音源验证 |
 | 排队、导出、退出 | `PlaybackRenderSmoke.h`、`WavExportSmoke.h`、`NativeShutdownSmoke.h` |
 | 保存和 MCP | `ProjectSafetySmoke.h`、`project_safety_live.py`、`mcp_live_smoke.py` |
 | 工具栏和布局 | `--smoke-integrated-ui` 输出截图；同时核对浅／深色及不同宽度 |

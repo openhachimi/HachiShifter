@@ -1,5 +1,24 @@
 # 实际功能主入口、数据流与架构审计
 
+## MLD5音高／voicing／连接贡献权威（207）
+
+- 声学voicing缺失不等于作者要求无音高：fresh Melodyne source support由item真实样本范围权威给出，property格覆盖仅采样数据范围；显式silent仍优先。旧HJPX保存数据不被替写，MLD5请求另外传同note source hint和target intent，仅强PCM周期证据可恢复未知pair，target仍由原编辑曲线决定。
+- `Mld5SourcePitchRecovery`是Hachi分析前端的保守补缺，不是Melodyne原separator。不得用正period/文件名/最近MIDI覆盖任意UV，不得把不稳定尾段低置信候选强行补声。原P/C/timeMap和用户自动化不改。
+- 已共享的连续PCM、内部touch且存在成对successive-join amplitude窗时，只能保留一次连续stream贡献；将两个非重叠半窗各衰减到零会制造断音。系统join权重与作者fadeIn/fadeOut、clip.gain/envelope是不同层，修系统权重不能抵消作者音量动作。
+- native source-time控制与输出pitch/read clocks独立，endpoint/count及UPDATED_R推进由一个适配器权威负责；同输出网格UV/dry与processed混合，EOF不等于queue-empty。第二项不再先Signalsmith再MLD5；同一组件两种布局可以等价。WSL新source_transition的简化compat/dispatch不是完整native child/phase/队列，不可据其compatible放宽独立源复用。
+
+## 历史：MLD5同源连续session及贡献权威（206）
+
+- 同源连续音频是一次DSP状态，不是多个独立音符渲染后叠加。严格规划证明owner／source-use、源文件与全部clock／控制相容，拒绝独立同WAV层、不同variant、源回退／冲突F0，不靠时间邻近或nativePitchGroupId猜声源身份。
+- 组输出以真实timeline union合成，保留一次逆向周期状态和单目标F0；切回共用全局样本网格、分数偏移与插值guard。重复窗口贡献归一化在mixer绝对采样时钟计算，作者clip.gain/envelopes、track gain各一次，不用EQ/limiter拟合。内部source cut不是最后component，退出／自动declick只在真实外端，不取消作者边缘。
+- MLD5默认同源先合成后拼接由Model helper+持久化marker权威给出；UI/MCP只调用它和现有setter，NSF默认／拉伸各自独立。item2有真实前置时长阶段，不和item3共用假结果；同源source会话不是跨源虚拟组assembly能力，不放宽原guard。
+
+## MLD5独立逆向DSP权威（205）
+
+- 用户2026-10-31提供的独立库取代旧Mld5Renderer中的经验remap。DSP权威在`third_party/mld5-re`，Hachi适配只负责PCM/rate、已有源F0、目标曲线、clock、UV和单次gain，不重新检测F0、修改作者曲线或用其他引擎代替。
+- sourceMidi/targetMidi都已是目标5ms网格；只有构建源时间period数组时做inverse clock一次。R=target/source pitch ratio，Q=R/formant ratio。高精度原组合与一般Hachi受控时钟/Q入口不同证据范围，见该库接入说明，不能把一个fixture的近逐位复现宣传成全部工程等价。
+- 原`mld5`序列化/ID1保持；UI、MCP共用既有Model setter。缓存revision只加在MLD5两key，无全引擎cache失效。真实源直通条件、NSF默认、MLD3禁用、virtual assembly／separated export拒绝不变。
+
 ## 滚动版本与发布格式（204）
 
 `HACHI_DISPLAY_VERSION=dev` 是公开版本权威，主程序/MCP/EXE文字共用；CMake数值tuple0.0.0与项目文件schema不是公开版本，不能混改。JUCE自定义RC只替换VERSIONINFO，仍保留原图标/manifest。Github扁平发布在独立工作树映射现有JUCE源码，保留远端云原生compiler与分包设施；lang是运行依赖，随EXE入包，不允许隐藏内置翻译回退。固定模型资源包独立下载/校验，权重不纳Git。
@@ -206,7 +225,7 @@
 
 ## 核对范围
 
-静态清点 `juce/src` 的自有非测试 `.cpp/.h/.inc` 共 **143 个文件、91,708 行**，含注释和空行；`Main.cpp` 仍包含内联诊断，因此并非纯产品代码行数。另核对 DiffSinger Python 桥、HAMOOD/曲速任务入口、现有维护文档与测试入口。第三方算法实现按适配边界归类，不逐个列其内部函数。
+静态清点 `src` 的自有非测试 `.cpp/.h/.inc` 共 **143 个文件、91,708 行**，含注释和空行；`Main.cpp` 仍包含内联诊断，因此并非纯产品代码行数。另核对 DiffSinger Python 桥、HAMOOD/曲速任务入口、现有维护文档与测试入口。第三方算法实现按适配边界归类，不逐个列其内部函数。
 
 [接口清单](AI_API_REFERENCE.md) 覆盖 11 个边界类的 **342 个公开声明**（重载和生命周期分别计数），其中 `ProjectModel` 162 个；列出 **71 个 MCP 注册命令**及 Main.cpp 中 **243 个启动参数字面量**。数字不是功能数，也不代表 243 项测试已通过。源码指纹和统计口径见 [扫描记录](interface-audit-inventory.json)。UI 私有事件和数学辅助函数不作为额外产品接口；重要辅助规则在下表标出唯一归属。
 

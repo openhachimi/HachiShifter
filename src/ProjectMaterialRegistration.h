@@ -31,6 +31,9 @@ public:
         // facts; never a pitch event/analysis epoch masquerading as a row.
         SampleRegionSetting annotation;
         std::vector<Locator> members;
+        // Explicit producer-supplied source alias (e.g. dictionary-normalized
+        // note ASR), never an imported project lyric guessed by this planner.
+        std::optional<juce::String> publicationAlias;
     };
     struct VariantFacts
     {

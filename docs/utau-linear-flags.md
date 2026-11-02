@@ -33,7 +33,7 @@ HN1（更新 172）支持 g、Mt、Rd、Mo、ME/QX、Mr、Mq、NA 的逐帧谐�
 
 - `--smoke-flag-curve-mode [WCSNDM.exe]`：三个 UTAU 模式的启用、曲线编辑、重置、模式切换；传入引擎时检查普通 UTAU 和界模式的真实导出变化。
 - `--smoke-classic-flag-ui [预览.png]`：普通 UTAU 的开关、曲线面板和双参数编辑。
-- `juce/tests/flag_curve_smoke.py 编辑器.exe 音源目录 WCSNDM.exe 音节 utau`：真实波形的渐变、开关、曲线形状和多参数叠加。
+- `tests/flag_curve_smoke.py 编辑器.exe 音源目录 WCSNDM.exe 音节 utau`：真实波形的渐变、开关、曲线形状和多参数叠加。
 - DiffSinger 参数命名隔离和原有回归检查。
 
 - `--smoke-continuous-flag 输出目录`：DS / WCSNDM 连续绘制、菜单偏好、边界衔接、撤销保存、渲染参数和局部曲线保护。

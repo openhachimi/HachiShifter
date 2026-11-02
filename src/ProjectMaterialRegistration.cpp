@@ -337,12 +337,12 @@ Service::Plan Service::prepare(const ProjectData& project, std::uint64_t revisio
         {
             if (fact.key.isEmpty() || !regionIds.count(fact.key)) continue;
             // Validate raw evidence before shared helpers can clamp bad values.
-            auto raw = fact.annotation; raw.name = "-"; raw.additionalAliases.clear();
+            auto raw = fact.annotation; raw.name = fact.publicationAlias ? *fact.publicationAlias : juce::String("-"); raw.additionalAliases.clear();
             raw.materialAudioId = audio.id; raw.materialRegionId = regionIds[fact.key]; raw.connectedNextRegionId.clear();
             OttoMaterialIO::Document check; check.audio.push_back({audio.id, audio.relativePath, {raw}});
             if (!OttoMaterialIO::validate(check, error) || raw.regionEndSeconds > duration)
             { reject("Invalid carried source facts: " + fact.key + ": " + error); continue; }
-            auto row = authoringRow(raw); row.materialAudioId = audio.id; row.materialRegionId = raw.materialRegionId;
+            auto row = authoringRow(raw); row.name=raw.name; row.materialAudioId = audio.id; row.materialRegionId = raw.materialRegionId;
             if (fact.nextRowKey.isNotEmpty())
             {
                 const auto next = regionIds.find(fact.nextRowKey);

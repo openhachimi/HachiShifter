@@ -8255,9 +8255,8 @@ void PianoRollComponent::paint(juce::Graphics& g)
         {
             for (auto& track : snapshot.tracks) if (trackShowsAllNativeRegions(track))
                 for (auto& clip : track.clips)
-                    if (auto plan = planNativeNoteTrim(clip, draggedNote,
-                        constrainedNativeTrimDelta(track,draggedNote,delta,edit == NativeNoteTimeEdit::leftEdge),
-                        edit == NativeNoteTimeEdit::leftEdge,track.allowNativeAudioOverlap))
+                    if (auto plan = planNativeOuterNoteTrim(track,snapshot.nativeVirtualGroups,
+                        snapshot.nativeConnections,clip,draggedNote,delta,edit == NativeNoteTimeEdit::leftEdge))
                         clip = std::move(plan->clip);
         }
         else
@@ -10854,7 +10853,8 @@ void PianoRollComponent::mouseDownSingle(const juce::MouseEvent& event)
             if (onNoteSelected) onNoteSelected(hit.id);
             if (left || tail)
             {
-                for(const auto& track:snapshot.tracks)if(nativeSelectionHasConnectedSeams(track,snapshot.nativeVirtualGroups,{hit.id}))
+                const auto data=model.snapshot(); // physical owners, not expanded view parts
+                for(const auto& track:data.tracks)if(nativeNoteEdgeHasConnectedSeam(track,data.nativeVirtualGroups,data.nativeConnections,hit.id,left))
                 {if(onEditRejected)onEditRejected(I18n::uiText("seam.disconnectBeforeCrop"));return;}
                 draggedNote = hit.id; nativeTrimDrag = true;
                 dragStartSeconds = previewStartSeconds = hit.startSeconds;
@@ -11763,10 +11763,12 @@ void PianoRollComponent::mouseDrag(const juce::MouseEvent& event)
         auto delta = static_cast<double>(event.position.x - event.mouseDownPosition.x) / pixelsPerSecond;
         const auto left=dragMode==DragMode::resizeNativeLeft;
         const auto data=model.snapshot();
+        bool planned=false;
         for(const auto& track:data.tracks)if(trackShowsAllNativeRegions(track))
             for(const auto& clip:track.clips)
-                if(auto plan=planNativeNoteTrim(clip,draggedNote,delta,left,track.allowNativeAudioOverlap))
-                    delta=constrainedNativeTrimDelta(track,draggedNote,plan->delta,left);
+                if(auto plan=planNativeOuterNoteTrim(track,data.nativeVirtualGroups,data.nativeConnections,clip,draggedNote,delta,left))
+                {delta=plan->delta;planned=true;}
+        if(!planned)delta=0; // rejected geometry must not paint a fictitious crop
         noteDragPassedThreshold = std::abs(delta) > 1.e-9;
         if (dragMode == DragMode::resizeNativeLeft)
         {

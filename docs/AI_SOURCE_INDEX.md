@@ -1,5 +1,29 @@
 # HachiShifter 逐文件索引与命令入口
 
+## 当前207：真元音假UV回落与同流触接断音
+
+- `backend/MelodyneImporter.{h,cpp}`：小pure source-item支持helper，不能把propertyPoints首末±half-grid当有声域；实际source支持内允许首尾hold，显式silent/无pitch仍UV。`--smoke-melodyne-pitch-support OUT [MPD]`覆盖用户4秒真元音与不改作者参数。
+- `backend/Mld5SourcePitchRecovery.h`：仅同note显式hint/target intent允许的缺失pair，native PCM主/局部周期证据合格后恢复声源MIDI并保留target intent；无模型/IO，不改GUI/project数据。证据不足的旧尾段跳过，不能降低门限当通用UV填充。`--smoke-mld5-source-pitch-recovery OUT`、`--smoke-mld5-false-uv-audio OUT`分开检验恢复条件与实际输出420→784Hz，不是finite-only。
+- `backend/Mld5NativeControl.h`：只有count/anchor边界刷新source endpoint-current/count与R ramp，S/R/C持续、不逐sample覆盖，验证native UPDATED_R C。`--smoke-mld5-native-control OUT`含3个解析sine波形oracle、chunk不变性与跨Q1真实FULL/ADD/noCOPY。原period/rolling/FFT/OLA仍唯一core，WSL新transition/stretch primitives不冒充完整跨源波形。
+- `AudioEngine::diagnosticMld5SourceSessions()`记录最终分配/拒绝候选与请求控制；`--render-mld5-original-authoring SOURCE OUT`保留原音高/音量/归一化/连接设置，不再用改作者状态诊断冒充原状验收。仅选择MLD5及第三顺序到自有副本；原文件/媒体SHA验证。
+- 同源session触接不应重复clip.crossfade半窗导致归零：只去掉已证明同流内成对touch join权重，显式clip.fade及音量包络保留；真正重叠互补窗、外端及不同源不变。EOF与terminal/pending-empty分离。第二项不再双DSP，单一相容组件可与第三项相同，不能为了菜单看起来不同故意增加伪影。MLD5 cache revision v5-voicing-join；NSF默认及公共版本dev/WCS0.0803不变。
+
+## 历史206：MLD5重叠接缝及渲染顺序
+
+- `Mld5ContinuousSource.h`：无IO纯规划器，证明原owner/source-use/明确双向连接、同真实音频身份、重叠全部clock断点及7类控制一致；相容组使用actual timeline union，不是累计时长，生成MLD5请求，不调用NSF concat。
+- `AudioEngine`新增MLD5专用pending source sessions，复用既有phrase异步缓存；内缝保留DSP状态/抑制自动declick，真首尾及作者fade保留。Slice记录全局采样偏移和buffer guard，normalization在真实mixer采样点应用，不预烘焙进PCM导致分数边界阶跃；window快照无owner循环引用，不抵消clip gain/envelope。
+- `RenderService::mld5SpliceBeforePitch`：item2调用共用pitch-neutral时长阶段再进逆向pitch core；item3保持source-driven连续周期合成再切回。内部source cut的componentEndIsPhysicalEnd=false，不能触发最后component退出；真实文件末端仍由原退出逻辑处理。
+- `initialiseMld5RenderPolicy(TrackData&)`：首次选MLD5或新导入／缺字段load默认processThenSplice+merge=true；私有mld5RenderPolicyInitialized保存，显式顺序／旧字段保留；不改NSF default或stretch。Main的三顺序combo只作用于有效当前Hachi MLD5/NSF轨，stale隐藏事件不全轨广播，MCP维持render_order＋merge_contiguous_source。
+- `--smoke-mld5-continuous-plan OUT`，`--smoke-mld5-continuous-audio OUT`，`--smoke-mld5-render-order-ui OUT`：规划负例、真实低电平PCM整段oracle及分数边界／gain／三种顺序冷读。`--render-mld5-orders SOURCE.hjpx|mpd OUT`输出真实工程三种全长音频、后端和组数，并验证原工程／源音频SHA不变；明确诊断关闭未支持virtual assembly，不把它说成虚拟组MLD5支持。
+
+## 历史205：MLD5逆向内核与可选入口
+
+- `third_party/mld5-re/src`：从用户G盘成果纳入的14个独立生产模块，严格浮点，无原DLL／模型／Python／参考音频依赖。`HACHI-ADAPTER.md`记录两处动态frame-Q兼容扩展及有限域声明。
+- `backend/Mld5Renderer.cpp`：目标时钟曲线→源周期表及R/Q；32k principal／48k DSP内部时钟、输出恢复原rate/channel/count。恒等map＋恒定Q＋全有声走原`source_time_gain`，其他前向map／Q经Hachi受控seam调用相同period core；UV由原PCM lane保护、gain只乘一次。无旧remap／RMS拟合／MLD5_*环境旋钮。
+- `RenderService`继续是统一调度与后置expression／归一化权威；MLD5失败带原因返回，backend为`mld5-recovered-period-v1`，无偷换。`AudioEngine`只对MLD5音频和波形key加入同revision，不清其他引擎缓存。
+- `MainComponent`两菜单与ID1双向映射、Settings、TrackList、MCP `set_track`开放MLD5，旧工程`mld5`字串不改；MLD3仍disabled，默认NSF／已保存值不改。组源／分离能力未随菜单放宽。
+- `--smoke-mld5-recovered OUT [HJPX]`：真实新DSP的rate/length/stereo/F0/Q/gain/UV/动态clock、MCP及任选实际工程源；`--smoke-mld5-picker OUT`：真实UI切选／换轨／undo/redo／保存冷读。老`--smoke-nsf-picker`含过时跨轨型UTAU切换假设，不等于新MLD5可选专项。
+
 ## 当前204：dev滚动版本与GitHub扁平发布
 
 公开版本文字改为`dev`，内部合法数值版本0.0.0用于CMake／Windows，WCSNDM0.0803不改。新增Windows `resources/windows/HachiVersion.rc.in` 通过JUCE已有自定义VERSIONINFO入口提供dev文字和prerelease/special-build标记；程序／MCP共同使用HACHI_DISPLAY_VERSION。`--version`输出当前版本，容许命令行末尾空token。
@@ -339,7 +363,7 @@ PianoRoll 普通原生发音统一在音符级标签路径输出，不能按 C/V
 
 更新 139：`MainComponent::nativeVibratoButton` 提供非 U 颤音入口，`PianoRollComponent::showSelectedNativeVibratoDialog` 复用批量参数对话框并可选实际音高线显示；`ProjectModel::setNotesVibrato` 可将显示选择纳入同一步撤销。新增 `src/tests/NativeVibratoSmoke.h`：`--smoke-native-vibrato 输出目录` 通过实际按钮、对话框和拖动验证界面及工程；`--smoke-native-vibrato-render 输出目录 NSF模型目录` 检查单段／整句／粘连目标、清音、缓存及真实音频 F0。报告在 `test-output/update139/`。
 
-本页覆盖 `juce/src` 下的自有非测试 C++／头文件／包含单元，测试在后面单列。头文件也可能包含完整实现，`.inc` 文件通过其他源文件编译。
+本页覆盖 `src` 下的自有非测试 C++／头文件／包含单元，测试在后面单列。头文件也可能包含完整实现，`.inc` 文件通过其他源文件编译。
 
 ## 编辑器与工程模块
 
@@ -784,51 +808,51 @@ PianoRoll 普通原生发音统一在音符级标签路径输出，不能按 C/V
 
 ## Python 集成测试
 
-位于 `juce/tests/`。运行前读脚本参数；真实模型、外置引擎和运行中窗口要求不同。
+位于 `tests/`。运行前读脚本参数；真实模型、外置引擎和运行中窗口要求不同。
 
-- [advanced_envelope_live.py](../juce/tests/advanced_envelope_live.py)
-- [advanced_envelope_settings_live.py](../juce/tests/advanced_envelope_settings_live.py)
-- [consonant_untouched_smoke.py](../juce/tests/consonant_untouched_smoke.py)
-- [diffsinger_expressions.py](../juce/tests/diffsinger_expressions.py)
-- [diffsinger_inference.py](../juce/tests/diffsinger_inference.py)
-- [diffsinger_parameters.py](../juce/tests/diffsinger_parameters.py)
-- [diffsinger_pronunciation_retake.py](../juce/tests/diffsinger_pronunciation_retake.py)
-- [diffsinger_runtime.py](../juce/tests/diffsinger_runtime.py)
-- [diffsinger_smoke.py](../juce/tests/diffsinger_smoke.py)
-- [diffsinger_timing.py](../juce/tests/diffsinger_timing.py)
-- [diffsinger_variance_retake.py](../juce/tests/diffsinger_variance_retake.py)
-- [envelope_stretch_smoke.py](../juce/tests/envelope_stretch_smoke.py)
-- [envelope_tail_smoke.py](../juce/tests/envelope_tail_smoke.py)
-- [export_tracks_smoke.py](../juce/tests/export_tracks_smoke.py)
-- [flag_curve_smoke.py](../juce/tests/flag_curve_smoke.py)
-- [flag_precedence_smoke.py](../juce/tests/flag_precedence_smoke.py)
-- [flag_rerender_smoke.py](../juce/tests/flag_rerender_smoke.py)
-- [game_default_smoke.py](../juce/tests/game_default_smoke.py)
-- [game_fcpe_smoke.py](../juce/tests/game_fcpe_smoke.py)
-- [hamood_context_live.py](../juce/tests/hamood_context_live.py)
-- [hamood_live_smoke.py](../juce/tests/hamood_live_smoke.py)
-- [hifisampler_curve_smoke.py](../juce/tests/hifisampler_curve_smoke.py)
-- [mcp_live_smoke.py](../juce/tests/mcp_live_smoke.py)
-- [mcp_smoke.py](../juce/tests/mcp_smoke.py)
-- [melodyne_import_smoke.py](../juce/tests/melodyne_import_smoke.py)
-- [mou_mixed_counts_smoke.py](../juce/tests/mou_mixed_counts_smoke.py)
-- [mou_oto_smoke.py](../juce/tests/mou_oto_smoke.py)
-- [native_pitch_smoke.py](../juce/tests/native_pitch_smoke.py)
-- [native_source_pitch_smoke.py](../juce/tests/native_source_pitch_smoke.py)
-- [native_unedited_audio_smoke.py](../juce/tests/native_unedited_audio_smoke.py)
-- [nsf_hifigan_model_smoke.py](../juce/tests/nsf_hifigan_model_smoke.py)
-- [project_safety_live.py](../juce/tests/project_safety_live.py)
-- [region_flag_smoke.py](../juce/tests/region_flag_smoke.py)
-- [rest_lyric_smoke.py](../juce/tests/rest_lyric_smoke.py)
-- [splice_smoke.py](../juce/tests/splice_smoke.py)
-- [ust_fidelity_live.py](../juce/tests/ust_fidelity_live.py)
-- [utau4_mode_smoke.py](../juce/tests/utau4_mode_smoke.py)
+- [advanced_envelope_live.py](../tests/advanced_envelope_live.py)
+- [advanced_envelope_settings_live.py](../tests/advanced_envelope_settings_live.py)
+- [consonant_untouched_smoke.py](../tests/consonant_untouched_smoke.py)
+- [diffsinger_expressions.py](../tests/diffsinger_expressions.py)
+- [diffsinger_inference.py](../tests/diffsinger_inference.py)
+- [diffsinger_parameters.py](../tests/diffsinger_parameters.py)
+- [diffsinger_pronunciation_retake.py](../tests/diffsinger_pronunciation_retake.py)
+- [diffsinger_runtime.py](../tests/diffsinger_runtime.py)
+- [diffsinger_smoke.py](../tests/diffsinger_smoke.py)
+- [diffsinger_timing.py](../tests/diffsinger_timing.py)
+- [diffsinger_variance_retake.py](../tests/diffsinger_variance_retake.py)
+- [envelope_stretch_smoke.py](../tests/envelope_stretch_smoke.py)
+- [envelope_tail_smoke.py](../tests/envelope_tail_smoke.py)
+- [export_tracks_smoke.py](../tests/export_tracks_smoke.py)
+- [flag_curve_smoke.py](../tests/flag_curve_smoke.py)
+- [flag_precedence_smoke.py](../tests/flag_precedence_smoke.py)
+- [flag_rerender_smoke.py](../tests/flag_rerender_smoke.py)
+- [game_default_smoke.py](../tests/game_default_smoke.py)
+- [game_fcpe_smoke.py](../tests/game_fcpe_smoke.py)
+- [hamood_context_live.py](../tests/hamood_context_live.py)
+- [hamood_live_smoke.py](../tests/hamood_live_smoke.py)
+- [hifisampler_curve_smoke.py](../tests/hifisampler_curve_smoke.py)
+- [mcp_live_smoke.py](../tests/mcp_live_smoke.py)
+- [mcp_smoke.py](../tests/mcp_smoke.py)
+- [melodyne_import_smoke.py](../tests/melodyne_import_smoke.py)
+- [mou_mixed_counts_smoke.py](../tests/mou_mixed_counts_smoke.py)
+- [mou_oto_smoke.py](../tests/mou_oto_smoke.py)
+- [native_pitch_smoke.py](../tests/native_pitch_smoke.py)
+- [native_source_pitch_smoke.py](../tests/native_source_pitch_smoke.py)
+- [native_unedited_audio_smoke.py](../tests/native_unedited_audio_smoke.py)
+- [nsf_hifigan_model_smoke.py](../tests/nsf_hifigan_model_smoke.py)
+- [project_safety_live.py](../tests/project_safety_live.py)
+- [region_flag_smoke.py](../tests/region_flag_smoke.py)
+- [rest_lyric_smoke.py](../tests/rest_lyric_smoke.py)
+- [splice_smoke.py](../tests/splice_smoke.py)
+- [ust_fidelity_live.py](../tests/ust_fidelity_live.py)
+- [utau4_mode_smoke.py](../tests/utau4_mode_smoke.py)
 
 ## 构建与通用工具
 
 | 文件 | 用途 |
 | --- | --- |
-| [CMakeLists.txt](../juce/CMakeLists.txt) | C++ 目标、依赖、资源和版本 |
+| [CMakeLists.txt](../CMakeLists.txt) | C++ 目标、依赖、资源和版本 |
 | [build-local.ps1](../build-local.ps1) | 本机 MSVC 增量构建 |
 | [build-windows-native.ps1](../build-windows-native.ps1) | MSYS2 clang-cl 与 xwin 路线 |
 | [windows-build.yml](../.github/workflows/windows-build.yml) | Windows 无模型构建与启动验证 |
@@ -895,8 +919,8 @@ PianoRoll 普通原生发音统一在音符级标签路径输出，不能按 C/V
 
 ## 资源和依赖
 
-- `juce/resources/`：编辑器资源，由 CMake 引用。
-- `juce/third_party/`：WORLD、LLSM2、ciglet 等依赖实现与许可。
+- `resources/`：编辑器资源，由 CMake 引用。
+- `third_party/`：WORLD、LLSM2、ciglet 等依赖实现与许可。
 - `.deps/` 和构建目录 `_deps/`：获取的 JUCE、ONNX Runtime 等依赖。
 - `third_party/hifisampler/`：当前为 LICENSE 和 NOTICE，适配实现位于 backend。
 - `models/`：本地权重及来源信息，不保证随源码包提供。

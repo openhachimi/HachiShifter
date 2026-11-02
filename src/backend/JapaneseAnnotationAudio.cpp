@@ -48,6 +48,30 @@ bool AnnotationAudio::load(const juce::File& file, AnnotationAudio& out, juce::S
     out = std::move(candidate); return true;
 }
 
+bool AnnotationAudio::loadSlice(const juce::File& file,juce::int64 first,juce::int64 end,
+    AnnotationAudio& out,juce::String& error,const AnnotationCancel& cancel)
+{
+    error.clear();if(cancel&&cancel()){error="Annotation cancelled";return false;}
+    juce::AudioFormatManager formats;formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+    if(!reader||!std::isfinite(reader->sampleRate)||reader->sampleRate<8000||reader->sampleRate>384000||reader->numChannels<1||reader->numChannels>32)
+    {error="Unsupported source recording for Japanese note recognition";return false;}
+    if(first<0||end<=first||end>reader->lengthInSamples||end-first>std::numeric_limits<int>::max()||(end-first)/reader->sampleRate>60.)
+    {error="Invalid physical source slice for Japanese note recognition";return false;}
+    const auto hash=juce::SHA256(file).toHexString();AnnotationAudio value;value.file=file;value.fingerprint=hash;
+    value.sampleRate=reader->sampleRate;value.duration=(end-first)/reader->sampleRate;value.mono.setSize(1,int(end-first));value.mono.clear();
+    juce::AudioBuffer<float> block(int(reader->numChannels),8192);
+    for(int offset=0;offset<value.mono.getNumSamples();offset+=8192)
+    {
+        if(cancel&&cancel()){error="Annotation cancelled";return false;}
+        const auto count=std::min(8192,value.mono.getNumSamples()-offset);
+        if(!reader->read(&block,0,count,first+offset,true,true)){error="Could not decode Japanese note source slice";return false;}
+        for(int s=0;s<count;++s){double v=0;for(int c=0;c<block.getNumChannels();++c){const auto x=block.getSample(c,s);if(!std::isfinite(x)){error="Source slice contains non-finite samples";return false;}v+=x;}value.mono.setSample(0,offset+s,float(v/block.getNumChannels()));}
+    }
+    if(juce::SHA256(file).toHexString()!=hash){error="Recording changed while reading Japanese note slice";return false;}
+    out=std::move(value);return true;
+}
+
 bool AnnotationAudio::resample(double rate, std::vector<float>& output, juce::String& error,
                                const AnnotationCancel& cancel) const
 {

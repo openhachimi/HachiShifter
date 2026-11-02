@@ -1,6 +1,6 @@
 # OpenUtau Chinese CVVC phonemizer
 
-`juce/src/backend/ChineseCvvcPhonemizer.h` adapts the alias-selection and timing
+`src/backend/ChineseCvvcPhonemizer.h` adapts the alias-selection and timing
 rules from OpenUtau's `OpenUtau.Plugin.Builtin/ChineseCVVCPhonemizer.cs`:
 https://github.com/openutau/OpenUtau/blob/master/OpenUtau.Plugin.Builtin/ChineseCVVCPhonemizer.cs
 

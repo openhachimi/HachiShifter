@@ -2,6 +2,7 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <vector>
+#include <functional>
 
 namespace hachi::backend
 {
@@ -30,16 +31,26 @@ struct Mld5RenderRequest
     std::vector<float> targetMidi;
     std::vector<float> formantSemitones;
     std::vector<float> noteGain;
+    std::vector<float> sourceMidiHint,targetMidiIntent;
+    std::function<void(int)> sourceRecoveryObserver;
     std::vector<TimeMapPoint> timeMap;        // empty -> no time warp
     int targetSamples = 0;                     // 0 -> output length = input length
+    // Scheduler facts only. Reader/file EOF does not establish an empty queue.
+    bool terminalComponentKnown = false;
+    bool pendingQueueEmpty = false;
+    bool allowZeroRemainder = false;
 };
 
 class Mld5Renderer final
 {
 public:
-    // Melodyne-5 MULSS-style renderer: phase-preserving bandlimited-harmonic
-    // spectral remap with formant-envelope compensation and granular hop time
-    // warp.  Independent of every other pitch backend.
-    [[nodiscard]] juce::AudioBuffer<float> render(const Mld5RenderRequest& request) const;
+    // Recovered period/rolling/FFT/OLA DSP supplied in G:/mld5. The Hachi host
+    // adapts analysed F0, target curves and time maps; it is not a reconstruction
+    // of Melodyne's source separator or all original project/control modes.
+    static constexpr const char* implementationId = "mld5-recovered-period-v5-voicing-join";
+    struct ControlSnapshot { double pitchRatio=1; float probeRatio=1,voicingGain=0; };
+    [[nodiscard]] static ControlSnapshot diagnosticControlAt(const Mld5RenderRequest&,double seconds);
+    [[nodiscard]] juce::AudioBuffer<float> render(const Mld5RenderRequest& request,
+                                                 juce::String* error=nullptr) const;
 };
 }

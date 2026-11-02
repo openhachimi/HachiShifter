@@ -180,12 +180,12 @@ https://github.com/Team-BRAPA/Umidaji-DiffSinger/releases/tag/v110
 使用匹配 Python 版本的 `requirements.txt` 安装到 packages；不依赖开发机绝对路径。
 开发/测试可设置 `HACHI_DIFFSINGER_RUNTIME` 指向含 python 和 diffsinger 的 engines 目录。
 
-真实模型测试：`juce/tests/diffsinger_smoke.py <bridge.py> <音源目录> <输出目录>`。
+真实模型测试：`tests/diffsinger_smoke.py <bridge.py> <音源目录> <输出目录>`。
 应用集成测试：`HachiShifter Next.exe --smoke-diffsinger <音源目录> <输出目录>`，覆盖 pitch 写入、过期结果拒绝、一次撤销/重做、工程保存读取、AudioEngine 播放和 WAV 导出。
 
 模型进程关闭 ORT 图优化：实测此版本 ORT 对测试音源 pitch 图的默认优化可能卡在 session 初始化。关闭优化后可正常预测。
 
-曲线测试：`juce/tests/diffsinger_expressions.py <bridge.py> <输出目录> [Umidaji 音源目录]`。
+曲线测试：`tests/diffsinger_expressions.py <bridge.py> <输出目录> [Umidaji 音源目录]`。
 `--smoke-diffsinger-expressions` 覆盖 U 模式启用、多曲线、贝塞尔采样、请求传递、工程存取、默认值及撤销/重做；真实模型集成测试另覆盖曲线修改后渲染缓存失效和界面操作。
 
 Umidaji 实测支持 DYN、GENC、VELC、PEXP 和 5 个音色混合。该音源没有能量、气声、张力、实声比例的对应声学输入，也没有声明支持 SHFC 的声码器，因此这些参数仅完成确定性替身模型的输入接口测试，尚无对应真实音源的声音验证。
@@ -200,9 +200,9 @@ Umidaji 实测支持 DYN、GENC、VELC、PEXP 和 5 个音色混合。该音源�
 
 该适配器按公开 ONNX 接口独立实现；未捆绑、运行或修改 OpenUtau 程序。
 
-预检/缓存/后台生命周期测试：`juce/tests/diffsinger_runtime.py`；更新 003 的报告位于 `integration-tests/diffsinger-update003/`。旧式采样接口通过输入契约验证；真实模型试听验证使用 Umidaji，不能据此宣称全部第三方音源已验证。
+预检/缓存/后台生命周期测试：`tests/diffsinger_runtime.py`；更新 003 的报告位于 `integration-tests/diffsinger-update003/`。旧式采样接口通过输入契约验证；真实模型试听验证使用 Umidaji，不能据此宣称全部第三方音源已验证。
 
-更新 004 验证：`juce/tests/diffsinger_timing.py` 使用真实音源检查共享边界、拍点、帧数守恒、负起点、休止、延音、规则时长、过界和过期覆盖；`--smoke-diffsinger-timing <音源目录> <输出目录>` 检查谋模式迁移、编辑器、保存重开、撤销、实际播放缓存和 WAV 导出。
+更新 004 验证：`tests/diffsinger_timing.py` 使用真实音源检查共享边界、拍点、帧数守恒、负起点、休止、延音、规则时长、过界和过期覆盖；`--smoke-diffsinger-timing <音源目录> <输出目录>` 检查谋模式迁移、编辑器、保存重开、撤销、实际播放缓存和 WAV 导出。
 
 更新 005 验证：`--smoke-diffsinger-consonants <工程.hjpx> <输出目录>` 使用真实工程和 zhang/wang 对照轨，检查负起点辅音、前音静音后辅音不丢失、单次包络、主界面发声/波形范围、选择上下文及移动片段的提前发声。报告位于 `integration-tests/diffsinger-update005/`。时长分组参考 [OpenUtau 官方 DiffSingerBasePhonemizer](https://github.com/openutau/OpenUtau/blob/master/OpenUtau.Core/DiffSinger/DiffSingerBasePhonemizer.cs)。
 

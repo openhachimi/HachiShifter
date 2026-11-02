@@ -1,6 +1,6 @@
 # 实际接口声明清单（自动生成）
 
-核对日期：2026-10-27。配套解读：[功能主入口与架构审计](AI_INTERFACE_ARCHITECTURE.md)。
+核对日期：2026-11-02。配套解读：[功能主入口与架构审计](AI_INTERFACE_ARCHITECTURE.md)。
 
 这是源文件导航，不是承诺稳定的公共 SDK。仅枚举下列 11 个边界类的公开方法，不把 private 函数、UI 回调、纯计算辅助函数或每个第三方函数算作产品接口。重载各列一行；诊断接口单独标记。源码行号为生成时位置。
 
@@ -10,212 +10,212 @@
 
 | 实际签名 | 类型 | 定义入口 |
 | --- | --- | --- |
-| `ProjectModel()` | 生命周期 | [ProjectModel.h:1034](../src/ProjectModel.h#L1034) |
-| `ProjectData snapshot() const` | 业务／适配 | [ProjectModel.h:1036](../src/ProjectModel.h#L1036) |
-| `std::uint64_t revisionNumber() const` | 业务／适配 | [ProjectModel.h:1037](../src/ProjectModel.h#L1037) |
-| `void replace(ProjectData replacement)` | 业务／适配 | [ProjectModel.h:1038](../src/ProjectModel.h#L1038) |
-| `void resetDocument(ProjectData replacement = {})` | 业务／适配 | [ProjectModel.h:1040](../src/ProjectModel.h#L1040) |
-| `void clear()` | 业务／适配 | [ProjectModel.h:1041](../src/ProjectModel.h#L1041) |
-| `void setAssetManagerVisible(bool visible)` | 业务／适配 | [ProjectModel.h:1043](../src/ProjectModel.h#L1043) |
-| `bool setHamoodState(const juce::String& state, juce::String& error)` | 业务／适配 | [ProjectModel.h:1044](../src/ProjectModel.h#L1044) |
-| `bool undo()` | 业务／适配 | [ProjectModel.h:1045](../src/ProjectModel.h#L1045) |
-| `bool redo()` | 业务／适配 | [ProjectModel.h:1046](../src/ProjectModel.h#L1046) |
-| `bool canUndo() const` | 业务／适配 | [ProjectModel.h:1047](../src/ProjectModel.h#L1047) |
-| `bool canRedo() const` | 业务／适配 | [ProjectModel.h:1048](../src/ProjectModel.h#L1048) |
-| `juce::String addAudioFile(const juce::File& file, double durationSeconds, double startSeconds = 0.0, const juce::String& targetTrackId = {}, const VoicebankOtoEntry* oto = nullptr, UtauMode otoMode = UtauMode::classic)` | 业务／适配 | [ProjectModel.h:1050](../src/ProjectModel.h#L1050) |
-| `juce::String addMaterialPronunciations( const juce::File& audio, const std::vector<SampleRegionSetting>& completeRows, const std::vector<juce::String>& selectedRegionIds, double absoluteStart, const juce::String& targetTrackId, juce::String& error, const juce::String& chosenAlias = {})` | 业务／适配 | [ProjectModel.h:1062](../src/ProjectModel.h#L1062) |
-| `juce::String addTypedTrack(TrackType type = TrackType::hachi, const juce::String& name = {})` | 业务／适配 | [ProjectModel.h:1067](../src/ProjectModel.h#L1067) |
-| `juce::String addTrack(const juce::String& name, bool compose = true, bool referenceOnly = false, bool accompaniment = false, TrackType type = TrackType::hachi)` | 业务／适配 | [ProjectModel.h:1069](../src/ProjectModel.h#L1069) |
-| `void setTrackReferenceOnly(const juce::String& trackId, bool referenceOnly)` | 业务／适配 | [ProjectModel.h:1072](../src/ProjectModel.h#L1072) |
-| `void setTrackName(const juce::String& trackId, const juce::String& name)` | 业务／适配 | [ProjectModel.h:1073](../src/ProjectModel.h#L1073) |
-| `bool setClipNotesIfEmpty(const juce::String& clipId, std::vector<NoteData> notes)` | 业务／适配 | [ProjectModel.h:1074](../src/ProjectModel.h#L1074) |
-| `std::size_t markNativeUnpitchedRegions(const juce::String& clipId)` | 业务／适配 | [ProjectModel.h:1075](../src/ProjectModel.h#L1075) |
-| `bool setNativeTrimSourceAnalysis(const juce::File& file, const std::vector<NoteData>& sourceNotes, const juce::String& expectedSourceFingerprint = {})` | 业务／适配 | [ProjectModel.h:1076](../src/ProjectModel.h#L1076) |
-| `bool setClipAudioAnalysis(const juce::String& clipId, std::vector<NoteData> notes, const ClipData& importedClip = ClipData{})` | 业务／适配 | [ProjectModel.h:1078](../src/ProjectModel.h#L1078) |
-| `bool addMidiFile(const juce::File& file, juce::String& error)` | 业务／适配 | [ProjectModel.h:1080](../src/ProjectModel.h#L1080) |
-| `static std::vector<MidiTrackChoice> midiTrackChoices(const juce::File& file, juce::String& error)` | 业务／适配 | [ProjectModel.h:1090](../src/ProjectModel.h#L1090) |
-| `juce::String addMidiTrack(const juce::File& file, int trackIndex, juce::String& error)` | 业务／适配 | [ProjectModel.h:1097](../src/ProjectModel.h#L1097) |
-| `static bool writeMidiFile(const ProjectData& data, const juce::File& file, juce::String& error, const juce::String& trackId = {}, bool includeMuted = false)` | 业务／适配 | [ProjectModel.h:1105](../src/ProjectModel.h#L1105) |
-| `bool addUstFile(const juce::File& file, juce::String& error, juce::StringArray& warnings, UstImportMode mode = UstImportMode::addTrack, juce::String* importedTrackId = nullptr, int encoding = 0, TrackType destinationType = TrackType::hachi)` | 业务／适配 | [ProjectModel.h:1123](../src/ProjectModel.h#L1123) |
-| `bool exportUst(const juce::File& file, const juce::String& trackId, juce::String& error, juce::StringArray& warnings, int encoding = 0) const` | 业务／适配 | [ProjectModel.h:1128](../src/ProjectModel.h#L1128) |
-| `void setTempo(double bpm, int numerator, int denominator = 4)` | 业务／适配 | [ProjectModel.h:1130](../src/ProjectModel.h#L1130) |
-| `void setTempoChange(double quarterPosition, double bpm, bool synchronizeNotes = true)` | 业务／适配 | [ProjectModel.h:1133](../src/ProjectModel.h#L1133) |
-| `juce::int64 contentFingerprint() const` | 业务／适配 | [ProjectModel.h:1137](../src/ProjectModel.h#L1137) |
-| `static juce::String registrationMusicSourceFingerprint(const ProjectData&)` | 业务／适配 | [ProjectModel.h:1139](../src/ProjectModel.h#L1139) |
-| `bool adoptRegisteredMaterialBindings(std::uint64_t expectedRevision, const juce::String& expectedFingerprint, const std::vector<ProjectMaterialRegistrationOwnerBinding>& owners, const std::vector<ProjectMaterialRegistrationNoteBinding>& notes, juce::String& error)` | 业务／适配 | [ProjectModel.h:1140](../src/ProjectModel.h#L1140) |
-| `void setGridDivision(const juce::String& division)` | 业务／适配 | [ProjectModel.h:1145](../src/ProjectModel.h#L1145) |
-| `void setNoteEditDivision(int division)` | 业务／适配 | [ProjectModel.h:1146](../src/ProjectModel.h#L1146) |
-| `void setBaseScale(const juce::String& scale)` | 业务／适配 | [ProjectModel.h:1147](../src/ProjectModel.h#L1147) |
-| `void setTrackCompose(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1148](../src/ProjectModel.h#L1148) |
-| `void setTrackMuted(const juce::String& trackId, bool muted)` | 业务／适配 | [ProjectModel.h:1149](../src/ProjectModel.h#L1149) |
-| `void setTrackSolo(const juce::String& trackId, bool solo)` | 业务／适配 | [ProjectModel.h:1150](../src/ProjectModel.h#L1150) |
-| `void setTrackVolume(const juce::String& trackId, float volume)` | 业务／适配 | [ProjectModel.h:1151](../src/ProjectModel.h#L1151) |
-| `void setClipGainEnvelope(const juce::String& clipId, std::vector<GainEnvelopePoint> points)` | 业务／适配 | [ProjectModel.h:1152](../src/ProjectModel.h#L1152) |
-| `void setTrackPan(const juce::String& trackId, float pan)` | 业务／适配 | [ProjectModel.h:1153](../src/ProjectModel.h#L1153) |
-| `void setTrackSmoothOverlaps(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1154](../src/ProjectModel.h#L1154) |
-| `void setTrackNormalizeVolume(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1155](../src/ProjectModel.h#L1155) |
-| `void setTrackNsfSmoothPitchTransitions(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1156](../src/ProjectModel.h#L1156) |
-| `void setTrackNsfNoiseProtection(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1157](../src/ProjectModel.h#L1157) |
-| `void setTrackVoicebankDirectory(const juce::String& trackId, const juce::File& directory)` | 业务／适配 | [ProjectModel.h:1158](../src/ProjectModel.h#L1158) |
-| `void setTrackUtauConsonantVelocity(const juce::String& trackId, int velocity)` | 业务／适配 | [ProjectModel.h:1160](../src/ProjectModel.h#L1160) |
-| `void setTrackUtauGlobalFlags(const juce::String& trackId, const juce::String& flags)` | 业务／适配 | [ProjectModel.h:1161](../src/ProjectModel.h#L1161) |
-| `void setUtauMode(UtauMode mode)` | 业务／适配 | [ProjectModel.h:1162](../src/ProjectModel.h#L1162) |
-| `void setTrackUtauMode(const juce::String& trackId, UtauMode mode)` | 业务／适配 | [ProjectModel.h:1163](../src/ProjectModel.h#L1163) |
-| `void setTrackChineseCvvc(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1164](../src/ProjectModel.h#L1164) |
-| `void setTrackCvvcCurveCrossfade(const juce::String& trackId, bool curved)` | 业务／适配 | [ProjectModel.h:1165](../src/ProjectModel.h#L1165) |
-| `void setTrackOutputEngine(const juce::String& trackId, UtauOutputEngine engine, const juce::File& resampler = {}, const juce::File& wavtool = {})` | 业务／适配 | [ProjectModel.h:1166](../src/ProjectModel.h#L1166) |
-| `void setNotesVibrato(const std::vector<juce::String>& noteIds, const NoteData& parameters, bool enabled, std::optional<bool> realLine = std::nullopt)` | 业务／适配 | [ProjectModel.h:1168](../src/ProjectModel.h#L1168) |
-| `void setNotesVibratoRealLine(const std::vector<juce::String>& noteIds, bool enabled)` | 业务／适配 | [ProjectModel.h:1171](../src/ProjectModel.h#L1171) |
-| `bool bakeNoteVibratoIntoPitch(const juce::String& noteId)` | 业务／适配 | [ProjectModel.h:1175](../src/ProjectModel.h#L1175) |
-| `void setNotesUtauSplice(const std::vector<juce::String>& noteIds, bool enabled)` | 业务／适配 | [ProjectModel.h:1176](../src/ProjectModel.h#L1176) |
-| `bool setPointCurves(std::vector<PointCurveEdit> edits, std::uint64_t expectedRevision, juce::String* error = nullptr)` | 业务／适配 | [ProjectModel.h:1204](../src/ProjectModel.h#L1204) |
-| `bool previewPointCurves(const std::vector<PointCurveEdit>& edits, std::uint64_t expectedRevision, PointCurvePlanPreview&, juce::String& error) const` | 业务／适配 | [ProjectModel.h:1206](../src/ProjectModel.h#L1206) |
-| `bool resetCvvcBoundaries(const std::vector<juce::String>& noteIds, std::uint64_t expectedRevision)` | 业务／适配 | [ProjectModel.h:1209](../src/ProjectModel.h#L1209) |
-| `bool setCvvcBoundary(const juce::String& noteId, int rightPart, double position, std::uint64_t expectedRevision)` | 业务／适配 | [ProjectModel.h:1210](../src/ProjectModel.h#L1210) |
-| `bool setCvvcEnvelopes(std::vector<CvvcEnvelopeEdit>, std::uint64_t expectedRevision)` | 业务／适配 | [ProjectModel.h:1211](../src/ProjectModel.h#L1211) |
-| `bool setCvvcEnvelope(const juce::String& noteId, int part, const juce::String& flag, backend::CvvcEnvelopeCurve points, std::uint64_t expectedRevision)` | 业务／适配 | [ProjectModel.h:1212](../src/ProjectModel.h#L1212) |
-| `void setNotesUtauFlagCurveEnabled(const std::vector<juce::String>& noteIds, bool enabled)` | 业务／适配 | [ProjectModel.h:1214](../src/ProjectModel.h#L1214) |
-| `bool resetNotesUtauFlagCurves(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1221](../src/ProjectModel.h#L1221) |
-| `bool resetNotesUtauFlagCurve(const std::vector<juce::String>& noteIds, const juce::String& flag)` | 业务／适配 | [ProjectModel.h:1223](../src/ProjectModel.h#L1223) |
-| `bool setNoteUtauFlagCurves(const juce::String& flag, const std::map<juce::String, std::vector<FlagCurvePoint>>& edits, std::optional<std::uint64_t> expectedRevision = std::nullopt, bool enabledOnly = true)` | 业务／适配 | [ProjectModel.h:1227](../src/ProjectModel.h#L1227) |
-| `bool setNoteUtauFlagCurve(const juce::String& noteId, const juce::String& flag, std::vector<FlagCurvePoint> points)` | 业务／适配 | [ProjectModel.h:1230](../src/ProjectModel.h#L1230) |
-| `void setNotesRegionFlags(const std::vector<juce::String>& noteIds, bool split, const juce::String& first, const juce::String& second, const juce::String& third, const juce::String& fourth)` | 业务／适配 | [ProjectModel.h:1232](../src/ProjectModel.h#L1232) |
-| `void setNotesUtauJieSplitCleared(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1236](../src/ProjectModel.h#L1236) |
-| `void setNotesUtauJieSplit(const std::vector<juce::String>& noteIds, double first, double second, double third)` | 业务／适配 | [ProjectModel.h:1237](../src/ProjectModel.h#L1237) |
-| `void clearNotesUtauJieSplit(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1239](../src/ProjectModel.h#L1239) |
-| `void setTrackPitchAlgorithm(const juce::String& trackId, PitchAlgorithm algorithm)` | 业务／适配 | [ProjectModel.h:1240](../src/ProjectModel.h#L1240) |
-| `void setTrackStretchAlgorithm(const juce::String& trackId, StretchAlgorithm algorithm)` | 业务／适配 | [ProjectModel.h:1241](../src/ProjectModel.h#L1241) |
-| `void setPitchAlgorithm(PitchAlgorithm algorithm)` | 业务／适配 | [ProjectModel.h:1242](../src/ProjectModel.h#L1242) |
-| `void setStretchAlgorithm(StretchAlgorithm algorithm)` | 业务／适配 | [ProjectModel.h:1243](../src/ProjectModel.h#L1243) |
-| `void setTrackRenderOrder(const juce::String& trackId, RenderOrder order, std::optional<bool> mergeContiguous = {})` | 业务／适配 | [ProjectModel.h:1244](../src/ProjectModel.h#L1244) |
-| `void setRenderOrder(RenderOrder order)` | 业务／适配 | [ProjectModel.h:1246](../src/ProjectModel.h#L1246) |
-| `void moveClip(const juce::String& clipId, double startSeconds)` | 业务／适配 | [ProjectModel.h:1247](../src/ProjectModel.h#L1247) |
-| `bool canSplitClip(const juce::String& clipId, double absoluteSeconds) const` | 业务／适配 | [ProjectModel.h:1248](../src/ProjectModel.h#L1248) |
-| `juce::String splitClip(const juce::String& clipId, double absoluteSeconds)` | 业务／适配 | [ProjectModel.h:1251](../src/ProjectModel.h#L1251) |
-| `juce::String duplicateClip(const juce::String& clipId, double startSeconds = -1.0, const juce::String& targetTrackId = {})` | 业务／适配 | [ProjectModel.h:1252](../src/ProjectModel.h#L1252) |
-| `void resizeClip(const juce::String& clipId, double startSeconds, double durationSeconds)` | 业务／适配 | [ProjectModel.h:1255](../src/ProjectModel.h#L1255) |
-| `bool trimClip(const juce::String& clipId, double startSeconds, double durationSeconds)` | 业务／适配 | [ProjectModel.h:1257](../src/ProjectModel.h#L1257) |
-| `void setClipGain(const juce::String& clipId, float gain)` | 业务／适配 | [ProjectModel.h:1258](../src/ProjectModel.h#L1258) |
-| `void setClipFades(const juce::String& clipId, double fadeInSeconds, double fadeOutSeconds)` | 业务／适配 | [ProjectModel.h:1259](../src/ProjectModel.h#L1259) |
-| `void setClipMuted(const juce::String& clipId, bool muted)` | 业务／适配 | [ProjectModel.h:1261](../src/ProjectModel.h#L1261) |
-| `void setClipNoteHints(const juce::String& clipId, bool enabled)` | 业务／适配 | [ProjectModel.h:1262](../src/ProjectModel.h#L1262) |
-| `void setClipNormalDisplay(const juce::String& clipId, bool enabled)` | 业务／适配 | [ProjectModel.h:1263](../src/ProjectModel.h#L1263) |
-| `void removeClip(const juce::String& clipId)` | 业务／适配 | [ProjectModel.h:1264](../src/ProjectModel.h#L1264) |
-| `void removeClips(const std::vector<juce::String>& clipIds)` | 业务／适配 | [ProjectModel.h:1265](../src/ProjectModel.h#L1265) |
-| `bool canMergeClips(const std::vector<juce::String>& clipIds) const` | 业务／适配 | [ProjectModel.h:1266](../src/ProjectModel.h#L1266) |
-| `juce::String mergeClips(const std::vector<juce::String>& clipIds)` | 业务／适配 | [ProjectModel.h:1267](../src/ProjectModel.h#L1267) |
-| `void moveClips(const std::vector<juce::String>& clipIds, double deltaSeconds, int trackDelta = 0)` | 业务／适配 | [ProjectModel.h:1268](../src/ProjectModel.h#L1268) |
-| `void removeTrack(const juce::String& trackId)` | 业务／适配 | [ProjectModel.h:1269](../src/ProjectModel.h#L1269) |
-| `void transposeNote(const juce::String& noteId, float semitones)` | 业务／适配 | [ProjectModel.h:1270](../src/ProjectModel.h#L1270) |
-| `void transposeNotes(const std::vector<juce::String>& noteIds, float semitones)` | 业务／适配 | [ProjectModel.h:1271](../src/ProjectModel.h#L1271) |
-| `bool moveUtauNotes(const std::vector<juce::String>& noteIds, double deltaSeconds, float semitones, juce::String* error = nullptr)` | 业务／适配 | [ProjectModel.h:1275](../src/ProjectModel.h#L1275) |
-| `bool moveNativeNotes(const std::vector<juce::String>& noteIds, double deltaSeconds, float semitones, juce::String* error = nullptr)` | 业务／适配 | [ProjectModel.h:1279](../src/ProjectModel.h#L1279) |
-| `bool setNativeNoteTransition(const juce::String& noteId,std::optional<double> middleSourceSeconds,juce::String& error)` | 业务／适配 | [ProjectModel.h:1283](../src/ProjectModel.h#L1283) |
-| `bool trimNativeNoteEdge(const juce::String& noteId, double deltaSeconds, bool leftEdge)` | 业务／适配 | [ProjectModel.h:1284](../src/ProjectModel.h#L1284) |
-| `bool resizeNativeNoteEdge(const juce::String& noteId, double deltaSeconds, bool leftEdge)` | 业务／适配 | [ProjectModel.h:1285](../src/ProjectModel.h#L1285) |
-| `bool alignNotePreutteranceToGrid(const juce::String& noteId, double quarterStep, juce::String& error)` | 业务／适配 | [ProjectModel.h:1288](../src/ProjectModel.h#L1288) |
-| `void setNotesMidi(const std::vector<juce::String>& noteIds, float midiNote)` | 业务／适配 | [ProjectModel.h:1289](../src/ProjectModel.h#L1289) |
-| `void averageNotesMidi(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1290](../src/ProjectModel.h#L1290) |
-| `void quantizeNotesMidi(const std::vector<juce::String>& noteIds, float stepSemitones = 1.0f)` | 业务／适配 | [ProjectModel.h:1291](../src/ProjectModel.h#L1291) |
-| `std::vector<juce::String> notesOverlapping( const juce::String& clipId, double fromSeconds, double toSeconds) const` | 业务／适配 | [ProjectModel.h:1295](../src/ProjectModel.h#L1295) |
-| `std::vector<juce::String> insertNotes( const juce::String& clipId, const std::vector<NoteData>& noteTemplates, double absoluteStartSeconds)` | 业务／适配 | [ProjectModel.h:1297](../src/ProjectModel.h#L1297) |
-| `std::vector<juce::String> insertNativeAudioClips( const juce::String& trackId, const std::vector<ClipData>& templates, const std::vector<NativeConnection>& connections, double atSeconds)` | 业务／适配 | [ProjectModel.h:1300](../src/ProjectModel.h#L1300) |
-| `std::vector<juce::String> duplicateNotes( const std::vector<juce::String>& noteIds, const juce::String& targetClipId, double absoluteStartSeconds)` | 业务／适配 | [ProjectModel.h:1303](../src/ProjectModel.h#L1303) |
-| `void resizeNote(const juce::String& noteId, double newStart, double newDuration)` | 业务／适配 | [ProjectModel.h:1306](../src/ProjectModel.h#L1306) |
-| `juce::String splitNote(const juce::String& noteId, double localSeconds)` | 业务／适配 | [ProjectModel.h:1307](../src/ProjectModel.h#L1307) |
-| `juce::String mergeNotes(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1309](../src/ProjectModel.h#L1309) |
-| `bool canJoinNativeNotes(const juce::String&,const juce::String&) const` | 业务／适配 | [ProjectModel.h:1310](../src/ProjectModel.h#L1310) |
-| `juce::String joinNativeNotes(const juce::String&,const juce::String&)` | 业务／适配 | [ProjectModel.h:1311](../src/ProjectModel.h#L1311) |
-| `void setNotesConnection(const std::vector<juce::String>& noteIds, bool enabled)` | 业务／适配 | [ProjectModel.h:1314](../src/ProjectModel.h#L1314) |
-| `bool setNotesPortamento(const std::vector<juce::String>& noteIds, bool enabled, juce::String& error, double durationSeconds = 0.1)` | 业务／适配 | [ProjectModel.h:1317](../src/ProjectModel.h#L1317) |
-| `bool forceNativeConnection(const std::vector<juce::String>& noteIds, bool enabled, juce::String& error, double durationSeconds = 0.1)` | 业务／适配 | [ProjectModel.h:1322](../src/ProjectModel.h#L1322) |
-| `bool setConnectionPitchCurve(const juce::String& connectionId, std::vector<PitchCurveEditPoint> absolutePoints, juce::String& error)` | 业务／适配 | [ProjectModel.h:1328](../src/ProjectModel.h#L1328) |
-| `bool setConnectionPitchPoint(const juce::String& connectionId, int pointIndex, PitchCurveEditPoint absolutePoint, juce::String& error)` | 业务／适配 | [ProjectModel.h:1330](../src/ProjectModel.h#L1330) |
-| `juce::String createNativeVirtualConnection(const std::vector<juce::String>& orderedNoteIds, bool automaticPitch,juce::String& error,double durationSeconds=.1,bool automaticallyCreated=false, const NativeSplitTransitionEvidence* splitTransition=nullptr,bool sharedPitch=false)` | 业务／适配 | [ProjectModel.h:1334](../src/ProjectModel.h#L1334) |
-| `bool setNativeVirtualConnectionForNotes(const std::vector<juce::String>& noteIds,bool enabled, bool automaticPitch,juce::String& error,double durationSeconds=.1,bool automaticallyCreated=false, const NativeSplitTransitionEvidence* splitTransition=nullptr,bool sharedPitch=false)` | 业务／适配 | [ProjectModel.h:1339](../src/ProjectModel.h#L1339) |
-| `bool setNativeVirtualConnectionEnabled(const juce::String& groupId,bool enabled,juce::String& error)` | 业务／适配 | [ProjectModel.h:1342](../src/ProjectModel.h#L1342) |
-| `bool setNativeVirtualMovementCoupled(const juce::String& groupId,bool coupled,juce::String& error)` | 业务／适配 | [ProjectModel.h:1343](../src/ProjectModel.h#L1343) |
-| `bool removeNativeVirtualConnection(const juce::String& groupId,juce::String& error)` | 业务／适配 | [ProjectModel.h:1344](../src/ProjectModel.h#L1344) |
-| `bool setNativeVirtualPitchCurve(const juce::String& groupId, const std::vector<PitchCurveEditPoint>& absolutePoints,juce::String& error)` | 业务／适配 | [ProjectModel.h:1345](../src/ProjectModel.h#L1345) |
-| `bool resetNativeVirtualPitchCurve(const juce::String& groupId,juce::String& error)` | 业务／适配 | [ProjectModel.h:1347](../src/ProjectModel.h#L1347) |
-| `bool setNativeVirtualHandoverWindow(const juce::String& groupId,const juce::String& leftNoteId, const juce::String& rightNoteId,double absoluteFrom,double absoluteTo,juce::String& error)` | 业务／适配 | [ProjectModel.h:1348](../src/ProjectModel.h#L1348) |
-| `bool resetNativeVirtualHandoverWindow(const juce::String& groupId,const juce::String& leftNoteId, const juce::String& rightNoteId,juce::String& error)` | 业务／适配 | [ProjectModel.h:1350](../src/ProjectModel.h#L1350) |
-| `juce::String mergeMelodyneConsonant(const NativeConsonantMergeEvidence&,juce::String& error)` | 业务／适配 | [ProjectModel.h:1352](../src/ProjectModel.h#L1352) |
-| `bool restoreMelodyneConsonant(const juce::String& mergedNoteId,bool discardMergedEdits,juce::String& error)` | 业务／适配 | [ProjectModel.h:1353](../src/ProjectModel.h#L1353) |
-| `bool disconnectNativeAudio(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1354](../src/ProjectModel.h#L1354) |
-| `bool linkNativeAudio(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1355](../src/ProjectModel.h#L1355) |
-| `bool setNativeAudioOverlap(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1356](../src/ProjectModel.h#L1356) |
-| `juce::String insertPrefixNote(const juce::String& noteId, double targetOverlapSeconds)` | 业务／适配 | [ProjectModel.h:1361](../src/ProjectModel.h#L1361) |
-| `void setNoteModulation(const juce::String& noteId, float modulation)` | 业务／适配 | [ProjectModel.h:1363](../src/ProjectModel.h#L1363) |
-| `void setNoteDrift(const juce::String& noteId, float drift)` | 业务／适配 | [ProjectModel.h:1364](../src/ProjectModel.h#L1364) |
-| `void setNoteTension(const juce::String& noteId, float tension)` | 业务／适配 | [ProjectModel.h:1365](../src/ProjectModel.h#L1365) |
-| `void setNoteBreath(const juce::String& noteId, float breath)` | 业务／适配 | [ProjectModel.h:1366](../src/ProjectModel.h#L1366) |
-| `void setNoteFormant(const juce::String& noteId, float semitones)` | 业务／适配 | [ProjectModel.h:1367](../src/ProjectModel.h#L1367) |
-| `void setNoteGain(const juce::String& noteId, float gain)` | 业务／适配 | [ProjectModel.h:1368](../src/ProjectModel.h#L1368) |
-| `bool setNotesTailFade(const std::vector<juce::String>& noteIds, int mode)` | 业务／适配 | [ProjectModel.h:1369](../src/ProjectModel.h#L1369) |
-| `bool setNotesNativeEnvelope(const std::vector<juce::String>& noteIds, const backend::NativeEnvelopeSettings& settings)` | 业务／适配 | [ProjectModel.h:1370](../src/ProjectModel.h#L1370) |
-| `bool setNotesTailFade(const std::vector<juce::String>& noteIds, int mode, const backend::TailFadeSettings& settings)` | 业务／适配 | [ProjectModel.h:1371](../src/ProjectModel.h#L1371) |
-| `void setNotesAmplitudeEnvelopeBase(const std::vector<juce::String>& noteIds, float basePercent)` | 业务／适配 | [ProjectModel.h:1373](../src/ProjectModel.h#L1373) |
-| `void setNoteAttack(const juce::String& noteId, double consonantSeconds, float attackSpeed)` | 业务／适配 | [ProjectModel.h:1375](../src/ProjectModel.h#L1375) |
-| `void setNoteAttackSpeed(const juce::String& noteId, float attackSpeed)` | 业务／适配 | [ProjectModel.h:1376](../src/ProjectModel.h#L1376) |
-| `void setNoteLabel(const juce::String& noteId, const juce::String& label)` | 业务／适配 | [ProjectModel.h:1377](../src/ProjectModel.h#L1377) |
-| `int convertTrackLyricsToPinyin(const juce::String& trackId)` | 业务／适配 | [ProjectModel.h:1381](../src/ProjectModel.h#L1381) |
-| `void setNoteLabels(const std::vector<std::pair<juce::String, juce::String>>& labels)` | 业务／适配 | [ProjectModel.h:1385](../src/ProjectModel.h#L1385) |
-| `void setNoteUtauFlags(const juce::String& noteId, const juce::String& flags)` | 业务／适配 | [ProjectModel.h:1389](../src/ProjectModel.h#L1389) |
-| `void setNotesUtauFlags(const std::vector<juce::String>& noteIds, const juce::String& flags)` | 业务／适配 | [ProjectModel.h:1390](../src/ProjectModel.h#L1390) |
-| `void setNotesUtauConsonantVelocity(const std::vector<juce::String>& noteIds, int velocity)` | 业务／适配 | [ProjectModel.h:1392](../src/ProjectModel.h#L1392) |
-| `void setNoteUtauOto(const juce::String& noteId, const backend::UtauOtoOverride& oto)` | 业务／适配 | [ProjectModel.h:1419](../src/ProjectModel.h#L1419) |
-| `bool setNoteUtauOtoChecked(const juce::String& noteId, std::uint64_t expectedRevision, const backend::UtauOtoOverride& value, std::uint64_t& resultingRevision, juce::String& error)` | 业务／适配 | [ProjectModel.h:1422](../src/ProjectModel.h#L1422) |
-| `void clearNotesUtauOto(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1427](../src/ProjectModel.h#L1427) |
-| `void setNotesUtauStp(const std::vector<juce::String>& noteIds, double seconds)` | 业务／适配 | [ProjectModel.h:1429](../src/ProjectModel.h#L1429) |
-| `void setNoteUtauTimingOverrides(const juce::String& noteId, bool enabled, double preutteranceSeconds, double overlapSeconds)` | 业务／适配 | [ProjectModel.h:1430](../src/ProjectModel.h#L1430) |
-| `void setNoteRobustPitchCurve(const juce::String& noteId, bool enabled)` | 业务／适配 | [ProjectModel.h:1433](../src/ProjectModel.h#L1433) |
-| `bool rememberDiffSingerParameters(const std::map<juce::String, std::vector<FlagCurve>>& curves)` | 业务／适配 | [ProjectModel.h:1434](../src/ProjectModel.h#L1434) |
-| `bool applyDiffSingerParameters(std::uint64_t expectedRevision, const std::map<juce::String, std::vector<FlagCurve>>& curves)` | 业务／适配 | [ProjectModel.h:1435](../src/ProjectModel.h#L1435) |
-| `bool setDiffSingerParameterCurve(const juce::String& id, const juce::String& key, std::vector<FlagCurvePoint> points)` | 业务／适配 | [ProjectModel.h:1437](../src/ProjectModel.h#L1437) |
-| `bool setDiffSingerPitchOffset(const juce::String& noteId, std::vector<PitchCurveEditPoint> points)` | 业务／适配 | [ProjectModel.h:1439](../src/ProjectModel.h#L1439) |
-| `bool setNotePitchCurve(const juce::String& noteId, std::vector<PitchCurveEditPoint> points, bool storeControlPoints = false, bool authorPitchSupport = false)` | 业务／适配 | [ProjectModel.h:1441](../src/ProjectModel.h#L1441) |
-| `bool applyDiffSingerTiming(std::uint64_t expectedRevision, const std::vector<std::pair<juce::String, juce::String>>& timings)` | 业务／适配 | [ProjectModel.h:1444](../src/ProjectModel.h#L1444) |
-| `bool applyDiffSingerPronunciation(std::uint64_t expectedRevision, const juce::String& trackId, const std::vector<std::pair<juce::String, juce::String>>& readings, const juce::String& dictionary)` | 业务／适配 | [ProjectModel.h:1446](../src/ProjectModel.h#L1446) |
-| `bool restoreDiffSingerPitchPoint(std::uint64_t expectedRevision, const juce::String& noteId, const std::vector<PitchCurveEditPoint>& displayedPoints, int index)` | 业务／适配 | [ProjectModel.h:1448](../src/ProjectModel.h#L1448) |
-| `bool applyDiffSingerPitch(std::uint64_t expectedRevision, const std::vector<std::pair<juce::String, std::vector<PitchCurveEditPoint>>>& curves, bool preserveOutsideNoteHandles = false)` | 业务／适配 | [ProjectModel.h:1450](../src/ProjectModel.h#L1450) |
-| `void setDiffSingerOptions(const juce::String& trackId, const juce::String& language, const juce::String& speaker)` | 业务／适配 | [ProjectModel.h:1453](../src/ProjectModel.h#L1453) |
-| `bool setNoteAmplitudeEnvelope(const juce::String& noteId, std::vector<AmplitudeEnvelopePoint> points)` | 业务／适配 | [ProjectModel.h:1455](../src/ProjectModel.h#L1455) |
-| `int crossfadeNotes(std::vector<CrossfadeSpan> spans, std::uint64_t expectedRevision, bool curved = false)` | 业务／适配 | [ProjectModel.h:1467](../src/ProjectModel.h#L1467) |
-| `bool rememberCvvcPhonemes(const std::vector<std::pair<juce::String,juce::String>>& caches, std::uint64_t expectedRevision)` | 业务／适配 | [ProjectModel.h:1468](../src/ProjectModel.h#L1468) |
-| `bool setNotesAmplitudeEnvelopes( std::vector<std::pair<juce::String, std::vector<AmplitudeEnvelopePoint>>> envelopes)` | 业务／适配 | [ProjectModel.h:1470](../src/ProjectModel.h#L1470) |
-| `static PlannedNote plannedNoteFor(double startSeconds, double requestedSeconds, double clipSeconds, const std::vector<NoteSpan>& occupied)` | 业务／适配 | [ProjectModel.h:1496](../src/ProjectModel.h#L1496) |
-| `juce::String addClip(const juce::String& trackId, double startSeconds, double durationSeconds)` | 业务／适配 | [ProjectModel.h:1504](../src/ProjectModel.h#L1504) |
-| `bool canAddEmptyTuningClip(const juce::String& trackId, double startSeconds) const` | 业务／适配 | [ProjectModel.h:1506](../src/ProjectModel.h#L1506) |
-| `juce::String addEmptyTuningClip(const juce::String& trackId, double startSeconds, double durationSeconds = 10.0)` | 业务／适配 | [ProjectModel.h:1508](../src/ProjectModel.h#L1508) |
-| `static std::vector<std::size_t> regionsToImport( const std::vector<RegionSpan>& regions)` | 业务／适配 | [ProjectModel.h:1525](../src/ProjectModel.h#L1525) |
-| `void flattenNotePitch(const std::vector<juce::String>& noteIds, bool snapNativeToSemitone = false)` | 业务／适配 | [ProjectModel.h:1541](../src/ProjectModel.h#L1541) |
-| `bool restoreNativeSourcePitch(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1542](../src/ProjectModel.h#L1542) |
-| `static double firstFreeStartFrom(double startSeconds, const std::vector<NoteSpan>& occupied)` | 业务／适配 | [ProjectModel.h:1543](../src/ProjectModel.h#L1543) |
-| `juce::String addNote(const juce::String& preferredClipId, double absoluteStart, double duration, float midiNote)` | 业务／适配 | [ProjectModel.h:1546](../src/ProjectModel.h#L1546) |
-| `juce::String addNoteFrom(const juce::String& preferredClipId, double absoluteFromSeconds, double maximumDuration, float midiNote)` | 业务／适配 | [ProjectModel.h:1554](../src/ProjectModel.h#L1554) |
-| `void removeNote(const juce::String& noteId)` | 业务／适配 | [ProjectModel.h:1557](../src/ProjectModel.h#L1557) |
-| `void removeNotes(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1558](../src/ProjectModel.h#L1558) |
-| `void removeNotesRippling(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1562](../src/ProjectModel.h#L1562) |
-| `void insertGapBeforeNote(const juce::String& noteId, double seconds)` | 业务／适配 | [ProjectModel.h:1566](../src/ProjectModel.h#L1566) |
-| `void closeGapBeforeNote(const juce::String& noteId, double seconds)` | 业务／适配 | [ProjectModel.h:1569](../src/ProjectModel.h#L1569) |
-| `void toggleNoteConnection(const juce::String& noteId)` | 业务／适配 | [ProjectModel.h:1570](../src/ProjectModel.h#L1570) |
-| `MaterialUpdateReport applySourceSettingsWithReport( const juce::File& source, const std::vector<SampleRegionSetting>& rows, bool apply = true, const juce::String& audioVariantScope = {})` | 业务／适配 | [ProjectModel.h:1591](../src/ProjectModel.h#L1591) |
-| `void applySourceSettings(const juce::File& source, const std::vector<SampleRegionSetting>& rows)` | 业务／适配 | [ProjectModel.h:1594](../src/ProjectModel.h#L1594) |
-| `void setNoteMaterialLocalOverride(const juce::String& noteId, bool enabled)` | 业务／适配 | [ProjectModel.h:1596](../src/ProjectModel.h#L1596) |
-| `bool getNoteMaterialLocalBinding(const juce::String& noteId, NoteMaterialLocalBinding&, SampleRegionSetting& row, juce::String& error) const` | 业务／适配 | [ProjectModel.h:1608](../src/ProjectModel.h#L1608) |
-| `bool applyNoteMaterialLocalRow(const NoteMaterialLocalBinding&, const SampleRegionSetting&, std::uint64_t& resultingRevision, juce::String& error)` | 业务／适配 | [ProjectModel.h:1610](../src/ProjectModel.h#L1610) |
-| `bool restoreNoteMaterialLocalRow(const NoteMaterialLocalBinding&, SampleRegionSetting& restored, std::uint64_t& resultingRevision, juce::String& error)` | 业务／适配 | [ProjectModel.h:1612](../src/ProjectModel.h#L1612) |
-| `static bool makeClassicNoteMaterialOto(const SampleRegionSetting&, backend::UtauOtoOverride&, juce::String& error)` | 业务／适配 | [ProjectModel.h:1615](../src/ProjectModel.h#L1615) |
-| `MaterialSourceReplacementReport replaceNotesMaterialSources( const std::vector<MaterialSourceChoice>& choices, std::uint64_t expectedRevision, juce::String& error, bool apply = true)` | 业务／适配 | [ProjectModel.h:1638](../src/ProjectModel.h#L1638) |
-| `MaterialSourceReplacementReport replaceNoteMaterialSource( const juce::String& noteId, const juce::File& audio, const std::vector<SampleRegionSetting>& completeRows, const juce::String& audioId, const juce::String& regionId, const juce::String& chosenAlias, juce::String& error, bool apply = true)` | 业务／适配 | [ProjectModel.h:1646](../src/ProjectModel.h#L1646) |
-| `std::vector<MaterialSourceBindingTicket> pendingMaterialSourceAnalyses() const` | 业务／适配 | [ProjectModel.h:1651](../src/ProjectModel.h#L1651) |
-| `bool completeMaterialSourceAnalysis(const MaterialSourceBindingTicket& ticket, const std::vector<NoteData>& fullFileSourceNotes, juce::String& error)` | 业务／适配 | [ProjectModel.h:1656](../src/ProjectModel.h#L1656) |
-| `bool save(const juce::File& file, juce::String& error) const` | 业务／适配 | [ProjectModel.h:1659](../src/ProjectModel.h#L1659) |
-| `bool load(const juce::File& file, juce::String& error)` | 业务／适配 | [ProjectModel.h:1660](../src/ProjectModel.h#L1660) |
-| `static bool saveRecoverySnapshot(ProjectData data, const juce::File& recoveryFile, const juce::File& originalFile, juce::String& error)` | 业务／适配 | [ProjectModel.h:1661](../src/ProjectModel.h#L1661) |
+| `ProjectModel()` | 生命周期 | [ProjectModel.h:1039](../src/ProjectModel.h#L1039) |
+| `ProjectData snapshot() const` | 业务／适配 | [ProjectModel.h:1041](../src/ProjectModel.h#L1041) |
+| `std::uint64_t revisionNumber() const` | 业务／适配 | [ProjectModel.h:1042](../src/ProjectModel.h#L1042) |
+| `void replace(ProjectData replacement)` | 业务／适配 | [ProjectModel.h:1043](../src/ProjectModel.h#L1043) |
+| `void resetDocument(ProjectData replacement = {})` | 业务／适配 | [ProjectModel.h:1045](../src/ProjectModel.h#L1045) |
+| `void clear()` | 业务／适配 | [ProjectModel.h:1046](../src/ProjectModel.h#L1046) |
+| `void setAssetManagerVisible(bool visible)` | 业务／适配 | [ProjectModel.h:1048](../src/ProjectModel.h#L1048) |
+| `bool setHamoodState(const juce::String& state, juce::String& error)` | 业务／适配 | [ProjectModel.h:1049](../src/ProjectModel.h#L1049) |
+| `bool undo()` | 业务／适配 | [ProjectModel.h:1050](../src/ProjectModel.h#L1050) |
+| `bool redo()` | 业务／适配 | [ProjectModel.h:1051](../src/ProjectModel.h#L1051) |
+| `bool canUndo() const` | 业务／适配 | [ProjectModel.h:1052](../src/ProjectModel.h#L1052) |
+| `bool canRedo() const` | 业务／适配 | [ProjectModel.h:1053](../src/ProjectModel.h#L1053) |
+| `juce::String addAudioFile(const juce::File& file, double durationSeconds, double startSeconds = 0.0, const juce::String& targetTrackId = {}, const VoicebankOtoEntry* oto = nullptr, UtauMode otoMode = UtauMode::classic)` | 业务／适配 | [ProjectModel.h:1055](../src/ProjectModel.h#L1055) |
+| `juce::String addMaterialPronunciations( const juce::File& audio, const std::vector<SampleRegionSetting>& completeRows, const std::vector<juce::String>& selectedRegionIds, double absoluteStart, const juce::String& targetTrackId, juce::String& error, const juce::String& chosenAlias = {})` | 业务／适配 | [ProjectModel.h:1067](../src/ProjectModel.h#L1067) |
+| `juce::String addTypedTrack(TrackType type = TrackType::hachi, const juce::String& name = {})` | 业务／适配 | [ProjectModel.h:1072](../src/ProjectModel.h#L1072) |
+| `juce::String addTrack(const juce::String& name, bool compose = true, bool referenceOnly = false, bool accompaniment = false, TrackType type = TrackType::hachi)` | 业务／适配 | [ProjectModel.h:1074](../src/ProjectModel.h#L1074) |
+| `void setTrackReferenceOnly(const juce::String& trackId, bool referenceOnly)` | 业务／适配 | [ProjectModel.h:1077](../src/ProjectModel.h#L1077) |
+| `void setTrackName(const juce::String& trackId, const juce::String& name)` | 业务／适配 | [ProjectModel.h:1078](../src/ProjectModel.h#L1078) |
+| `bool setClipNotesIfEmpty(const juce::String& clipId, std::vector<NoteData> notes)` | 业务／适配 | [ProjectModel.h:1079](../src/ProjectModel.h#L1079) |
+| `std::size_t markNativeUnpitchedRegions(const juce::String& clipId)` | 业务／适配 | [ProjectModel.h:1080](../src/ProjectModel.h#L1080) |
+| `bool setNativeTrimSourceAnalysis(const juce::File& file, const std::vector<NoteData>& sourceNotes, const juce::String& expectedSourceFingerprint = {})` | 业务／适配 | [ProjectModel.h:1081](../src/ProjectModel.h#L1081) |
+| `bool setClipAudioAnalysis(const juce::String& clipId, std::vector<NoteData> notes, const ClipData& importedClip = ClipData{})` | 业务／适配 | [ProjectModel.h:1083](../src/ProjectModel.h#L1083) |
+| `bool addMidiFile(const juce::File& file, juce::String& error)` | 业务／适配 | [ProjectModel.h:1085](../src/ProjectModel.h#L1085) |
+| `static std::vector<MidiTrackChoice> midiTrackChoices(const juce::File& file, juce::String& error)` | 业务／适配 | [ProjectModel.h:1095](../src/ProjectModel.h#L1095) |
+| `juce::String addMidiTrack(const juce::File& file, int trackIndex, juce::String& error)` | 业务／适配 | [ProjectModel.h:1102](../src/ProjectModel.h#L1102) |
+| `static bool writeMidiFile(const ProjectData& data, const juce::File& file, juce::String& error, const juce::String& trackId = {}, bool includeMuted = false)` | 业务／适配 | [ProjectModel.h:1110](../src/ProjectModel.h#L1110) |
+| `bool addUstFile(const juce::File& file, juce::String& error, juce::StringArray& warnings, UstImportMode mode = UstImportMode::addTrack, juce::String* importedTrackId = nullptr, int encoding = 0, TrackType destinationType = TrackType::hachi)` | 业务／适配 | [ProjectModel.h:1128](../src/ProjectModel.h#L1128) |
+| `bool exportUst(const juce::File& file, const juce::String& trackId, juce::String& error, juce::StringArray& warnings, int encoding = 0) const` | 业务／适配 | [ProjectModel.h:1133](../src/ProjectModel.h#L1133) |
+| `void setTempo(double bpm, int numerator, int denominator = 4)` | 业务／适配 | [ProjectModel.h:1135](../src/ProjectModel.h#L1135) |
+| `void setTempoChange(double quarterPosition, double bpm, bool synchronizeNotes = true)` | 业务／适配 | [ProjectModel.h:1138](../src/ProjectModel.h#L1138) |
+| `juce::int64 contentFingerprint() const` | 业务／适配 | [ProjectModel.h:1142](../src/ProjectModel.h#L1142) |
+| `static juce::String registrationMusicSourceFingerprint(const ProjectData&)` | 业务／适配 | [ProjectModel.h:1144](../src/ProjectModel.h#L1144) |
+| `bool adoptRegisteredMaterialBindings(std::uint64_t expectedRevision, const juce::String& expectedFingerprint, const std::vector<ProjectMaterialRegistrationOwnerBinding>& owners, const std::vector<ProjectMaterialRegistrationNoteBinding>& notes, juce::String& error)` | 业务／适配 | [ProjectModel.h:1145](../src/ProjectModel.h#L1145) |
+| `void setGridDivision(const juce::String& division)` | 业务／适配 | [ProjectModel.h:1150](../src/ProjectModel.h#L1150) |
+| `void setNoteEditDivision(int division)` | 业务／适配 | [ProjectModel.h:1151](../src/ProjectModel.h#L1151) |
+| `void setBaseScale(const juce::String& scale)` | 业务／适配 | [ProjectModel.h:1152](../src/ProjectModel.h#L1152) |
+| `void setTrackCompose(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1153](../src/ProjectModel.h#L1153) |
+| `void setTrackMuted(const juce::String& trackId, bool muted)` | 业务／适配 | [ProjectModel.h:1154](../src/ProjectModel.h#L1154) |
+| `void setTrackSolo(const juce::String& trackId, bool solo)` | 业务／适配 | [ProjectModel.h:1155](../src/ProjectModel.h#L1155) |
+| `void setTrackVolume(const juce::String& trackId, float volume)` | 业务／适配 | [ProjectModel.h:1156](../src/ProjectModel.h#L1156) |
+| `void setClipGainEnvelope(const juce::String& clipId, std::vector<GainEnvelopePoint> points)` | 业务／适配 | [ProjectModel.h:1157](../src/ProjectModel.h#L1157) |
+| `void setTrackPan(const juce::String& trackId, float pan)` | 业务／适配 | [ProjectModel.h:1158](../src/ProjectModel.h#L1158) |
+| `void setTrackSmoothOverlaps(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1159](../src/ProjectModel.h#L1159) |
+| `void setTrackNormalizeVolume(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1160](../src/ProjectModel.h#L1160) |
+| `void setTrackNsfSmoothPitchTransitions(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1161](../src/ProjectModel.h#L1161) |
+| `void setTrackNsfNoiseProtection(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1162](../src/ProjectModel.h#L1162) |
+| `void setTrackVoicebankDirectory(const juce::String& trackId, const juce::File& directory)` | 业务／适配 | [ProjectModel.h:1163](../src/ProjectModel.h#L1163) |
+| `void setTrackUtauConsonantVelocity(const juce::String& trackId, int velocity)` | 业务／适配 | [ProjectModel.h:1165](../src/ProjectModel.h#L1165) |
+| `void setTrackUtauGlobalFlags(const juce::String& trackId, const juce::String& flags)` | 业务／适配 | [ProjectModel.h:1166](../src/ProjectModel.h#L1166) |
+| `void setUtauMode(UtauMode mode)` | 业务／适配 | [ProjectModel.h:1167](../src/ProjectModel.h#L1167) |
+| `void setTrackUtauMode(const juce::String& trackId, UtauMode mode)` | 业务／适配 | [ProjectModel.h:1168](../src/ProjectModel.h#L1168) |
+| `void setTrackChineseCvvc(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1169](../src/ProjectModel.h#L1169) |
+| `void setTrackCvvcCurveCrossfade(const juce::String& trackId, bool curved)` | 业务／适配 | [ProjectModel.h:1170](../src/ProjectModel.h#L1170) |
+| `void setTrackOutputEngine(const juce::String& trackId, UtauOutputEngine engine, const juce::File& resampler = {}, const juce::File& wavtool = {})` | 业务／适配 | [ProjectModel.h:1171](../src/ProjectModel.h#L1171) |
+| `void setNotesVibrato(const std::vector<juce::String>& noteIds, const NoteData& parameters, bool enabled, std::optional<bool> realLine = std::nullopt)` | 业务／适配 | [ProjectModel.h:1173](../src/ProjectModel.h#L1173) |
+| `void setNotesVibratoRealLine(const std::vector<juce::String>& noteIds, bool enabled)` | 业务／适配 | [ProjectModel.h:1176](../src/ProjectModel.h#L1176) |
+| `bool bakeNoteVibratoIntoPitch(const juce::String& noteId)` | 业务／适配 | [ProjectModel.h:1180](../src/ProjectModel.h#L1180) |
+| `void setNotesUtauSplice(const std::vector<juce::String>& noteIds, bool enabled)` | 业务／适配 | [ProjectModel.h:1181](../src/ProjectModel.h#L1181) |
+| `bool setPointCurves(std::vector<PointCurveEdit> edits, std::uint64_t expectedRevision, juce::String* error = nullptr)` | 业务／适配 | [ProjectModel.h:1209](../src/ProjectModel.h#L1209) |
+| `bool previewPointCurves(const std::vector<PointCurveEdit>& edits, std::uint64_t expectedRevision, PointCurvePlanPreview&, juce::String& error) const` | 业务／适配 | [ProjectModel.h:1211](../src/ProjectModel.h#L1211) |
+| `bool resetCvvcBoundaries(const std::vector<juce::String>& noteIds, std::uint64_t expectedRevision)` | 业务／适配 | [ProjectModel.h:1214](../src/ProjectModel.h#L1214) |
+| `bool setCvvcBoundary(const juce::String& noteId, int rightPart, double position, std::uint64_t expectedRevision)` | 业务／适配 | [ProjectModel.h:1215](../src/ProjectModel.h#L1215) |
+| `bool setCvvcEnvelopes(std::vector<CvvcEnvelopeEdit>, std::uint64_t expectedRevision)` | 业务／适配 | [ProjectModel.h:1216](../src/ProjectModel.h#L1216) |
+| `bool setCvvcEnvelope(const juce::String& noteId, int part, const juce::String& flag, backend::CvvcEnvelopeCurve points, std::uint64_t expectedRevision)` | 业务／适配 | [ProjectModel.h:1217](../src/ProjectModel.h#L1217) |
+| `void setNotesUtauFlagCurveEnabled(const std::vector<juce::String>& noteIds, bool enabled)` | 业务／适配 | [ProjectModel.h:1219](../src/ProjectModel.h#L1219) |
+| `bool resetNotesUtauFlagCurves(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1226](../src/ProjectModel.h#L1226) |
+| `bool resetNotesUtauFlagCurve(const std::vector<juce::String>& noteIds, const juce::String& flag)` | 业务／适配 | [ProjectModel.h:1228](../src/ProjectModel.h#L1228) |
+| `bool setNoteUtauFlagCurves(const juce::String& flag, const std::map<juce::String, std::vector<FlagCurvePoint>>& edits, std::optional<std::uint64_t> expectedRevision = std::nullopt, bool enabledOnly = true)` | 业务／适配 | [ProjectModel.h:1232](../src/ProjectModel.h#L1232) |
+| `bool setNoteUtauFlagCurve(const juce::String& noteId, const juce::String& flag, std::vector<FlagCurvePoint> points)` | 业务／适配 | [ProjectModel.h:1235](../src/ProjectModel.h#L1235) |
+| `void setNotesRegionFlags(const std::vector<juce::String>& noteIds, bool split, const juce::String& first, const juce::String& second, const juce::String& third, const juce::String& fourth)` | 业务／适配 | [ProjectModel.h:1237](../src/ProjectModel.h#L1237) |
+| `void setNotesUtauJieSplitCleared(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1241](../src/ProjectModel.h#L1241) |
+| `void setNotesUtauJieSplit(const std::vector<juce::String>& noteIds, double first, double second, double third)` | 业务／适配 | [ProjectModel.h:1242](../src/ProjectModel.h#L1242) |
+| `void clearNotesUtauJieSplit(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1244](../src/ProjectModel.h#L1244) |
+| `void setTrackPitchAlgorithm(const juce::String& trackId, PitchAlgorithm algorithm)` | 业务／适配 | [ProjectModel.h:1245](../src/ProjectModel.h#L1245) |
+| `void setTrackStretchAlgorithm(const juce::String& trackId, StretchAlgorithm algorithm)` | 业务／适配 | [ProjectModel.h:1246](../src/ProjectModel.h#L1246) |
+| `void setPitchAlgorithm(PitchAlgorithm algorithm)` | 业务／适配 | [ProjectModel.h:1247](../src/ProjectModel.h#L1247) |
+| `void setStretchAlgorithm(StretchAlgorithm algorithm)` | 业务／适配 | [ProjectModel.h:1248](../src/ProjectModel.h#L1248) |
+| `void setTrackRenderOrder(const juce::String& trackId, RenderOrder order, std::optional<bool> mergeContiguous = {})` | 业务／适配 | [ProjectModel.h:1249](../src/ProjectModel.h#L1249) |
+| `void setRenderOrder(RenderOrder order)` | 业务／适配 | [ProjectModel.h:1251](../src/ProjectModel.h#L1251) |
+| `void moveClip(const juce::String& clipId, double startSeconds)` | 业务／适配 | [ProjectModel.h:1252](../src/ProjectModel.h#L1252) |
+| `bool canSplitClip(const juce::String& clipId, double absoluteSeconds) const` | 业务／适配 | [ProjectModel.h:1253](../src/ProjectModel.h#L1253) |
+| `juce::String splitClip(const juce::String& clipId, double absoluteSeconds)` | 业务／适配 | [ProjectModel.h:1256](../src/ProjectModel.h#L1256) |
+| `juce::String duplicateClip(const juce::String& clipId, double startSeconds = -1.0, const juce::String& targetTrackId = {})` | 业务／适配 | [ProjectModel.h:1257](../src/ProjectModel.h#L1257) |
+| `void resizeClip(const juce::String& clipId, double startSeconds, double durationSeconds)` | 业务／适配 | [ProjectModel.h:1260](../src/ProjectModel.h#L1260) |
+| `bool trimClip(const juce::String& clipId, double startSeconds, double durationSeconds)` | 业务／适配 | [ProjectModel.h:1262](../src/ProjectModel.h#L1262) |
+| `void setClipGain(const juce::String& clipId, float gain)` | 业务／适配 | [ProjectModel.h:1263](../src/ProjectModel.h#L1263) |
+| `void setClipFades(const juce::String& clipId, double fadeInSeconds, double fadeOutSeconds)` | 业务／适配 | [ProjectModel.h:1264](../src/ProjectModel.h#L1264) |
+| `void setClipMuted(const juce::String& clipId, bool muted)` | 业务／适配 | [ProjectModel.h:1266](../src/ProjectModel.h#L1266) |
+| `void setClipNoteHints(const juce::String& clipId, bool enabled)` | 业务／适配 | [ProjectModel.h:1267](../src/ProjectModel.h#L1267) |
+| `void setClipNormalDisplay(const juce::String& clipId, bool enabled)` | 业务／适配 | [ProjectModel.h:1268](../src/ProjectModel.h#L1268) |
+| `void removeClip(const juce::String& clipId)` | 业务／适配 | [ProjectModel.h:1269](../src/ProjectModel.h#L1269) |
+| `void removeClips(const std::vector<juce::String>& clipIds)` | 业务／适配 | [ProjectModel.h:1270](../src/ProjectModel.h#L1270) |
+| `bool canMergeClips(const std::vector<juce::String>& clipIds) const` | 业务／适配 | [ProjectModel.h:1271](../src/ProjectModel.h#L1271) |
+| `juce::String mergeClips(const std::vector<juce::String>& clipIds)` | 业务／适配 | [ProjectModel.h:1272](../src/ProjectModel.h#L1272) |
+| `void moveClips(const std::vector<juce::String>& clipIds, double deltaSeconds, int trackDelta = 0)` | 业务／适配 | [ProjectModel.h:1273](../src/ProjectModel.h#L1273) |
+| `void removeTrack(const juce::String& trackId)` | 业务／适配 | [ProjectModel.h:1274](../src/ProjectModel.h#L1274) |
+| `void transposeNote(const juce::String& noteId, float semitones)` | 业务／适配 | [ProjectModel.h:1275](../src/ProjectModel.h#L1275) |
+| `void transposeNotes(const std::vector<juce::String>& noteIds, float semitones)` | 业务／适配 | [ProjectModel.h:1276](../src/ProjectModel.h#L1276) |
+| `bool moveUtauNotes(const std::vector<juce::String>& noteIds, double deltaSeconds, float semitones, juce::String* error = nullptr)` | 业务／适配 | [ProjectModel.h:1280](../src/ProjectModel.h#L1280) |
+| `bool moveNativeNotes(const std::vector<juce::String>& noteIds, double deltaSeconds, float semitones, juce::String* error = nullptr)` | 业务／适配 | [ProjectModel.h:1284](../src/ProjectModel.h#L1284) |
+| `bool setNativeNoteTransition(const juce::String& noteId,std::optional<double> middleSourceSeconds,juce::String& error)` | 业务／适配 | [ProjectModel.h:1288](../src/ProjectModel.h#L1288) |
+| `bool trimNativeNoteEdge(const juce::String& noteId, double deltaSeconds, bool leftEdge)` | 业务／适配 | [ProjectModel.h:1289](../src/ProjectModel.h#L1289) |
+| `bool resizeNativeNoteEdge(const juce::String& noteId, double deltaSeconds, bool leftEdge)` | 业务／适配 | [ProjectModel.h:1290](../src/ProjectModel.h#L1290) |
+| `bool alignNotePreutteranceToGrid(const juce::String& noteId, double quarterStep, juce::String& error)` | 业务／适配 | [ProjectModel.h:1293](../src/ProjectModel.h#L1293) |
+| `void setNotesMidi(const std::vector<juce::String>& noteIds, float midiNote)` | 业务／适配 | [ProjectModel.h:1294](../src/ProjectModel.h#L1294) |
+| `void averageNotesMidi(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1295](../src/ProjectModel.h#L1295) |
+| `void quantizeNotesMidi(const std::vector<juce::String>& noteIds, float stepSemitones = 1.0f)` | 业务／适配 | [ProjectModel.h:1296](../src/ProjectModel.h#L1296) |
+| `std::vector<juce::String> notesOverlapping( const juce::String& clipId, double fromSeconds, double toSeconds) const` | 业务／适配 | [ProjectModel.h:1300](../src/ProjectModel.h#L1300) |
+| `std::vector<juce::String> insertNotes( const juce::String& clipId, const std::vector<NoteData>& noteTemplates, double absoluteStartSeconds)` | 业务／适配 | [ProjectModel.h:1302](../src/ProjectModel.h#L1302) |
+| `std::vector<juce::String> insertNativeAudioClips( const juce::String& trackId, const std::vector<ClipData>& templates, const std::vector<NativeConnection>& connections, double atSeconds)` | 业务／适配 | [ProjectModel.h:1305](../src/ProjectModel.h#L1305) |
+| `std::vector<juce::String> duplicateNotes( const std::vector<juce::String>& noteIds, const juce::String& targetClipId, double absoluteStartSeconds)` | 业务／适配 | [ProjectModel.h:1308](../src/ProjectModel.h#L1308) |
+| `void resizeNote(const juce::String& noteId, double newStart, double newDuration)` | 业务／适配 | [ProjectModel.h:1311](../src/ProjectModel.h#L1311) |
+| `juce::String splitNote(const juce::String& noteId, double localSeconds)` | 业务／适配 | [ProjectModel.h:1312](../src/ProjectModel.h#L1312) |
+| `juce::String mergeNotes(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1314](../src/ProjectModel.h#L1314) |
+| `bool canJoinNativeNotes(const juce::String&,const juce::String&) const` | 业务／适配 | [ProjectModel.h:1315](../src/ProjectModel.h#L1315) |
+| `juce::String joinNativeNotes(const juce::String&,const juce::String&)` | 业务／适配 | [ProjectModel.h:1316](../src/ProjectModel.h#L1316) |
+| `void setNotesConnection(const std::vector<juce::String>& noteIds, bool enabled)` | 业务／适配 | [ProjectModel.h:1319](../src/ProjectModel.h#L1319) |
+| `bool setNotesPortamento(const std::vector<juce::String>& noteIds, bool enabled, juce::String& error, double durationSeconds = 0.1)` | 业务／适配 | [ProjectModel.h:1322](../src/ProjectModel.h#L1322) |
+| `bool forceNativeConnection(const std::vector<juce::String>& noteIds, bool enabled, juce::String& error, double durationSeconds = 0.1)` | 业务／适配 | [ProjectModel.h:1327](../src/ProjectModel.h#L1327) |
+| `bool setConnectionPitchCurve(const juce::String& connectionId, std::vector<PitchCurveEditPoint> absolutePoints, juce::String& error)` | 业务／适配 | [ProjectModel.h:1333](../src/ProjectModel.h#L1333) |
+| `bool setConnectionPitchPoint(const juce::String& connectionId, int pointIndex, PitchCurveEditPoint absolutePoint, juce::String& error)` | 业务／适配 | [ProjectModel.h:1335](../src/ProjectModel.h#L1335) |
+| `juce::String createNativeVirtualConnection(const std::vector<juce::String>& orderedNoteIds, bool automaticPitch,juce::String& error,double durationSeconds=.1,bool automaticallyCreated=false, const NativeSplitTransitionEvidence* splitTransition=nullptr,bool sharedPitch=false)` | 业务／适配 | [ProjectModel.h:1339](../src/ProjectModel.h#L1339) |
+| `bool setNativeVirtualConnectionForNotes(const std::vector<juce::String>& noteIds,bool enabled, bool automaticPitch,juce::String& error,double durationSeconds=.1,bool automaticallyCreated=false, const NativeSplitTransitionEvidence* splitTransition=nullptr,bool sharedPitch=false)` | 业务／适配 | [ProjectModel.h:1344](../src/ProjectModel.h#L1344) |
+| `bool setNativeVirtualConnectionEnabled(const juce::String& groupId,bool enabled,juce::String& error)` | 业务／适配 | [ProjectModel.h:1347](../src/ProjectModel.h#L1347) |
+| `bool setNativeVirtualMovementCoupled(const juce::String& groupId,bool coupled,juce::String& error)` | 业务／适配 | [ProjectModel.h:1348](../src/ProjectModel.h#L1348) |
+| `bool removeNativeVirtualConnection(const juce::String& groupId,juce::String& error)` | 业务／适配 | [ProjectModel.h:1349](../src/ProjectModel.h#L1349) |
+| `bool setNativeVirtualPitchCurve(const juce::String& groupId, const std::vector<PitchCurveEditPoint>& absolutePoints,juce::String& error)` | 业务／适配 | [ProjectModel.h:1350](../src/ProjectModel.h#L1350) |
+| `bool resetNativeVirtualPitchCurve(const juce::String& groupId,juce::String& error)` | 业务／适配 | [ProjectModel.h:1352](../src/ProjectModel.h#L1352) |
+| `bool setNativeVirtualHandoverWindow(const juce::String& groupId,const juce::String& leftNoteId, const juce::String& rightNoteId,double absoluteFrom,double absoluteTo,juce::String& error)` | 业务／适配 | [ProjectModel.h:1353](../src/ProjectModel.h#L1353) |
+| `bool resetNativeVirtualHandoverWindow(const juce::String& groupId,const juce::String& leftNoteId, const juce::String& rightNoteId,juce::String& error)` | 业务／适配 | [ProjectModel.h:1355](../src/ProjectModel.h#L1355) |
+| `juce::String mergeMelodyneConsonant(const NativeConsonantMergeEvidence&,juce::String& error)` | 业务／适配 | [ProjectModel.h:1357](../src/ProjectModel.h#L1357) |
+| `bool restoreMelodyneConsonant(const juce::String& mergedNoteId,bool discardMergedEdits,juce::String& error)` | 业务／适配 | [ProjectModel.h:1358](../src/ProjectModel.h#L1358) |
+| `bool disconnectNativeAudio(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1359](../src/ProjectModel.h#L1359) |
+| `bool linkNativeAudio(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1360](../src/ProjectModel.h#L1360) |
+| `bool setNativeAudioOverlap(const juce::String& trackId, bool enabled)` | 业务／适配 | [ProjectModel.h:1361](../src/ProjectModel.h#L1361) |
+| `juce::String insertPrefixNote(const juce::String& noteId, double targetOverlapSeconds)` | 业务／适配 | [ProjectModel.h:1366](../src/ProjectModel.h#L1366) |
+| `void setNoteModulation(const juce::String& noteId, float modulation)` | 业务／适配 | [ProjectModel.h:1368](../src/ProjectModel.h#L1368) |
+| `void setNoteDrift(const juce::String& noteId, float drift)` | 业务／适配 | [ProjectModel.h:1369](../src/ProjectModel.h#L1369) |
+| `void setNoteTension(const juce::String& noteId, float tension)` | 业务／适配 | [ProjectModel.h:1370](../src/ProjectModel.h#L1370) |
+| `void setNoteBreath(const juce::String& noteId, float breath)` | 业务／适配 | [ProjectModel.h:1371](../src/ProjectModel.h#L1371) |
+| `void setNoteFormant(const juce::String& noteId, float semitones)` | 业务／适配 | [ProjectModel.h:1372](../src/ProjectModel.h#L1372) |
+| `void setNoteGain(const juce::String& noteId, float gain)` | 业务／适配 | [ProjectModel.h:1373](../src/ProjectModel.h#L1373) |
+| `bool setNotesTailFade(const std::vector<juce::String>& noteIds, int mode)` | 业务／适配 | [ProjectModel.h:1374](../src/ProjectModel.h#L1374) |
+| `bool setNotesNativeEnvelope(const std::vector<juce::String>& noteIds, const backend::NativeEnvelopeSettings& settings)` | 业务／适配 | [ProjectModel.h:1375](../src/ProjectModel.h#L1375) |
+| `bool setNotesTailFade(const std::vector<juce::String>& noteIds, int mode, const backend::TailFadeSettings& settings)` | 业务／适配 | [ProjectModel.h:1376](../src/ProjectModel.h#L1376) |
+| `void setNotesAmplitudeEnvelopeBase(const std::vector<juce::String>& noteIds, float basePercent)` | 业务／适配 | [ProjectModel.h:1378](../src/ProjectModel.h#L1378) |
+| `void setNoteAttack(const juce::String& noteId, double consonantSeconds, float attackSpeed)` | 业务／适配 | [ProjectModel.h:1380](../src/ProjectModel.h#L1380) |
+| `void setNoteAttackSpeed(const juce::String& noteId, float attackSpeed)` | 业务／适配 | [ProjectModel.h:1381](../src/ProjectModel.h#L1381) |
+| `void setNoteLabel(const juce::String& noteId, const juce::String& label)` | 业务／适配 | [ProjectModel.h:1382](../src/ProjectModel.h#L1382) |
+| `int convertTrackLyricsToPinyin(const juce::String& trackId)` | 业务／适配 | [ProjectModel.h:1386](../src/ProjectModel.h#L1386) |
+| `void setNoteLabels(const std::vector<std::pair<juce::String, juce::String>>& labels)` | 业务／适配 | [ProjectModel.h:1390](../src/ProjectModel.h#L1390) |
+| `void setNoteUtauFlags(const juce::String& noteId, const juce::String& flags)` | 业务／适配 | [ProjectModel.h:1394](../src/ProjectModel.h#L1394) |
+| `void setNotesUtauFlags(const std::vector<juce::String>& noteIds, const juce::String& flags)` | 业务／适配 | [ProjectModel.h:1395](../src/ProjectModel.h#L1395) |
+| `void setNotesUtauConsonantVelocity(const std::vector<juce::String>& noteIds, int velocity)` | 业务／适配 | [ProjectModel.h:1397](../src/ProjectModel.h#L1397) |
+| `void setNoteUtauOto(const juce::String& noteId, const backend::UtauOtoOverride& oto)` | 业务／适配 | [ProjectModel.h:1424](../src/ProjectModel.h#L1424) |
+| `bool setNoteUtauOtoChecked(const juce::String& noteId, std::uint64_t expectedRevision, const backend::UtauOtoOverride& value, std::uint64_t& resultingRevision, juce::String& error)` | 业务／适配 | [ProjectModel.h:1427](../src/ProjectModel.h#L1427) |
+| `void clearNotesUtauOto(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1432](../src/ProjectModel.h#L1432) |
+| `void setNotesUtauStp(const std::vector<juce::String>& noteIds, double seconds)` | 业务／适配 | [ProjectModel.h:1434](../src/ProjectModel.h#L1434) |
+| `void setNoteUtauTimingOverrides(const juce::String& noteId, bool enabled, double preutteranceSeconds, double overlapSeconds)` | 业务／适配 | [ProjectModel.h:1435](../src/ProjectModel.h#L1435) |
+| `void setNoteRobustPitchCurve(const juce::String& noteId, bool enabled)` | 业务／适配 | [ProjectModel.h:1438](../src/ProjectModel.h#L1438) |
+| `bool rememberDiffSingerParameters(const std::map<juce::String, std::vector<FlagCurve>>& curves)` | 业务／适配 | [ProjectModel.h:1439](../src/ProjectModel.h#L1439) |
+| `bool applyDiffSingerParameters(std::uint64_t expectedRevision, const std::map<juce::String, std::vector<FlagCurve>>& curves)` | 业务／适配 | [ProjectModel.h:1440](../src/ProjectModel.h#L1440) |
+| `bool setDiffSingerParameterCurve(const juce::String& id, const juce::String& key, std::vector<FlagCurvePoint> points)` | 业务／适配 | [ProjectModel.h:1442](../src/ProjectModel.h#L1442) |
+| `bool setDiffSingerPitchOffset(const juce::String& noteId, std::vector<PitchCurveEditPoint> points)` | 业务／适配 | [ProjectModel.h:1444](../src/ProjectModel.h#L1444) |
+| `bool setNotePitchCurve(const juce::String& noteId, std::vector<PitchCurveEditPoint> points, bool storeControlPoints = false, bool authorPitchSupport = false)` | 业务／适配 | [ProjectModel.h:1446](../src/ProjectModel.h#L1446) |
+| `bool applyDiffSingerTiming(std::uint64_t expectedRevision, const std::vector<std::pair<juce::String, juce::String>>& timings)` | 业务／适配 | [ProjectModel.h:1449](../src/ProjectModel.h#L1449) |
+| `bool applyDiffSingerPronunciation(std::uint64_t expectedRevision, const juce::String& trackId, const std::vector<std::pair<juce::String, juce::String>>& readings, const juce::String& dictionary)` | 业务／适配 | [ProjectModel.h:1451](../src/ProjectModel.h#L1451) |
+| `bool restoreDiffSingerPitchPoint(std::uint64_t expectedRevision, const juce::String& noteId, const std::vector<PitchCurveEditPoint>& displayedPoints, int index)` | 业务／适配 | [ProjectModel.h:1453](../src/ProjectModel.h#L1453) |
+| `bool applyDiffSingerPitch(std::uint64_t expectedRevision, const std::vector<std::pair<juce::String, std::vector<PitchCurveEditPoint>>>& curves, bool preserveOutsideNoteHandles = false)` | 业务／适配 | [ProjectModel.h:1455](../src/ProjectModel.h#L1455) |
+| `void setDiffSingerOptions(const juce::String& trackId, const juce::String& language, const juce::String& speaker)` | 业务／适配 | [ProjectModel.h:1458](../src/ProjectModel.h#L1458) |
+| `bool setNoteAmplitudeEnvelope(const juce::String& noteId, std::vector<AmplitudeEnvelopePoint> points)` | 业务／适配 | [ProjectModel.h:1460](../src/ProjectModel.h#L1460) |
+| `int crossfadeNotes(std::vector<CrossfadeSpan> spans, std::uint64_t expectedRevision, bool curved = false)` | 业务／适配 | [ProjectModel.h:1472](../src/ProjectModel.h#L1472) |
+| `bool rememberCvvcPhonemes(const std::vector<std::pair<juce::String,juce::String>>& caches, std::uint64_t expectedRevision)` | 业务／适配 | [ProjectModel.h:1473](../src/ProjectModel.h#L1473) |
+| `bool setNotesAmplitudeEnvelopes( std::vector<std::pair<juce::String, std::vector<AmplitudeEnvelopePoint>>> envelopes)` | 业务／适配 | [ProjectModel.h:1475](../src/ProjectModel.h#L1475) |
+| `static PlannedNote plannedNoteFor(double startSeconds, double requestedSeconds, double clipSeconds, const std::vector<NoteSpan>& occupied)` | 业务／适配 | [ProjectModel.h:1501](../src/ProjectModel.h#L1501) |
+| `juce::String addClip(const juce::String& trackId, double startSeconds, double durationSeconds)` | 业务／适配 | [ProjectModel.h:1509](../src/ProjectModel.h#L1509) |
+| `bool canAddEmptyTuningClip(const juce::String& trackId, double startSeconds) const` | 业务／适配 | [ProjectModel.h:1511](../src/ProjectModel.h#L1511) |
+| `juce::String addEmptyTuningClip(const juce::String& trackId, double startSeconds, double durationSeconds = 10.0)` | 业务／适配 | [ProjectModel.h:1513](../src/ProjectModel.h#L1513) |
+| `static std::vector<std::size_t> regionsToImport( const std::vector<RegionSpan>& regions)` | 业务／适配 | [ProjectModel.h:1530](../src/ProjectModel.h#L1530) |
+| `void flattenNotePitch(const std::vector<juce::String>& noteIds, bool snapNativeToSemitone = false)` | 业务／适配 | [ProjectModel.h:1546](../src/ProjectModel.h#L1546) |
+| `bool restoreNativeSourcePitch(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1547](../src/ProjectModel.h#L1547) |
+| `static double firstFreeStartFrom(double startSeconds, const std::vector<NoteSpan>& occupied)` | 业务／适配 | [ProjectModel.h:1548](../src/ProjectModel.h#L1548) |
+| `juce::String addNote(const juce::String& preferredClipId, double absoluteStart, double duration, float midiNote)` | 业务／适配 | [ProjectModel.h:1551](../src/ProjectModel.h#L1551) |
+| `juce::String addNoteFrom(const juce::String& preferredClipId, double absoluteFromSeconds, double maximumDuration, float midiNote)` | 业务／适配 | [ProjectModel.h:1559](../src/ProjectModel.h#L1559) |
+| `void removeNote(const juce::String& noteId)` | 业务／适配 | [ProjectModel.h:1562](../src/ProjectModel.h#L1562) |
+| `void removeNotes(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1563](../src/ProjectModel.h#L1563) |
+| `void removeNotesRippling(const std::vector<juce::String>& noteIds)` | 业务／适配 | [ProjectModel.h:1567](../src/ProjectModel.h#L1567) |
+| `void insertGapBeforeNote(const juce::String& noteId, double seconds)` | 业务／适配 | [ProjectModel.h:1571](../src/ProjectModel.h#L1571) |
+| `void closeGapBeforeNote(const juce::String& noteId, double seconds)` | 业务／适配 | [ProjectModel.h:1574](../src/ProjectModel.h#L1574) |
+| `void toggleNoteConnection(const juce::String& noteId)` | 业务／适配 | [ProjectModel.h:1575](../src/ProjectModel.h#L1575) |
+| `MaterialUpdateReport applySourceSettingsWithReport( const juce::File& source, const std::vector<SampleRegionSetting>& rows, bool apply = true, const juce::String& audioVariantScope = {})` | 业务／适配 | [ProjectModel.h:1596](../src/ProjectModel.h#L1596) |
+| `void applySourceSettings(const juce::File& source, const std::vector<SampleRegionSetting>& rows)` | 业务／适配 | [ProjectModel.h:1599](../src/ProjectModel.h#L1599) |
+| `void setNoteMaterialLocalOverride(const juce::String& noteId, bool enabled)` | 业务／适配 | [ProjectModel.h:1601](../src/ProjectModel.h#L1601) |
+| `bool getNoteMaterialLocalBinding(const juce::String& noteId, NoteMaterialLocalBinding&, SampleRegionSetting& row, juce::String& error) const` | 业务／适配 | [ProjectModel.h:1613](../src/ProjectModel.h#L1613) |
+| `bool applyNoteMaterialLocalRow(const NoteMaterialLocalBinding&, const SampleRegionSetting&, std::uint64_t& resultingRevision, juce::String& error)` | 业务／适配 | [ProjectModel.h:1615](../src/ProjectModel.h#L1615) |
+| `bool restoreNoteMaterialLocalRow(const NoteMaterialLocalBinding&, SampleRegionSetting& restored, std::uint64_t& resultingRevision, juce::String& error)` | 业务／适配 | [ProjectModel.h:1617](../src/ProjectModel.h#L1617) |
+| `static bool makeClassicNoteMaterialOto(const SampleRegionSetting&, backend::UtauOtoOverride&, juce::String& error)` | 业务／适配 | [ProjectModel.h:1620](../src/ProjectModel.h#L1620) |
+| `MaterialSourceReplacementReport replaceNotesMaterialSources( const std::vector<MaterialSourceChoice>& choices, std::uint64_t expectedRevision, juce::String& error, bool apply = true)` | 业务／适配 | [ProjectModel.h:1643](../src/ProjectModel.h#L1643) |
+| `MaterialSourceReplacementReport replaceNoteMaterialSource( const juce::String& noteId, const juce::File& audio, const std::vector<SampleRegionSetting>& completeRows, const juce::String& audioId, const juce::String& regionId, const juce::String& chosenAlias, juce::String& error, bool apply = true)` | 业务／适配 | [ProjectModel.h:1651](../src/ProjectModel.h#L1651) |
+| `std::vector<MaterialSourceBindingTicket> pendingMaterialSourceAnalyses() const` | 业务／适配 | [ProjectModel.h:1656](../src/ProjectModel.h#L1656) |
+| `bool completeMaterialSourceAnalysis(const MaterialSourceBindingTicket& ticket, const std::vector<NoteData>& fullFileSourceNotes, juce::String& error)` | 业务／适配 | [ProjectModel.h:1661](../src/ProjectModel.h#L1661) |
+| `bool save(const juce::File& file, juce::String& error) const` | 业务／适配 | [ProjectModel.h:1664](../src/ProjectModel.h#L1664) |
+| `bool load(const juce::File& file, juce::String& error)` | 业务／适配 | [ProjectModel.h:1665](../src/ProjectModel.h#L1665) |
+| `static bool saveRecoverySnapshot(ProjectData data, const juce::File& recoveryFile, const juce::File& originalFile, juce::String& error)` | 业务／适配 | [ProjectModel.h:1666](../src/ProjectModel.h#L1666) |
 
-## AudioEngine（75 个声明）
+## AudioEngine（76 个声明）
 
 | 实际签名 | 类型 | 定义入口 |
 | --- | --- | --- |
@@ -268,32 +268,33 @@
 | `void setDiagnosticUtauOwnPitch(bool enabled)` | 业务／适配 | [AudioEngine.h:198](../src/AudioEngine.h#L198) |
 | `void setDiagnosticUtauNominalBridge(bool enabled)` | 业务／适配 | [AudioEngine.h:199](../src/AudioEngine.h#L199) |
 | `int diagnosticMergedPhraseCount() const` | 诊断 | [AudioEngine.h:202](../src/AudioEngine.h#L202) |
-| `std::uint64_t diagnosticScheduledNsfUtauRenders() const` | 诊断 | [AudioEngine.h:203](../src/AudioEngine.h#L203) |
-| `double diagnosticRenderPriorityPosition() const` | 诊断 | [AudioEngine.h:204](../src/AudioEngine.h#L204) |
-| `static std::vector<ProjectedNotePitch> projectTrackNotePitch( const TrackData&, const std::vector<NativeConnection>&)` | 业务／适配 | [AudioEngine.h:220](../src/AudioEngine.h#L220) |
-| `static std::vector<float> diagnosticNativeTargetMidi( const ProjectData& project, int trackIndex, int clipIndex)` | 诊断 | [AudioEngine.h:226](../src/AudioEngine.h#L226) |
-| `static backend::Mld5FileRenderRequest diagnosticNativeRequest(const ClipData& clip,const TrackData& track)` | 诊断 | [AudioEngine.h:228](../src/AudioEngine.h#L228) |
-| `std::shared_ptr<const std::vector<UtauNoteWaveform>> utauNoteWaveforms() const` | 业务／适配 | [AudioEngine.h:234](../src/AudioEngine.h#L234) |
-| `void refreshUtauWaveforms()` | 业务／适配 | [AudioEngine.h:240](../src/AudioEngine.h#L240) |
-| `void refreshNativeWaveforms()` | 业务／适配 | [AudioEngine.h:241](../src/AudioEngine.h#L241) |
-| `std::shared_ptr<const std::vector<NativeRenderedWaveform>> nativeClipWaveforms() const` | 业务／适配 | [AudioEngine.h:242](../src/AudioEngine.h#L242) |
-| `static std::uint64_t nativeClipWaveformHash(const ClipData&, const TrackData&, const std::vector<NativeVirtualGroup>* virtualGroups = nullptr)` | 业务／适配 | [AudioEngine.h:246](../src/AudioEngine.h#L246) |
-| `static std::uint64_t utauNoteRenderHash(const NoteData& note)` | 业务／适配 | [AudioEngine.h:253](../src/AudioEngine.h#L253) |
-| `static std::uint64_t utauNoteAudioHash(const NoteData& note)` | 业务／适配 | [AudioEngine.h:256](../src/AudioEngine.h#L256) |
-| `static std::uint64_t utauNotePhonemeHash(const NoteData& note)` | 业务／适配 | [AudioEngine.h:257](../src/AudioEngine.h#L257) |
-| `static std::uint64_t utauPhonemeMixContextHash(const TrackData& track)` | 业务／适配 | [AudioEngine.h:258](../src/AudioEngine.h#L258) |
-| `static std::vector<backend::UtauNoteRenderSpec> diagnosticUtauRequestNotes( const ProjectData& project, const juce::String& clipId, const std::vector<juce::String>& selection = {})` | 诊断 | [AudioEngine.h:262](../src/AudioEngine.h#L262) |
-| `static std::vector<backend::UtauNoteRenderSpec> utauRequestNotesForClip( const ProjectData& project, const juce::String& clipId)` | 业务／适配 | [AudioEngine.h:266](../src/AudioEngine.h#L266) |
-| `static backend::RequestedVoicebankFamily diagnosticUtauRequestedFamily( const ProjectData& project, const juce::String& clipId)` | 诊断 | [AudioEngine.h:268](../src/AudioEngine.h#L268) |
-| `static std::string diagnosticUtauRenderKey( const ProjectData& project, const juce::String& clipId, UtauOutputEngine defaultEngine = UtauOutputEngine::resampler, const juce::File& resampler = {}, const juce::File& wavtool = {})` | 诊断 | [AudioEngine.h:270](../src/AudioEngine.h#L270) |
-| `bool exportWav(const juce::File& file, juce::String& error, const juce::String& trackId = {}, double fromSeconds = 0.0, double toSeconds = 0.0, WavExportOptions options = {})` | 业务／适配 | [AudioEngine.h:275](../src/AudioEngine.h#L275) |
-| `std::optional<float> diagnosticNativeSourceEdgeGain(const juce::String& clipId,double localSeconds) const` | 诊断 | [AudioEngine.h:279](../src/AudioEngine.h#L279) |
-| `double playbackSampleRate() const` | 业务／适配 | [AudioEngine.h:280](../src/AudioEngine.h#L280) |
-| `bool isPlaying() const` | 业务／适配 | [AudioEngine.h:281](../src/AudioEngine.h#L281) |
-| `juce::AudioDeviceManager& devices()` | 业务／适配 | [AudioEngine.h:282](../src/AudioEngine.h#L282) |
-| `bool ensureOutputDevice(juce::String& error)` | 业务／适配 | [AudioEngine.h:283](../src/AudioEngine.h#L283) |
-| `void restoreDeviceState(juce::PropertiesFile& properties)` | 业务／适配 | [AudioEngine.h:284](../src/AudioEngine.h#L284) |
-| `void saveDeviceState(juce::PropertiesFile& properties) const` | 业务／适配 | [AudioEngine.h:285](../src/AudioEngine.h#L285) |
+| `juce::var diagnosticMld5SourceSessions() const` | 诊断 | [AudioEngine.h:203](../src/AudioEngine.h#L203) |
+| `std::uint64_t diagnosticScheduledNsfUtauRenders() const` | 诊断 | [AudioEngine.h:204](../src/AudioEngine.h#L204) |
+| `double diagnosticRenderPriorityPosition() const` | 诊断 | [AudioEngine.h:205](../src/AudioEngine.h#L205) |
+| `static std::vector<ProjectedNotePitch> projectTrackNotePitch( const TrackData&, const std::vector<NativeConnection>&)` | 业务／适配 | [AudioEngine.h:221](../src/AudioEngine.h#L221) |
+| `static std::vector<float> diagnosticNativeTargetMidi( const ProjectData& project, int trackIndex, int clipIndex)` | 诊断 | [AudioEngine.h:227](../src/AudioEngine.h#L227) |
+| `static backend::Mld5FileRenderRequest diagnosticNativeRequest(const ClipData& clip,const TrackData& track)` | 诊断 | [AudioEngine.h:229](../src/AudioEngine.h#L229) |
+| `std::shared_ptr<const std::vector<UtauNoteWaveform>> utauNoteWaveforms() const` | 业务／适配 | [AudioEngine.h:235](../src/AudioEngine.h#L235) |
+| `void refreshUtauWaveforms()` | 业务／适配 | [AudioEngine.h:241](../src/AudioEngine.h#L241) |
+| `void refreshNativeWaveforms()` | 业务／适配 | [AudioEngine.h:242](../src/AudioEngine.h#L242) |
+| `std::shared_ptr<const std::vector<NativeRenderedWaveform>> nativeClipWaveforms() const` | 业务／适配 | [AudioEngine.h:243](../src/AudioEngine.h#L243) |
+| `static std::uint64_t nativeClipWaveformHash(const ClipData&, const TrackData&, const std::vector<NativeVirtualGroup>* virtualGroups = nullptr)` | 业务／适配 | [AudioEngine.h:247](../src/AudioEngine.h#L247) |
+| `static std::uint64_t utauNoteRenderHash(const NoteData& note)` | 业务／适配 | [AudioEngine.h:254](../src/AudioEngine.h#L254) |
+| `static std::uint64_t utauNoteAudioHash(const NoteData& note)` | 业务／适配 | [AudioEngine.h:257](../src/AudioEngine.h#L257) |
+| `static std::uint64_t utauNotePhonemeHash(const NoteData& note)` | 业务／适配 | [AudioEngine.h:258](../src/AudioEngine.h#L258) |
+| `static std::uint64_t utauPhonemeMixContextHash(const TrackData& track)` | 业务／适配 | [AudioEngine.h:259](../src/AudioEngine.h#L259) |
+| `static std::vector<backend::UtauNoteRenderSpec> diagnosticUtauRequestNotes( const ProjectData& project, const juce::String& clipId, const std::vector<juce::String>& selection = {})` | 诊断 | [AudioEngine.h:263](../src/AudioEngine.h#L263) |
+| `static std::vector<backend::UtauNoteRenderSpec> utauRequestNotesForClip( const ProjectData& project, const juce::String& clipId)` | 业务／适配 | [AudioEngine.h:267](../src/AudioEngine.h#L267) |
+| `static backend::RequestedVoicebankFamily diagnosticUtauRequestedFamily( const ProjectData& project, const juce::String& clipId)` | 诊断 | [AudioEngine.h:269](../src/AudioEngine.h#L269) |
+| `static std::string diagnosticUtauRenderKey( const ProjectData& project, const juce::String& clipId, UtauOutputEngine defaultEngine = UtauOutputEngine::resampler, const juce::File& resampler = {}, const juce::File& wavtool = {})` | 诊断 | [AudioEngine.h:271](../src/AudioEngine.h#L271) |
+| `bool exportWav(const juce::File& file, juce::String& error, const juce::String& trackId = {}, double fromSeconds = 0.0, double toSeconds = 0.0, WavExportOptions options = {})` | 业务／适配 | [AudioEngine.h:276](../src/AudioEngine.h#L276) |
+| `std::optional<float> diagnosticNativeSourceEdgeGain(const juce::String& clipId,double localSeconds) const` | 诊断 | [AudioEngine.h:280](../src/AudioEngine.h#L280) |
+| `double playbackSampleRate() const` | 业务／适配 | [AudioEngine.h:281](../src/AudioEngine.h#L281) |
+| `bool isPlaying() const` | 业务／适配 | [AudioEngine.h:282](../src/AudioEngine.h#L282) |
+| `juce::AudioDeviceManager& devices()` | 业务／适配 | [AudioEngine.h:283](../src/AudioEngine.h#L283) |
+| `bool ensureOutputDevice(juce::String& error)` | 业务／适配 | [AudioEngine.h:284](../src/AudioEngine.h#L284) |
+| `void restoreDeviceState(juce::PropertiesFile& properties)` | 业务／适配 | [AudioEngine.h:285](../src/AudioEngine.h#L285) |
+| `void saveDeviceState(juce::PropertiesFile& properties) const` | 业务／适配 | [AudioEngine.h:286](../src/AudioEngine.h#L286) |
 
 ## SampleSettings（36 个声明）
 
@@ -365,18 +366,18 @@
 
 | 实际签名 | 类型 | 定义入口 |
 | --- | --- | --- |
-| `RenderService()` | 生命周期 | [backend/RenderService.h:97](../src/backend/RenderService.h#L97) |
-| `~RenderService()` | 生命周期 | [backend/RenderService.h:98](../src/backend/RenderService.h#L98) |
-| `void renderMld5(Mld5RenderRequest request, Completion completion)` | 业务／适配 | [backend/RenderService.h:99](../src/backend/RenderService.h#L99) |
-| `void renderMld5File(Mld5FileRenderRequest request, FileCompletion completion, RenderSchedule schedule = {})` | 业务／适配 | [backend/RenderService.h:100](../src/backend/RenderService.h#L100) |
-| `void renderUtau(UtauRenderRequest request, FileCompletion completion, RenderSchedule schedule = {})` | 业务／适配 | [backend/RenderService.h:102](../src/backend/RenderService.h#L102) |
-| `void renderNsfUtau(UtauRenderRequest request, juce::File modelDirectory, OrtExecutionConfig execution, FileCompletion completion, RenderSchedule schedule = {})` | 业务／适配 | [backend/RenderService.h:108](../src/backend/RenderService.h#L108) |
-| `void cancelAll()` | 业务／适配 | [backend/RenderService.h:111](../src/backend/RenderService.h#L111) |
-| `bool hasActiveJobs()` | 业务／适配 | [backend/RenderService.h:112](../src/backend/RenderService.h#L112) |
-| `void setPlaybackPosition(double seconds) noexcept` | 业务／适配 | [backend/RenderService.h:113](../src/backend/RenderService.h#L113) |
-| `void beginUpdate()` | 业务／适配 | [backend/RenderService.h:114](../src/backend/RenderService.h#L114) |
-| `void endUpdate(const std::unordered_set<std::string>& keys)` | 业务／适配 | [backend/RenderService.h:115](../src/backend/RenderService.h#L115) |
-| `double playbackPriorityPosition() const` | 业务／适配 | [backend/RenderService.h:116](../src/backend/RenderService.h#L116) |
+| `RenderService()` | 生命周期 | [backend/RenderService.h:101](../src/backend/RenderService.h#L101) |
+| `~RenderService()` | 生命周期 | [backend/RenderService.h:102](../src/backend/RenderService.h#L102) |
+| `void renderMld5(Mld5RenderRequest request, Completion completion)` | 业务／适配 | [backend/RenderService.h:103](../src/backend/RenderService.h#L103) |
+| `void renderMld5File(Mld5FileRenderRequest request, FileCompletion completion, RenderSchedule schedule = {})` | 业务／适配 | [backend/RenderService.h:104](../src/backend/RenderService.h#L104) |
+| `void renderUtau(UtauRenderRequest request, FileCompletion completion, RenderSchedule schedule = {})` | 业务／适配 | [backend/RenderService.h:106](../src/backend/RenderService.h#L106) |
+| `void renderNsfUtau(UtauRenderRequest request, juce::File modelDirectory, OrtExecutionConfig execution, FileCompletion completion, RenderSchedule schedule = {})` | 业务／适配 | [backend/RenderService.h:112](../src/backend/RenderService.h#L112) |
+| `void cancelAll()` | 业务／适配 | [backend/RenderService.h:115](../src/backend/RenderService.h#L115) |
+| `bool hasActiveJobs()` | 业务／适配 | [backend/RenderService.h:116](../src/backend/RenderService.h#L116) |
+| `void setPlaybackPosition(double seconds) noexcept` | 业务／适配 | [backend/RenderService.h:117](../src/backend/RenderService.h#L117) |
+| `void beginUpdate()` | 业务／适配 | [backend/RenderService.h:118](../src/backend/RenderService.h#L118) |
+| `void endUpdate(const std::unordered_set<std::string>& keys)` | 业务／适配 | [backend/RenderService.h:119](../src/backend/RenderService.h#L119) |
+| `double playbackPriorityPosition() const` | 业务／适配 | [backend/RenderService.h:120](../src/backend/RenderService.h#L120) |
 
 ## UtauRenderer（27 个声明）
 
@@ -548,422 +549,438 @@ Headless 命令来自 `McpServer::diagnosticTools`；Live 复用它并叠加窗�
 
 | 参数 | 首次出现位置 |
 | --- | --- |
-| `--migrate-otto-folder` | [Main.cpp:258](../src/Main.cpp#L258) |
-| `--export-otto-folder` | [Main.cpp:259](../src/Main.cpp#L259) |
-| `--include-bare` | [Main.cpp:269](../src/Main.cpp#L269) |
-| `--replace` | [Main.cpp:273](../src/Main.cpp#L273) |
-| `--smoke-main-project-registration-ui` | [Main.cpp:283](../src/Main.cpp#L283) |
-| `--smoke-classic-note-scope` | [Main.cpp:289](../src/Main.cpp#L289) |
-| `--smoke-oto-provenance` | [Main.cpp:294](../src/Main.cpp#L294) |
-| `--smoke-community-dataset-menu` | [Main.cpp:299](../src/Main.cpp#L299) |
-| `--smoke-material-root-registration` | [Main.cpp:304](../src/Main.cpp#L304) |
-| `--smoke-variant-asset-ui` | [Main.cpp:309](../src/Main.cpp#L309) |
-| `--smoke-voicebank-family` | [Main.cpp:314](../src/Main.cpp#L314) |
-| `--smoke-track-types` | [Main.cpp:319](../src/Main.cpp#L319) |
-| `--smoke-engine-view-capabilities` | [Main.cpp:324](../src/Main.cpp#L324) |
-| `--smoke-track-editing-interfaces-ui` | [Main.cpp:331](../src/Main.cpp#L331) |
-| `--smoke-material-variants` | [Main.cpp:338](../src/Main.cpp#L338) |
-| `--smoke-community-dataset` | [Main.cpp:343](../src/Main.cpp#L343) |
-| `--smoke-ustx-importer` | [Main.cpp:349](../src/Main.cpp#L349) |
-| `--smoke-japanese-inference-dialog` | [Main.cpp:354](../src/Main.cpp#L354) |
-| `--smoke-japanese-inference-modes` | [Main.cpp:359](../src/Main.cpp#L359) |
-| `--smoke-native-source-reopen-scope` | [Main.cpp:364](../src/Main.cpp#L364) |
-| `--smoke-native-material-overlap` | [Main.cpp:370](../src/Main.cpp#L370) |
-| `--smoke-native-edge-profile-gui` | [Main.cpp:376](../src/Main.cpp#L376) |
-| `--smoke-native-pronunciation-edge-edit` | [Main.cpp:381](../src/Main.cpp#L381) |
-| `--smoke-native-source-slice-edges` | [Main.cpp:386](../src/Main.cpp#L386) |
-| `--smoke-native-source-assembly` | [Main.cpp:391](../src/Main.cpp#L391) |
-| `--smoke-world-source-assembly` | [Main.cpp:395](../src/Main.cpp#L395) |
-| `--smoke-focused-defaults` | [Main.cpp:399](../src/Main.cpp#L399) |
-| `--smoke-transition-pair-import-options` | [Main.cpp:401](../src/Main.cpp#L401) |
-| `--smoke-legacy-native-usage` | [Main.cpp:403](../src/Main.cpp#L403) |
-| `--smoke-native-melodyne-yellow` | [Main.cpp:405](../src/Main.cpp#L405) |
-| `--smoke-native-permanent-seam` | [Main.cpp:407](../src/Main.cpp#L407) |
-| `--smoke-native-virtual-single-line` | [Main.cpp:412](../src/Main.cpp#L412) |
-| `--smoke-native-virtual-handover-window` | [Main.cpp:417](../src/Main.cpp#L417) |
-| `--smoke-native-virtual-handover-gesture` | [Main.cpp:422](../src/Main.cpp#L422) |
-| `--smoke-native-virtual-flat-bezier` | [Main.cpp:427](../src/Main.cpp#L427) |
-| `--smoke-native-virtual-coupled-move` | [Main.cpp:432](../src/Main.cpp#L432) |
-| `--smoke-native-note-transition-menu` | [Main.cpp:437](../src/Main.cpp#L437) |
-| `--render-saved-nsf-three` | [Main.cpp:442](../src/Main.cpp#L442) |
-| `--profile-teio-request-fingerprint` | [Main.cpp:447](../src/Main.cpp#L447) |
-| `--render-teio-full-virtual` | [Main.cpp:459](../src/Main.cpp#L459) |
-| `--smoke-main-real-multi-bridge-window` | [Main.cpp:465](../src/Main.cpp#L465) |
-| `--smoke-native-real-multi-split-audio` | [Main.cpp:471](../src/Main.cpp#L471) |
-| `--smoke-native-virtual-hop-curve` | [Main.cpp:476](../src/Main.cpp#L476) |
-| `--smoke-native-virtual-peer-waveform` | [Main.cpp:481](../src/Main.cpp#L481) |
-| `--smoke-native-virtual-curve-tool` | [Main.cpp:486](../src/Main.cpp#L486) |
-| `--smoke-native-virtual-nonlinear-curve` | [Main.cpp:491](../src/Main.cpp#L491) |
-| `--smoke-native-virtual-same-file-skip` | [Main.cpp:496](../src/Main.cpp#L496) |
-| `--smoke-melodyne-optimization-entry` | [Main.cpp:501](../src/Main.cpp#L501) |
-| `--smoke-native-virtual-multi-split` | [Main.cpp:506](../src/Main.cpp#L506) |
-| `--smoke-native-virtual-chain-extension` | [Main.cpp:511](../src/Main.cpp#L511) |
-| `--smoke-native-virtual-unavailable-group` | [Main.cpp:516](../src/Main.cpp#L516) |
-| `--smoke-native-virtual-shared-pitch-gesture` | [Main.cpp:521](../src/Main.cpp#L521) |
-| `--smoke-native-virtual-chain-shared` | [Main.cpp:526](../src/Main.cpp#L526) |
-| `--smoke-native-virtual-waveform-hash` | [Main.cpp:531](../src/Main.cpp#L531) |
-| `--smoke-native-virtual-export-parity` | [Main.cpp:536](../src/Main.cpp#L536) |
-| `--smoke-native-virtual-glide-audio` | [Main.cpp:541](../src/Main.cpp#L541) |
-| `--smoke-native-partial-cut-drag-gesture` | [Main.cpp:546](../src/Main.cpp#L546) |
-| `--real-partial-cut-drag` | [Main.cpp:551](../src/Main.cpp#L551) |
-| `--smoke-native-partial-cut-move` | [Main.cpp:559](../src/Main.cpp#L559) |
-| `--smoke-native-consonant-merge-detection` | [Main.cpp:564](../src/Main.cpp#L564) |
-| `--smoke-native-consonant-merge-model` | [Main.cpp:569](../src/Main.cpp#L569) |
-| `--smoke-native-consonant-merge-plan` | [Main.cpp:574](../src/Main.cpp#L574) |
-| `--smoke-native-virtual-connection-ui` | [Main.cpp:579](../src/Main.cpp#L579) |
-| `--smoke-native-logical-transition-registration` | [Main.cpp:584](../src/Main.cpp#L584) |
-| `--smoke-native-split-transition-detection` | [Main.cpp:589](../src/Main.cpp#L589) |
-| `--smoke-native-split-transition-mixer` | [Main.cpp:594](../src/Main.cpp#L594) |
-| `--smoke-native-split-transition-plan` | [Main.cpp:599](../src/Main.cpp#L599) |
-| `--smoke-native-virtual-auto` | [Main.cpp:604](../src/Main.cpp#L604) |
-| `--smoke-native-virtual-pitch-edit` | [Main.cpp:609](../src/Main.cpp#L609) |
-| `--smoke-native-virtual-move` | [Main.cpp:614](../src/Main.cpp#L614) |
-| `--smoke-native-virtual-pitch-request` | [Main.cpp:619](../src/Main.cpp#L619) |
-| `--smoke-native-virtual-pitch-plan` | [Main.cpp:624](../src/Main.cpp#L624) |
-| `--smoke-native-virtual-mixer` | [Main.cpp:629](../src/Main.cpp#L629) |
-| `--smoke-native-virtual-entrypoints` | [Main.cpp:634](../src/Main.cpp#L634) |
-| `--smoke-native-virtual-model` | [Main.cpp:639](../src/Main.cpp#L639) |
-| `--smoke-native-virtual-plan` | [Main.cpp:644](../src/Main.cpp#L644) |
-| `--smoke-native-source-edge-mixer` | [Main.cpp:649](../src/Main.cpp#L649) |
-| `--smoke-native-score-replacement-ui` | [Main.cpp:654](../src/Main.cpp#L654) |
-| `--smoke-native-score-material-replacement` | [Main.cpp:660](../src/Main.cpp#L660) |
-| `--smoke-translation-no-file` | [Main.cpp:665](../src/Main.cpp#L665) |
-| `--smoke-translation-file` | [Main.cpp:670](../src/Main.cpp#L670) |
-| `--export-translations` | [Main.cpp:675](../src/Main.cpp#L675) |
-| `--smoke-teio-transition-registration` | [Main.cpp:684](../src/Main.cpp#L684) |
-| `--smoke-native-transition-detection` | [Main.cpp:689](../src/Main.cpp#L689) |
-| `--smoke-native-source-trend` | [Main.cpp:694](../src/Main.cpp#L694) |
-| `--smoke-native-transition-shape` | [Main.cpp:699](../src/Main.cpp#L699) |
-| `--smoke-native-midi-material` | [Main.cpp:704](../src/Main.cpp#L704) |
-| `--smoke-native-material-appearance` | [Main.cpp:709](../src/Main.cpp#L709) |
-| `--smoke-native-note-clicks` | [Main.cpp:714](../src/Main.cpp#L714) |
-| `--smoke-native-force-connection-ui` | [Main.cpp:719](../src/Main.cpp#L719) |
-| `--smoke-native-force-connection` | [Main.cpp:725](../src/Main.cpp#L725) |
-| `--smoke-melodyne-timing` | [Main.cpp:730](../src/Main.cpp#L730) |
-| `--smoke-native-source-edge-plan` | [Main.cpp:736](../src/Main.cpp#L736) |
-| `--smoke-source-preview-ui` | [Main.cpp:741](../src/Main.cpp#L741) |
-| `--smoke-main-japanese-annotation` | [Main.cpp:747](../src/Main.cpp#L747) |
-| `--smoke-japanese-annotation-safety` | [Main.cpp:754](../src/Main.cpp#L754) |
-| `--smoke-japanese-auto-annotation` | [Main.cpp:759](../src/Main.cpp#L759) |
-| `--smoke-main-community-import` | [Main.cpp:766](../src/Main.cpp#L766) |
-| `--smoke-community-import-gui` | [Main.cpp:773](../src/Main.cpp#L773) |
-| `--smoke-registered-project-audio` | [Main.cpp:779](../src/Main.cpp#L779) |
-| `--smoke-registration-facts` | [Main.cpp:785](../src/Main.cpp#L785) |
-| `--smoke-main-material-variants` | [Main.cpp:790](../src/Main.cpp#L790) |
-| `--audit-project-material-registration` | [Main.cpp:796](../src/Main.cpp#L796) |
-| `--smoke-project-material-registration-model` | [Main.cpp:805](../src/Main.cpp#L805) |
-| `--smoke-project-material-registration` | [Main.cpp:810](../src/Main.cpp#L810) |
-| `--smoke-note-material-local-override` | [Main.cpp:815](../src/Main.cpp#L815) |
-| `--smoke-local-material-scope` | [Main.cpp:820](../src/Main.cpp#L820) |
-| `--smoke-connection-pitch-ui` | [Main.cpp:825](../src/Main.cpp#L825) |
-| `--smoke-host-pitch-projection` | [Main.cpp:830](../src/Main.cpp#L830) |
-| `--smoke-material-pronunciation-catalog` | [Main.cpp:835](../src/Main.cpp#L835) |
-| `--smoke-graph-pitch-edit-batch` | [Main.cpp:840](../src/Main.cpp#L840) |
-| `--smoke-overlap-selector` | [Main.cpp:845](../src/Main.cpp#L845) |
-| `--smoke-forced-portamento-audio` | [Main.cpp:850](../src/Main.cpp#L850) |
-| `--smoke-track-pitch-scope` | [Main.cpp:856](../src/Main.cpp#L856) |
-| `--smoke-forced-portamento` | [Main.cpp:861](../src/Main.cpp#L861) |
-| `--smoke-named-vowel` | [Main.cpp:866](../src/Main.cpp#L866) |
-| `--smoke-vowel-timing-audio` | [Main.cpp:871](../src/Main.cpp#L871) |
-| `--smoke-pronunciation-timing` | [Main.cpp:877](../src/Main.cpp#L877) |
-| `--smoke-adjacent-pronunciation` | [Main.cpp:882](../src/Main.cpp#L882) |
-| `--smoke-vowel-stretch-alignment` | [Main.cpp:887](../src/Main.cpp#L887) |
-| `--smoke-material-source-replacement` | [Main.cpp:892](../src/Main.cpp#L892) |
-| `--smoke-native-nsf-compatibility` | [Main.cpp:897](../src/Main.cpp#L897) |
-| `--smoke-native-workflow-e2e` | [Main.cpp:903](../src/Main.cpp#L903) |
-| `--smoke-material-topology-audio` | [Main.cpp:912](../src/Main.cpp#L912) |
-| `--smoke-midi-export-scope` | [Main.cpp:918](../src/Main.cpp#L918) |
-| `--smoke-unified-draw-action` | [Main.cpp:924](../src/Main.cpp#L924) |
-| `--smoke-main-source-replacement-ui` | [Main.cpp:930](../src/Main.cpp#L930) |
-| `--smoke-single-entry-ui` | [Main.cpp:938](../src/Main.cpp#L938) |
-| `--smoke-nsf-native-expression` | [Main.cpp:946](../src/Main.cpp#L946) |
-| `--smoke-material-topology` | [Main.cpp:954](../src/Main.cpp#L954) |
-| `--smoke-native-connection-graph` | [Main.cpp:960](../src/Main.cpp#L960) |
-| `--smoke-material-format-auto` | [Main.cpp:966](../src/Main.cpp#L966) |
-| `--smoke-unified-material-editor` | [Main.cpp:972](../src/Main.cpp#L972) |
-| `--smoke-material-insertion` | [Main.cpp:978](../src/Main.cpp#L978) |
-| `--smoke-material-asset-tree` | [Main.cpp:984](../src/Main.cpp#L984) |
-| `--smoke-material-annotation` | [Main.cpp:990](../src/Main.cpp#L990) |
-| `--smoke-material-binding` | [Main.cpp:996](../src/Main.cpp#L996) |
-| `--smoke-otto-material` | [Main.cpp:1002](../src/Main.cpp#L1002) |
-| `--audit-hamood-keys` | [Main.cpp:1011](../src/Main.cpp#L1011) |
-| `--smoke-hamood-utau` | [Main.cpp:1030](../src/Main.cpp#L1030) |
-| `--smoke-hamood` | [Main.cpp:1036](../src/Main.cpp#L1036) |
-| `--smoke-diffsinger-pitch-offset` | [Main.cpp:1043](../src/Main.cpp#L1043) |
-| `--smoke-accompaniment-tempo` | [Main.cpp:1050](../src/Main.cpp#L1050) |
-| `--smoke-accompaniment` | [Main.cpp:1066](../src/Main.cpp#L1066) |
-| `--smoke-wav-export-options` | [Main.cpp:1073](../src/Main.cpp#L1073) |
-| `--smoke-diffsinger-pitch-persistence` | [Main.cpp:1083](../src/Main.cpp#L1083) |
-| `--reopen` | [Main.cpp:1087](../src/Main.cpp#L1087) |
-| `--smoke-diffsinger-pitch-handles` | [Main.cpp:1091](../src/Main.cpp#L1091) |
-| `--smoke-diffsinger-pitch-restore` | [Main.cpp:1097](../src/Main.cpp#L1097) |
-| `--smoke-diffsinger-pitch-reference` | [Main.cpp:1104](../src/Main.cpp#L1104) |
-| `--smoke-continuous-flag` | [Main.cpp:1110](../src/Main.cpp#L1110) |
-| `--smoke-classic-flag-ui` | [Main.cpp:1117](../src/Main.cpp#L1117) |
-| `--smoke-diffsinger-inference` | [Main.cpp:1126](../src/Main.cpp#L1126) |
-| `--smoke-diffsinger-parameter-retake` | [Main.cpp:1132](../src/Main.cpp#L1132) |
-| `--smoke-diffsinger-cache` | [Main.cpp:1139](../src/Main.cpp#L1139) |
-| `--smoke-diffsinger-parameters` | [Main.cpp:1144](../src/Main.cpp#L1144) |
-| `--smoke-diffsinger-expressions` | [Main.cpp:1149](../src/Main.cpp#L1149) |
-| `--smoke-diffsinger-consonants` | [Main.cpp:1156](../src/Main.cpp#L1156) |
-| `--smoke-diffsinger-timing` | [Main.cpp:1162](../src/Main.cpp#L1162) |
-| `--smoke-diffsinger-ui` | [Main.cpp:1169](../src/Main.cpp#L1169) |
-| `--smoke-diffsinger` | [Main.cpp:1178](../src/Main.cpp#L1178) |
-| `--smoke-chinese-cvvc` | [Main.cpp:1185](../src/Main.cpp#L1185) |
-| `--smoke-output-engine` | [Main.cpp:1193](../src/Main.cpp#L1193) |
-| `--smoke-native-vibrato` | [Main.cpp:1202](../src/Main.cpp#L1202) |
-| `--smoke-native-vibrato-render` | [Main.cpp:1213](../src/Main.cpp#L1213) |
-| `--smoke-native-noise-option` | [Main.cpp:1219](../src/Main.cpp#L1219) |
-| `--smoke-native-incremental` | [Main.cpp:1227](../src/Main.cpp#L1227) |
-| `--smoke-native-shutdown` | [Main.cpp:1235](../src/Main.cpp#L1235) |
-| `--smoke-native-noise` | [Main.cpp:1243](../src/Main.cpp#L1243) |
-| `--smoke-wcs-nonloop` | [Main.cpp:1250](../src/Main.cpp#L1250) |
-| `--smoke-hn-cache` | [Main.cpp:1257](../src/Main.cpp#L1257) |
-| `--force` | [Main.cpp:1260](../src/Main.cpp#L1260) |
-| `--smoke-hifisampler` | [Main.cpp:1264](../src/Main.cpp#L1264) |
-| `--smoke-hifishifter-mel` | [Main.cpp:1264](../src/Main.cpp#L1264) |
-| `--smoke-nsf-regions` | [Main.cpp:1273](../src/Main.cpp#L1273) |
-| `--smoke-nsf-pitch-transitions` | [Main.cpp:1281](../src/Main.cpp#L1281) |
-| `--smoke-voicebank-import` | [Main.cpp:1287](../src/Main.cpp#L1287) |
-| `--smoke-voicebank-selection` | [Main.cpp:1293](../src/Main.cpp#L1293) |
-| `--smoke-nsf-picker` | [Main.cpp:1302](../src/Main.cpp#L1302) |
-| `--smoke-cross-region-editing` | [Main.cpp:1311](../src/Main.cpp#L1311) |
-| `--smoke-hamood-persistence` | [Main.cpp:1311](../src/Main.cpp#L1311) |
-| `--smoke-mou-to-jie` | [Main.cpp:1318](../src/Main.cpp#L1318) |
-| `--smoke-oto-overlap` | [Main.cpp:1324](../src/Main.cpp#L1324) |
-| `--smoke-modeless-oto` | [Main.cpp:1330](../src/Main.cpp#L1330) |
-| `--smoke-oto-continuity` | [Main.cpp:1335](../src/Main.cpp#L1335) |
-| `--smoke-native-envelope` | [Main.cpp:1340](../src/Main.cpp#L1340) |
-| `--smoke-cvvc-layout-cache` | [Main.cpp:1345](../src/Main.cpp#L1345) |
-| `--smoke-auto-crossfade` | [Main.cpp:1350](../src/Main.cpp#L1350) |
-| `--smoke-pitch-point-selection` | [Main.cpp:1355](../src/Main.cpp#L1355) |
-| `--smoke-point-group` | [Main.cpp:1360](../src/Main.cpp#L1360) |
-| `--smoke-envelope-point-selection` | [Main.cpp:1365](../src/Main.cpp#L1365) |
-| `--smoke-native-linked-envelope` | [Main.cpp:1370](../src/Main.cpp#L1370) |
-| `--smoke-advanced-envelope` | [Main.cpp:1375](../src/Main.cpp#L1375) |
-| `--smoke-advanced-envelope-panel` | [Main.cpp:1375](../src/Main.cpp#L1375) |
-| `--smoke-playback-priority` | [Main.cpp:1380](../src/Main.cpp#L1380) |
-| `--smoke-ust-fidelity` | [Main.cpp:1381](../src/Main.cpp#L1381) |
-| `--smoke-project-safety` | [Main.cpp:1382](../src/Main.cpp#L1382) |
-| `--smoke-normal-display` | [Main.cpp:1390](../src/Main.cpp#L1390) |
-| `--smoke-note-hints` | [Main.cpp:1398](../src/Main.cpp#L1398) |
-| `--smoke-clip-editor-scope` | [Main.cpp:1406](../src/Main.cpp#L1406) |
-| `--smoke-empty-tuning-clip` | [Main.cpp:1414](../src/Main.cpp#L1414) |
-| `--smoke-track-gain-envelope` | [Main.cpp:1422](../src/Main.cpp#L1422) |
-| `--smoke-native-rendered-waveform` | [Main.cpp:1430](../src/Main.cpp#L1430) |
-| `--smoke-native-note-move` | [Main.cpp:1437](../src/Main.cpp#L1437) |
-| `--smoke-native-source-pitch-restore` | [Main.cpp:1443](../src/Main.cpp#L1443) |
-| `--smoke-native-audio-overlap-focus` | [Main.cpp:1449](../src/Main.cpp#L1449) |
-| `--smoke-native-audio-overlap` | [Main.cpp:1455](../src/Main.cpp#L1455) |
-| `--smoke-native-linked-pitch` | [Main.cpp:1461](../src/Main.cpp#L1461) |
-| `--smoke-source-breathiness` | [Main.cpp:1468](../src/Main.cpp#L1468) |
-| `--smoke-native-unpitched-regions` | [Main.cpp:1475](../src/Main.cpp#L1475) |
-| `--smoke-native-consonant-display` | [Main.cpp:1483](../src/Main.cpp#L1483) |
-| `--smoke-native-pitch-visibility` | [Main.cpp:1490](../src/Main.cpp#L1490) |
-| `--smoke-native-audio-link` | [Main.cpp:1496](../src/Main.cpp#L1496) |
-| `--smoke-native-note-join` | [Main.cpp:1502](../src/Main.cpp#L1502) |
-| `--smoke-native-trim-expand` | [Main.cpp:1507](../src/Main.cpp#L1507) |
-| `--smoke-native-audio-trim` | [Main.cpp:1512](../src/Main.cpp#L1512) |
-| `--smoke-native-audio-disconnect` | [Main.cpp:1518](../src/Main.cpp#L1518) |
-| `--smoke-native-note-copy-paste` | [Main.cpp:1524](../src/Main.cpp#L1524) |
-| `--smoke-native-import-performance` | [Main.cpp:1531](../src/Main.cpp#L1531) |
-| `--smoke-native-source-pitch` | [Main.cpp:1538](../src/Main.cpp#L1538) |
-| `--smoke-native-waveform-preview` | [Main.cpp:1546](../src/Main.cpp#L1546) |
-| `--smoke-timeline-notes` | [Main.cpp:1554](../src/Main.cpp#L1554) |
-| `--smoke-clip-gain-knob` | [Main.cpp:1562](../src/Main.cpp#L1562) |
-| `--smoke-clip-merge` | [Main.cpp:1570](../src/Main.cpp#L1570) |
-| `--smoke-timeline-selection` | [Main.cpp:1578](../src/Main.cpp#L1578) |
-| `--smoke-clip-trim` | [Main.cpp:1586](../src/Main.cpp#L1586) |
-| `--smoke-clip-split` | [Main.cpp:1595](../src/Main.cpp#L1595) |
-| `--smoke-independent-zoom` | [Main.cpp:1604](../src/Main.cpp#L1604) |
-| `--smoke-scroll-zoom` | [Main.cpp:1613](../src/Main.cpp#L1613) |
-| `--preview-note-dance` | [Main.cpp:1622](../src/Main.cpp#L1622) |
-| `--smoke-tempo-change` | [Main.cpp:1630](../src/Main.cpp#L1630) |
-| `--smoke-timeline-pit` | [Main.cpp:1639](../src/Main.cpp#L1639) |
-| `--mcp-live` | [Main.cpp:1645](../src/Main.cpp#L1645) |
-| `--mcp-list-sessions` | [Main.cpp:1645](../src/Main.cpp#L1645) |
-| `--session` | [Main.cpp:1648](../src/Main.cpp#L1648) |
-| `--smoke-hifisampler-envelope` | [Main.cpp:1653](../src/Main.cpp#L1653) |
-| `--smoke-nsf-project-note` | [Main.cpp:1659](../src/Main.cpp#L1659) |
-| `--mcp` | [Main.cpp:1665](../src/Main.cpp#L1665) |
-| `--roots` | [Main.cpp:1667](../src/Main.cpp#L1667) |
-| `--smoke-oto-playback` | [Main.cpp:1679](../src/Main.cpp#L1679) |
-| `--smoke-oto-editor` | [Main.cpp:1879](../src/Main.cpp#L1879) |
-| `--click` | [Main.cpp:1990](../src/Main.cpp#L1990) |
-| `--smoke-splice-envelope` | [Main.cpp:2002](../src/Main.cpp#L2002) |
-| `--smoke-dialog-enter` | [Main.cpp:2112](../src/Main.cpp#L2112) |
-| `--smoke-source-edit-view` | [Main.cpp:2170](../src/Main.cpp#L2170) |
-| `--smoke-consonant-hold` | [Main.cpp:2232](../src/Main.cpp#L2232) |
-| `--smoke-mou-panel-counts` | [Main.cpp:2452](../src/Main.cpp#L2452) |
-| `--smoke-mou-consonant-ticks` | [Main.cpp:2543](../src/Main.cpp#L2543) |
-| `--smoke-mou-boundary-drag` | [Main.cpp:2696](../src/Main.cpp#L2696) |
-| `--smoke-prefix-map` | [Main.cpp:2785](../src/Main.cpp#L2785) |
-| `--repair-mou-oto` | [Main.cpp:2826](../src/Main.cpp#L2826) |
-| `--smoke-mou-oto-file` | [Main.cpp:2847](../src/Main.cpp#L2847) |
-| `--smoke-utau-mode` | [Main.cpp:3046](../src/Main.cpp#L3046) |
-| `--smoke-lane-marquee` | [Main.cpp:3186](../src/Main.cpp#L3186) |
-| `--smoke-flag-lane` | [Main.cpp:3287](../src/Main.cpp#L3287) |
-| `--smoke-keyboard-labels` | [Main.cpp:4148](../src/Main.cpp#L4148) |
-| `--smoke-lane-labels` | [Main.cpp:4202](../src/Main.cpp#L4202) |
-| `--smoke-export-targets` | [Main.cpp:4230](../src/Main.cpp#L4230) |
-| `--smoke-audition-position` | [Main.cpp:4336](../src/Main.cpp#L4336) |
-| `--smoke-lyric-envelope` | [Main.cpp:4378](../src/Main.cpp#L4378) |
-| `--smoke-lyric-timing` | [Main.cpp:4450](../src/Main.cpp#L4450) |
-| `--smoke-vibrato-bake` | [Main.cpp:4549](../src/Main.cpp#L4549) |
-| `--smoke-mou-note-regions` | [Main.cpp:4662](../src/Main.cpp#L4662) |
-| `--smoke-region-guides` | [Main.cpp:4948](../src/Main.cpp#L4948) |
-| `--smoke-rest-playback` | [Main.cpp:5022](../src/Main.cpp#L5022) |
-| `--smoke-rest-lyric` | [Main.cpp:5118](../src/Main.cpp#L5118) |
-| `--smoke-missing-alias-piano` | [Main.cpp:5281](../src/Main.cpp#L5281) |
-| `--smoke-flag-curve-mode` | [Main.cpp:5408](../src/Main.cpp#L5408) |
-| `--smoke-flag-point-value` | [Main.cpp:5593](../src/Main.cpp#L5593) |
-| `--smoke-flag-overlap` | [Main.cpp:5683](../src/Main.cpp#L5683) |
-| `--smoke-load-timing` | [Main.cpp:5798](../src/Main.cpp#L5798) |
-| `--smoke-flatten-pitch-line` | [Main.cpp:5911](../src/Main.cpp#L5911) |
-| `--smoke-note-across-tracks` | [Main.cpp:6071](../src/Main.cpp#L6071) |
-| `--smoke-clip-across-tracks` | [Main.cpp:6227](../src/Main.cpp#L6227) |
-| `--smoke-reference-track` | [Main.cpp:6376](../src/Main.cpp#L6376) |
-| `--smoke-native-pitch-seam` | [Main.cpp:6524](../src/Main.cpp#L6524) |
-| `--smoke-native-pitch-points` | [Main.cpp:6596](../src/Main.cpp#L6596) |
-| `--smoke-paste-at-pointer` | [Main.cpp:6820](../src/Main.cpp#L6820) |
-| `--smoke-note-menu-split` | [Main.cpp:6963](../src/Main.cpp#L6963) |
-| `--smoke-lyric-gate` | [Main.cpp:7145](../src/Main.cpp#L7145) |
-| `--smoke-lyric-tab` | [Main.cpp:7242](../src/Main.cpp#L7242) |
-| `--smoke-syllable-cuts` | [Main.cpp:7442](../src/Main.cpp#L7442) |
-| `--smoke-single-syllable` | [Main.cpp:7624](../src/Main.cpp#L7624) |
-| `--smoke-deleted-notes-silent` | [Main.cpp:7731](../src/Main.cpp#L7731) |
-| `--smoke-delete-clip` | [Main.cpp:7878](../src/Main.cpp#L7878) |
-| `--smoke-draw-unit` | [Main.cpp:7975](../src/Main.cpp#L7975) |
-| `--smoke-new-track-draw` | [Main.cpp:8069](../src/Main.cpp#L8069) |
-| `--smoke-draw-drag` | [Main.cpp:8178](../src/Main.cpp#L8178) |
-| `--smoke-draw-overlap` | [Main.cpp:8350](../src/Main.cpp#L8350) |
-| `--smoke-dropdown-arrow` | [Main.cpp:8536](../src/Main.cpp#L8536) |
-| `--smoke-pitch-line` | [Main.cpp:8627](../src/Main.cpp#L8627) |
-| `--smoke-view-menu` | [Main.cpp:8918](../src/Main.cpp#L8918) |
-| `--inspect-melodyne-tracks` | [Main.cpp:9031](../src/Main.cpp#L9031) |
-| `--smoke-melodyne-provider` | [Main.cpp:9042](../src/Main.cpp#L9042) |
-| `--probe-melodyne-vst3-instance` | [Main.cpp:9067](../src/Main.cpp#L9067) |
-| `--smoke-native-timing` | [Main.cpp:9079](../src/Main.cpp#L9079) |
-| `--smoke-file-only-translation-ui` | [Main.cpp:9136](../src/Main.cpp#L9136) |
-| `--smoke-gui198-layout` | [Main.cpp:9141](../src/Main.cpp#L9141) |
-| `--smoke-integrated-ui` | [Main.cpp:9156](../src/Main.cpp#L9156) |
-| `--smoke-integrated` | [Main.cpp:9165](../src/Main.cpp#L9165) |
-| `--smoke-native-hjm` | [Main.cpp:9171](../src/Main.cpp#L9171) |
-| `--smoke-batch-lyrics` | [Main.cpp:9238](../src/Main.cpp#L9238) |
-| `--smoke-envelope-lanes` | [Main.cpp:9330](../src/Main.cpp#L9330) |
-| `--smoke-wheel` | [Main.cpp:9389](../src/Main.cpp#L9389) |
-| `--smoke-waveform-toggle` | [Main.cpp:9430](../src/Main.cpp#L9430) |
-| `--smoke-envelope-base` | [Main.cpp:9540](../src/Main.cpp#L9540) |
-| `--smoke-amplitude-waveform` | [Main.cpp:9861](../src/Main.cpp#L9861) |
-| `--smoke-vibrato-end` | [Main.cpp:10319](../src/Main.cpp#L10319) |
-| `--smoke-hanzi-pinyin` | [Main.cpp:10579](../src/Main.cpp#L10579) |
-| `--smoke-shared-pitch-line` | [Main.cpp:10718](../src/Main.cpp#L10718) |
-| `--smoke-waveform-alignment` | [Main.cpp:11376](../src/Main.cpp#L11376) |
-| `--smoke-note-waveform` | [Main.cpp:11575](../src/Main.cpp#L11575) |
-| `--smoke-utau-waveform` | [Main.cpp:11881](../src/Main.cpp#L11881) |
-| `--smoke-voicebank-index` | [Main.cpp:12055](../src/Main.cpp#L12055) |
-| `--smoke-ust-pitch` | [Main.cpp:12521](../src/Main.cpp#L12521) |
-| `--low` | [Main.cpp:12826](../src/Main.cpp#L12826) |
-| `--smoke-hf-daemon-owner` | [Main.cpp:12945](../src/Main.cpp#L12945) |
-| `--quit` | [Main.cpp:12953](../src/Main.cpp#L12953) |
-| `--smoke-hf-prewarm` | [Main.cpp:12958](../src/Main.cpp#L12958) |
-| `--smoke-ust-vibrato` | [Main.cpp:13091](../src/Main.cpp#L13091) |
-| `--smoke-mcp-roots` | [Main.cpp:13336](../src/Main.cpp#L13336) |
-| `--smoke-mcp-schema` | [Main.cpp:13443](../src/Main.cpp#L13443) |
-| `--smoke-dragged-transition` | [Main.cpp:13608](../src/Main.cpp#L13608) |
-| `--smoke-forward-bend` | [Main.cpp:13831](../src/Main.cpp#L13831) |
-| `--smoke-midi-track-import` | [Main.cpp:14003](../src/Main.cpp#L14003) |
-| `--smoke-midi-export` | [Main.cpp:14332](../src/Main.cpp#L14332) |
-| `--sounding` | [Main.cpp:14457](../src/Main.cpp#L14457) |
-| `--still` | [Main.cpp:14589](../src/Main.cpp#L14589) |
-| `--smoke-ust-import` | [Main.cpp:14625](../src/Main.cpp#L14625) |
-| `--smoke-ust-encoding` | [Main.cpp:14766](../src/Main.cpp#L14766) |
-| `--smoke-ust` | [Main.cpp:14918](../src/Main.cpp#L14918) |
-| `--smoke-active-resampler` | [Main.cpp:15123](../src/Main.cpp#L15123) |
-| `--smoke-bundled-resampler` | [Main.cpp:15168](../src/Main.cpp#L15168) |
-| `--smoke-anchor-frequency` | [Main.cpp:15226](../src/Main.cpp#L15226) |
-| `--smoke-note-oto` | [Main.cpp:15412](../src/Main.cpp#L15412) |
-| `--smoke-prefix-jie` | [Main.cpp:15842](../src/Main.cpp#L15842) |
-| `--smoke-prefix-note` | [Main.cpp:15996](../src/Main.cpp#L15996) |
-| `--smoke-utau-overlap` | [Main.cpp:16353](../src/Main.cpp#L16353) |
-| `--smoke-note-stp` | [Main.cpp:16668](../src/Main.cpp#L16668) |
-| `--smoke-track-toggle-tips` | [Main.cpp:16907](../src/Main.cpp#L16907) |
-| `--smoke-track-area-menu` | [Main.cpp:17154](../src/Main.cpp#L17154) |
-| `--smoke-stretch-items` | [Main.cpp:17255](../src/Main.cpp#L17255) |
-| `--smoke-render-order` | [Main.cpp:17307](../src/Main.cpp#L17307) |
-| `--smoke-llsm2-length` | [Main.cpp:17439](../src/Main.cpp#L17439) |
-| `--smoke-glide-seam` | [Main.cpp:17491](../src/Main.cpp#L17491) |
-| `--smoke-native-envelope-base` | [Main.cpp:17555](../src/Main.cpp#L17555) |
-| `--smoke-nsf-utau-phrase` | [Main.cpp:17639](../src/Main.cpp#L17639) |
-| `--smoke-nsf-utau-synth` | [Main.cpp:17671](../src/Main.cpp#L17671) |
-| `--smoke-nsf-utau-f0` | [Main.cpp:17719](../src/Main.cpp#L17719) |
-| `--smoke-nsf-utau-mix` | [Main.cpp:17764](../src/Main.cpp#L17764) |
-| `--smoke-nsf-utau-plan` | [Main.cpp:17829](../src/Main.cpp#L17829) |
-| `--smoke-render-capability` | [Main.cpp:17886](../src/Main.cpp#L17886) |
-| `--smoke-oto-hjm-discipline` | [Main.cpp:17937](../src/Main.cpp#L17937) |
-| `--smoke-asset-register-dir` | [Main.cpp:18007](../src/Main.cpp#L18007) |
-| `--smoke-oto-audio` | [Main.cpp:18051](../src/Main.cpp#L18051) |
-| `--smoke-asset-audio` | [Main.cpp:18064](../src/Main.cpp#L18064) |
-| `--smoke-project-voicebank-assets` | [Main.cpp:18078](../src/Main.cpp#L18078) |
-| `--smoke-asset-search` | [Main.cpp:18084](../src/Main.cpp#L18084) |
-| `--smoke-asset-manager` | [Main.cpp:18093](../src/Main.cpp#L18093) |
-| `--smoke-gap-menu` | [Main.cpp:18218](../src/Main.cpp#L18218) |
-| `--smoke-insert-gap` | [Main.cpp:18337](../src/Main.cpp#L18337) |
-| `--smoke-ripple-delete` | [Main.cpp:18453](../src/Main.cpp#L18453) |
-| `--smoke-paste-notes` | [Main.cpp:18542](../src/Main.cpp#L18542) |
-| `--smoke-consonant-edge` | [Main.cpp:18718](../src/Main.cpp#L18718) |
-| `--smoke-consonant-reset` | [Main.cpp:18874](../src/Main.cpp#L18874) |
-| `--smoke-region-split` | [Main.cpp:18981](../src/Main.cpp#L18981) |
-| `--smoke-vibrato-presets` | [Main.cpp:19073](../src/Main.cpp#L19073) |
-| `--smoke-follow-rule` | [Main.cpp:19143](../src/Main.cpp#L19143) |
-| `--smoke-play-until` | [Main.cpp:19215](../src/Main.cpp#L19215) |
-| `--smoke-flags-field` | [Main.cpp:19274](../src/Main.cpp#L19274) |
-| `--smoke-vertical-drag` | [Main.cpp:19339](../src/Main.cpp#L19339) |
-| `--smoke-scroll-sync` | [Main.cpp:19432](../src/Main.cpp#L19432) |
-| `--smoke-edit-follow` | [Main.cpp:19513](../src/Main.cpp#L19513) |
-| `--smoke-note-drag-threshold` | [Main.cpp:19613](../src/Main.cpp#L19613) |
-| `--smoke-roll-drag` | [Main.cpp:19688](../src/Main.cpp#L19688) |
-| `--smoke-playhead-band` | [Main.cpp:19819](../src/Main.cpp#L19819) |
-| `--smoke-roll-cull` | [Main.cpp:19872](../src/Main.cpp#L19872) |
-| `--smoke-roll-timing` | [Main.cpp:19945](../src/Main.cpp#L19945) |
-| `--smoke-envelope-shapes` | [Main.cpp:19991](../src/Main.cpp#L19991) |
-| `--smoke-envelope-presets` | [Main.cpp:20308](../src/Main.cpp#L20308) |
-| `--smoke-piano-roll` | [Main.cpp:20324](../src/Main.cpp#L20324) |
-| `--render-project` | [Main.cpp:20372](../src/Main.cpp#L20372) |
-| `--inspect-project` | [Main.cpp:20501](../src/Main.cpp#L20501) |
-| `--inspect-settings` | [Main.cpp:20537](../src/Main.cpp#L20537) |
-| `--smoke-oto-spectrum` | [Main.cpp:20564](../src/Main.cpp#L20564) |
-| `--smoke-game-defaults` | [Main.cpp:20571](../src/Main.cpp#L20571) |
-| `--inspect-analysis` | [Main.cpp:20577](../src/Main.cpp#L20577) |
-| `--inspect-fcpe` | [Main.cpp:20599](../src/Main.cpp#L20599) |
-| `--smoke-export` | [Main.cpp:20625](../src/Main.cpp#L20625) |
-| `--smoke-mld5` | [Main.cpp:20655](../src/Main.cpp#L20655) |
-| `--smoke-utau-selection` | [Main.cpp:20748](../src/Main.cpp#L20748) |
-| `--smoke-utau-voicebank` | [Main.cpp:20862](../src/Main.cpp#L20862) |
-| `--smoke-utau` | [Main.cpp:20945](../src/Main.cpp#L20945) |
-| `--inspect-midi` | [Main.cpp:21031](../src/Main.cpp#L21031) |
-| `--inspect-audio` | [Main.cpp:21054](../src/Main.cpp#L21054) |
-| `--import-mpd` | [Main.cpp:21089](../src/Main.cpp#L21089) |
-| `--auto-merge-consonants` | [Main.cpp:21096](../src/Main.cpp#L21096) |
-| `--auto-virtual-connections` | [Main.cpp:21097](../src/Main.cpp#L21097) |
-| `--auto-virtual-pitch` | [Main.cpp:21098](../src/Main.cpp#L21098) |
-| `--no-register-transitions` | [Main.cpp:21099](../src/Main.cpp#L21099) |
-| `--recursive-media` | [Main.cpp:21100](../src/Main.cpp#L21100) |
-| `--inspect-mpd-split-transitions` | [Main.cpp:21124](../src/Main.cpp#L21124) |
-| `--inspect-mpd-joins` | [Main.cpp:21178](../src/Main.cpp#L21178) |
-| `--inspect-mpd` | [Main.cpp:21185](../src/Main.cpp#L21185) |
+| `--version` | [Main.cpp:272](../src/Main.cpp#L272) |
+| `--migrate-otto-folder` | [Main.cpp:274](../src/Main.cpp#L274) |
+| `--export-otto-folder` | [Main.cpp:275](../src/Main.cpp#L275) |
+| `--include-bare` | [Main.cpp:285](../src/Main.cpp#L285) |
+| `--replace` | [Main.cpp:289](../src/Main.cpp#L289) |
+| `--smoke-main-project-registration-ui` | [Main.cpp:299](../src/Main.cpp#L299) |
+| `--smoke-classic-note-scope` | [Main.cpp:305](../src/Main.cpp#L305) |
+| `--smoke-oto-provenance` | [Main.cpp:310](../src/Main.cpp#L310) |
+| `--smoke-community-dataset-menu` | [Main.cpp:315](../src/Main.cpp#L315) |
+| `--smoke-material-root-registration` | [Main.cpp:320](../src/Main.cpp#L320) |
+| `--smoke-variant-asset-ui` | [Main.cpp:325](../src/Main.cpp#L325) |
+| `--smoke-voicebank-family` | [Main.cpp:330](../src/Main.cpp#L330) |
+| `--smoke-track-types` | [Main.cpp:335](../src/Main.cpp#L335) |
+| `--smoke-engine-view-capabilities` | [Main.cpp:340](../src/Main.cpp#L340) |
+| `--smoke-track-editing-interfaces-ui` | [Main.cpp:347](../src/Main.cpp#L347) |
+| `--smoke-material-variants` | [Main.cpp:354](../src/Main.cpp#L354) |
+| `--smoke-community-dataset` | [Main.cpp:359](../src/Main.cpp#L359) |
+| `--smoke-ustx-importer` | [Main.cpp:365](../src/Main.cpp#L365) |
+| `--smoke-japanese-inference-dialog` | [Main.cpp:370](../src/Main.cpp#L370) |
+| `--smoke-japanese-inference-modes` | [Main.cpp:375](../src/Main.cpp#L375) |
+| `--smoke-native-source-reopen-scope` | [Main.cpp:380](../src/Main.cpp#L380) |
+| `--smoke-native-material-overlap` | [Main.cpp:386](../src/Main.cpp#L386) |
+| `--smoke-native-edge-profile-gui` | [Main.cpp:392](../src/Main.cpp#L392) |
+| `--smoke-native-pronunciation-edge-edit` | [Main.cpp:397](../src/Main.cpp#L397) |
+| `--smoke-native-source-slice-edges` | [Main.cpp:402](../src/Main.cpp#L402) |
+| `--smoke-native-source-assembly` | [Main.cpp:407](../src/Main.cpp#L407) |
+| `--smoke-world-source-assembly` | [Main.cpp:411](../src/Main.cpp#L411) |
+| `--smoke-melodyne-japanese-slice-contract` | [Main.cpp:415](../src/Main.cpp#L415) |
+| `--smoke-registration-japanese-choice` | [Main.cpp:417](../src/Main.cpp#L417) |
+| `--smoke-melodyne-japanese-slices` | [Main.cpp:419](../src/Main.cpp#L419) |
+| `--render-mld5-original-authoring` | [Main.cpp:427](../src/Main.cpp#L427) |
+| `--render-mld5-orders` | [Main.cpp:429](../src/Main.cpp#L429) |
+| `--smoke-melodyne-pitch-support` | [Main.cpp:431](../src/Main.cpp#L431) |
+| `--smoke-mld5-false-uv-audio` | [Main.cpp:433](../src/Main.cpp#L433) |
+| `--smoke-mld5-source-pitch-recovery` | [Main.cpp:435](../src/Main.cpp#L435) |
+| `--smoke-mld5-native-control` | [Main.cpp:437](../src/Main.cpp#L437) |
+| `--smoke-mld5-continuous-audio` | [Main.cpp:439](../src/Main.cpp#L439) |
+| `--smoke-mld5-continuous-plan` | [Main.cpp:441](../src/Main.cpp#L441) |
+| `--smoke-mld5-render-order-ui` | [Main.cpp:443](../src/Main.cpp#L443) |
+| `--smoke-mld5-recovered` | [Main.cpp:445](../src/Main.cpp#L445) |
+| `--smoke-focused-defaults` | [Main.cpp:447](../src/Main.cpp#L447) |
+| `--smoke-transition-pair-import-options` | [Main.cpp:449](../src/Main.cpp#L449) |
+| `--smoke-legacy-native-usage` | [Main.cpp:451](../src/Main.cpp#L451) |
+| `--smoke-native-melodyne-yellow` | [Main.cpp:453](../src/Main.cpp#L453) |
+| `--smoke-native-virtual-outer-trim` | [Main.cpp:455](../src/Main.cpp#L455) |
+| `--smoke-native-permanent-seam` | [Main.cpp:457](../src/Main.cpp#L457) |
+| `--smoke-native-virtual-single-line` | [Main.cpp:462](../src/Main.cpp#L462) |
+| `--smoke-native-virtual-handover-window` | [Main.cpp:467](../src/Main.cpp#L467) |
+| `--smoke-native-virtual-handover-gesture` | [Main.cpp:472](../src/Main.cpp#L472) |
+| `--smoke-native-virtual-flat-bezier` | [Main.cpp:477](../src/Main.cpp#L477) |
+| `--smoke-native-virtual-coupled-move` | [Main.cpp:482](../src/Main.cpp#L482) |
+| `--smoke-native-note-transition-menu` | [Main.cpp:487](../src/Main.cpp#L487) |
+| `--render-saved-nsf-three` | [Main.cpp:492](../src/Main.cpp#L492) |
+| `--profile-teio-request-fingerprint` | [Main.cpp:497](../src/Main.cpp#L497) |
+| `--render-teio-full-virtual` | [Main.cpp:509](../src/Main.cpp#L509) |
+| `--smoke-main-real-multi-bridge-window` | [Main.cpp:515](../src/Main.cpp#L515) |
+| `--smoke-native-real-multi-split-audio` | [Main.cpp:521](../src/Main.cpp#L521) |
+| `--smoke-native-virtual-hop-curve` | [Main.cpp:526](../src/Main.cpp#L526) |
+| `--smoke-native-virtual-peer-waveform` | [Main.cpp:531](../src/Main.cpp#L531) |
+| `--smoke-native-virtual-curve-tool` | [Main.cpp:536](../src/Main.cpp#L536) |
+| `--smoke-native-virtual-nonlinear-curve` | [Main.cpp:541](../src/Main.cpp#L541) |
+| `--smoke-native-virtual-same-file-skip` | [Main.cpp:546](../src/Main.cpp#L546) |
+| `--smoke-melodyne-optimization-entry` | [Main.cpp:551](../src/Main.cpp#L551) |
+| `--smoke-native-virtual-multi-split` | [Main.cpp:556](../src/Main.cpp#L556) |
+| `--smoke-native-virtual-chain-extension` | [Main.cpp:561](../src/Main.cpp#L561) |
+| `--smoke-native-virtual-unavailable-group` | [Main.cpp:566](../src/Main.cpp#L566) |
+| `--smoke-native-virtual-shared-pitch-gesture` | [Main.cpp:571](../src/Main.cpp#L571) |
+| `--smoke-native-virtual-chain-shared` | [Main.cpp:576](../src/Main.cpp#L576) |
+| `--smoke-native-virtual-waveform-hash` | [Main.cpp:581](../src/Main.cpp#L581) |
+| `--smoke-native-virtual-export-parity` | [Main.cpp:586](../src/Main.cpp#L586) |
+| `--smoke-native-virtual-glide-audio` | [Main.cpp:591](../src/Main.cpp#L591) |
+| `--smoke-native-partial-cut-drag-gesture` | [Main.cpp:596](../src/Main.cpp#L596) |
+| `--real-partial-cut-drag` | [Main.cpp:601](../src/Main.cpp#L601) |
+| `--smoke-native-partial-cut-move` | [Main.cpp:609](../src/Main.cpp#L609) |
+| `--smoke-native-consonant-merge-detection` | [Main.cpp:614](../src/Main.cpp#L614) |
+| `--smoke-native-consonant-merge-model` | [Main.cpp:619](../src/Main.cpp#L619) |
+| `--smoke-native-consonant-merge-plan` | [Main.cpp:624](../src/Main.cpp#L624) |
+| `--smoke-native-virtual-connection-ui` | [Main.cpp:629](../src/Main.cpp#L629) |
+| `--smoke-native-logical-transition-registration` | [Main.cpp:634](../src/Main.cpp#L634) |
+| `--smoke-native-split-transition-detection` | [Main.cpp:639](../src/Main.cpp#L639) |
+| `--smoke-native-split-transition-mixer` | [Main.cpp:644](../src/Main.cpp#L644) |
+| `--smoke-native-split-transition-plan` | [Main.cpp:649](../src/Main.cpp#L649) |
+| `--smoke-native-virtual-auto` | [Main.cpp:654](../src/Main.cpp#L654) |
+| `--smoke-native-virtual-pitch-edit` | [Main.cpp:659](../src/Main.cpp#L659) |
+| `--smoke-native-virtual-move` | [Main.cpp:664](../src/Main.cpp#L664) |
+| `--smoke-native-virtual-pitch-request` | [Main.cpp:669](../src/Main.cpp#L669) |
+| `--smoke-native-virtual-pitch-plan` | [Main.cpp:674](../src/Main.cpp#L674) |
+| `--smoke-native-virtual-mixer` | [Main.cpp:679](../src/Main.cpp#L679) |
+| `--smoke-native-virtual-entrypoints` | [Main.cpp:684](../src/Main.cpp#L684) |
+| `--smoke-native-virtual-model` | [Main.cpp:689](../src/Main.cpp#L689) |
+| `--smoke-native-virtual-plan` | [Main.cpp:694](../src/Main.cpp#L694) |
+| `--smoke-native-source-edge-mixer` | [Main.cpp:699](../src/Main.cpp#L699) |
+| `--smoke-native-score-replacement-ui` | [Main.cpp:704](../src/Main.cpp#L704) |
+| `--smoke-native-score-material-replacement` | [Main.cpp:710](../src/Main.cpp#L710) |
+| `--smoke-translation-no-file` | [Main.cpp:715](../src/Main.cpp#L715) |
+| `--smoke-translation-file` | [Main.cpp:720](../src/Main.cpp#L720) |
+| `--export-translations` | [Main.cpp:725](../src/Main.cpp#L725) |
+| `--smoke-teio-transition-registration` | [Main.cpp:734](../src/Main.cpp#L734) |
+| `--smoke-native-transition-detection` | [Main.cpp:739](../src/Main.cpp#L739) |
+| `--smoke-native-source-trend` | [Main.cpp:744](../src/Main.cpp#L744) |
+| `--smoke-native-transition-shape` | [Main.cpp:749](../src/Main.cpp#L749) |
+| `--smoke-native-midi-material` | [Main.cpp:754](../src/Main.cpp#L754) |
+| `--smoke-native-material-appearance` | [Main.cpp:759](../src/Main.cpp#L759) |
+| `--smoke-native-note-clicks` | [Main.cpp:764](../src/Main.cpp#L764) |
+| `--smoke-native-force-connection-ui` | [Main.cpp:769](../src/Main.cpp#L769) |
+| `--smoke-native-force-connection` | [Main.cpp:775](../src/Main.cpp#L775) |
+| `--smoke-melodyne-timing` | [Main.cpp:780](../src/Main.cpp#L780) |
+| `--smoke-native-source-edge-plan` | [Main.cpp:786](../src/Main.cpp#L786) |
+| `--smoke-source-preview-ui` | [Main.cpp:791](../src/Main.cpp#L791) |
+| `--smoke-main-japanese-annotation` | [Main.cpp:797](../src/Main.cpp#L797) |
+| `--smoke-japanese-annotation-safety` | [Main.cpp:804](../src/Main.cpp#L804) |
+| `--smoke-japanese-auto-annotation` | [Main.cpp:809](../src/Main.cpp#L809) |
+| `--smoke-main-community-import` | [Main.cpp:816](../src/Main.cpp#L816) |
+| `--smoke-community-import-gui` | [Main.cpp:823](../src/Main.cpp#L823) |
+| `--smoke-registered-project-audio` | [Main.cpp:829](../src/Main.cpp#L829) |
+| `--smoke-registration-facts` | [Main.cpp:835](../src/Main.cpp#L835) |
+| `--smoke-main-material-variants` | [Main.cpp:840](../src/Main.cpp#L840) |
+| `--audit-project-material-registration` | [Main.cpp:846](../src/Main.cpp#L846) |
+| `--smoke-project-material-registration-model` | [Main.cpp:855](../src/Main.cpp#L855) |
+| `--smoke-project-material-registration` | [Main.cpp:860](../src/Main.cpp#L860) |
+| `--smoke-note-material-local-override` | [Main.cpp:865](../src/Main.cpp#L865) |
+| `--smoke-local-material-scope` | [Main.cpp:870](../src/Main.cpp#L870) |
+| `--smoke-connection-pitch-ui` | [Main.cpp:875](../src/Main.cpp#L875) |
+| `--smoke-host-pitch-projection` | [Main.cpp:880](../src/Main.cpp#L880) |
+| `--smoke-material-pronunciation-catalog` | [Main.cpp:885](../src/Main.cpp#L885) |
+| `--smoke-graph-pitch-edit-batch` | [Main.cpp:890](../src/Main.cpp#L890) |
+| `--smoke-overlap-selector` | [Main.cpp:895](../src/Main.cpp#L895) |
+| `--smoke-forced-portamento-audio` | [Main.cpp:900](../src/Main.cpp#L900) |
+| `--smoke-track-pitch-scope` | [Main.cpp:906](../src/Main.cpp#L906) |
+| `--smoke-forced-portamento` | [Main.cpp:911](../src/Main.cpp#L911) |
+| `--smoke-named-vowel` | [Main.cpp:916](../src/Main.cpp#L916) |
+| `--smoke-vowel-timing-audio` | [Main.cpp:921](../src/Main.cpp#L921) |
+| `--smoke-pronunciation-timing` | [Main.cpp:927](../src/Main.cpp#L927) |
+| `--smoke-adjacent-pronunciation` | [Main.cpp:932](../src/Main.cpp#L932) |
+| `--smoke-vowel-stretch-alignment` | [Main.cpp:937](../src/Main.cpp#L937) |
+| `--smoke-material-source-replacement` | [Main.cpp:942](../src/Main.cpp#L942) |
+| `--smoke-native-nsf-compatibility` | [Main.cpp:947](../src/Main.cpp#L947) |
+| `--smoke-native-workflow-e2e` | [Main.cpp:953](../src/Main.cpp#L953) |
+| `--smoke-material-topology-audio` | [Main.cpp:962](../src/Main.cpp#L962) |
+| `--smoke-midi-export-scope` | [Main.cpp:968](../src/Main.cpp#L968) |
+| `--smoke-unified-draw-action` | [Main.cpp:974](../src/Main.cpp#L974) |
+| `--smoke-main-source-replacement-ui` | [Main.cpp:980](../src/Main.cpp#L980) |
+| `--smoke-single-entry-ui` | [Main.cpp:988](../src/Main.cpp#L988) |
+| `--smoke-nsf-native-expression` | [Main.cpp:996](../src/Main.cpp#L996) |
+| `--smoke-material-topology` | [Main.cpp:1004](../src/Main.cpp#L1004) |
+| `--smoke-native-connection-graph` | [Main.cpp:1010](../src/Main.cpp#L1010) |
+| `--smoke-material-format-auto` | [Main.cpp:1016](../src/Main.cpp#L1016) |
+| `--smoke-unified-material-editor` | [Main.cpp:1022](../src/Main.cpp#L1022) |
+| `--smoke-material-insertion` | [Main.cpp:1028](../src/Main.cpp#L1028) |
+| `--smoke-material-asset-tree` | [Main.cpp:1034](../src/Main.cpp#L1034) |
+| `--smoke-material-annotation` | [Main.cpp:1040](../src/Main.cpp#L1040) |
+| `--smoke-material-binding` | [Main.cpp:1046](../src/Main.cpp#L1046) |
+| `--smoke-otto-material` | [Main.cpp:1052](../src/Main.cpp#L1052) |
+| `--audit-hamood-keys` | [Main.cpp:1061](../src/Main.cpp#L1061) |
+| `--smoke-hamood-utau` | [Main.cpp:1080](../src/Main.cpp#L1080) |
+| `--smoke-hamood` | [Main.cpp:1086](../src/Main.cpp#L1086) |
+| `--smoke-diffsinger-pitch-offset` | [Main.cpp:1093](../src/Main.cpp#L1093) |
+| `--smoke-accompaniment-tempo` | [Main.cpp:1100](../src/Main.cpp#L1100) |
+| `--smoke-accompaniment` | [Main.cpp:1116](../src/Main.cpp#L1116) |
+| `--smoke-wav-export-options` | [Main.cpp:1123](../src/Main.cpp#L1123) |
+| `--smoke-diffsinger-pitch-persistence` | [Main.cpp:1133](../src/Main.cpp#L1133) |
+| `--reopen` | [Main.cpp:1137](../src/Main.cpp#L1137) |
+| `--smoke-diffsinger-pitch-handles` | [Main.cpp:1141](../src/Main.cpp#L1141) |
+| `--smoke-diffsinger-pitch-restore` | [Main.cpp:1147](../src/Main.cpp#L1147) |
+| `--smoke-diffsinger-pitch-reference` | [Main.cpp:1154](../src/Main.cpp#L1154) |
+| `--smoke-continuous-flag` | [Main.cpp:1160](../src/Main.cpp#L1160) |
+| `--smoke-classic-flag-ui` | [Main.cpp:1167](../src/Main.cpp#L1167) |
+| `--smoke-diffsinger-inference` | [Main.cpp:1176](../src/Main.cpp#L1176) |
+| `--smoke-diffsinger-parameter-retake` | [Main.cpp:1182](../src/Main.cpp#L1182) |
+| `--smoke-diffsinger-cache` | [Main.cpp:1189](../src/Main.cpp#L1189) |
+| `--smoke-diffsinger-parameters` | [Main.cpp:1194](../src/Main.cpp#L1194) |
+| `--smoke-diffsinger-expressions` | [Main.cpp:1199](../src/Main.cpp#L1199) |
+| `--smoke-diffsinger-consonants` | [Main.cpp:1206](../src/Main.cpp#L1206) |
+| `--smoke-diffsinger-timing` | [Main.cpp:1212](../src/Main.cpp#L1212) |
+| `--smoke-diffsinger-ui` | [Main.cpp:1219](../src/Main.cpp#L1219) |
+| `--smoke-diffsinger` | [Main.cpp:1228](../src/Main.cpp#L1228) |
+| `--smoke-chinese-cvvc` | [Main.cpp:1235](../src/Main.cpp#L1235) |
+| `--smoke-output-engine` | [Main.cpp:1243](../src/Main.cpp#L1243) |
+| `--smoke-native-vibrato` | [Main.cpp:1252](../src/Main.cpp#L1252) |
+| `--smoke-native-vibrato-render` | [Main.cpp:1263](../src/Main.cpp#L1263) |
+| `--smoke-native-noise-option` | [Main.cpp:1269](../src/Main.cpp#L1269) |
+| `--smoke-native-incremental` | [Main.cpp:1277](../src/Main.cpp#L1277) |
+| `--smoke-native-shutdown` | [Main.cpp:1285](../src/Main.cpp#L1285) |
+| `--smoke-native-noise` | [Main.cpp:1293](../src/Main.cpp#L1293) |
+| `--smoke-wcs-nonloop` | [Main.cpp:1300](../src/Main.cpp#L1300) |
+| `--smoke-hn-cache` | [Main.cpp:1307](../src/Main.cpp#L1307) |
+| `--force` | [Main.cpp:1310](../src/Main.cpp#L1310) |
+| `--smoke-hifisampler` | [Main.cpp:1314](../src/Main.cpp#L1314) |
+| `--smoke-hifishifter-mel` | [Main.cpp:1314](../src/Main.cpp#L1314) |
+| `--smoke-nsf-regions` | [Main.cpp:1323](../src/Main.cpp#L1323) |
+| `--smoke-nsf-pitch-transitions` | [Main.cpp:1331](../src/Main.cpp#L1331) |
+| `--smoke-voicebank-import` | [Main.cpp:1337](../src/Main.cpp#L1337) |
+| `--smoke-voicebank-selection` | [Main.cpp:1343](../src/Main.cpp#L1343) |
+| `--smoke-mld5-picker` | [Main.cpp:1352](../src/Main.cpp#L1352) |
+| `--smoke-nsf-picker` | [Main.cpp:1354](../src/Main.cpp#L1354) |
+| `--smoke-cross-region-editing` | [Main.cpp:1363](../src/Main.cpp#L1363) |
+| `--smoke-hamood-persistence` | [Main.cpp:1363](../src/Main.cpp#L1363) |
+| `--smoke-mou-to-jie` | [Main.cpp:1370](../src/Main.cpp#L1370) |
+| `--smoke-oto-overlap` | [Main.cpp:1376](../src/Main.cpp#L1376) |
+| `--smoke-modeless-oto` | [Main.cpp:1382](../src/Main.cpp#L1382) |
+| `--smoke-oto-continuity` | [Main.cpp:1387](../src/Main.cpp#L1387) |
+| `--smoke-native-envelope` | [Main.cpp:1392](../src/Main.cpp#L1392) |
+| `--smoke-cvvc-layout-cache` | [Main.cpp:1397](../src/Main.cpp#L1397) |
+| `--smoke-auto-crossfade` | [Main.cpp:1402](../src/Main.cpp#L1402) |
+| `--smoke-pitch-point-selection` | [Main.cpp:1407](../src/Main.cpp#L1407) |
+| `--smoke-point-group` | [Main.cpp:1412](../src/Main.cpp#L1412) |
+| `--smoke-envelope-point-selection` | [Main.cpp:1417](../src/Main.cpp#L1417) |
+| `--smoke-native-linked-envelope` | [Main.cpp:1422](../src/Main.cpp#L1422) |
+| `--smoke-advanced-envelope` | [Main.cpp:1427](../src/Main.cpp#L1427) |
+| `--smoke-advanced-envelope-panel` | [Main.cpp:1427](../src/Main.cpp#L1427) |
+| `--smoke-playback-priority` | [Main.cpp:1432](../src/Main.cpp#L1432) |
+| `--smoke-ust-fidelity` | [Main.cpp:1433](../src/Main.cpp#L1433) |
+| `--smoke-project-safety` | [Main.cpp:1434](../src/Main.cpp#L1434) |
+| `--smoke-normal-display` | [Main.cpp:1442](../src/Main.cpp#L1442) |
+| `--smoke-note-hints` | [Main.cpp:1450](../src/Main.cpp#L1450) |
+| `--smoke-clip-editor-scope` | [Main.cpp:1458](../src/Main.cpp#L1458) |
+| `--smoke-empty-tuning-clip` | [Main.cpp:1466](../src/Main.cpp#L1466) |
+| `--smoke-track-gain-envelope` | [Main.cpp:1474](../src/Main.cpp#L1474) |
+| `--smoke-native-rendered-waveform` | [Main.cpp:1482](../src/Main.cpp#L1482) |
+| `--smoke-native-note-move` | [Main.cpp:1489](../src/Main.cpp#L1489) |
+| `--smoke-native-source-pitch-restore` | [Main.cpp:1495](../src/Main.cpp#L1495) |
+| `--smoke-native-audio-overlap-focus` | [Main.cpp:1501](../src/Main.cpp#L1501) |
+| `--smoke-native-audio-overlap` | [Main.cpp:1507](../src/Main.cpp#L1507) |
+| `--smoke-native-linked-pitch` | [Main.cpp:1513](../src/Main.cpp#L1513) |
+| `--smoke-source-breathiness` | [Main.cpp:1520](../src/Main.cpp#L1520) |
+| `--smoke-native-unpitched-regions` | [Main.cpp:1527](../src/Main.cpp#L1527) |
+| `--smoke-native-consonant-display` | [Main.cpp:1535](../src/Main.cpp#L1535) |
+| `--smoke-native-pitch-visibility` | [Main.cpp:1542](../src/Main.cpp#L1542) |
+| `--smoke-native-audio-link` | [Main.cpp:1548](../src/Main.cpp#L1548) |
+| `--smoke-native-note-join` | [Main.cpp:1554](../src/Main.cpp#L1554) |
+| `--smoke-native-trim-expand` | [Main.cpp:1559](../src/Main.cpp#L1559) |
+| `--smoke-native-audio-trim` | [Main.cpp:1564](../src/Main.cpp#L1564) |
+| `--smoke-native-audio-disconnect` | [Main.cpp:1570](../src/Main.cpp#L1570) |
+| `--smoke-native-note-copy-paste` | [Main.cpp:1576](../src/Main.cpp#L1576) |
+| `--smoke-native-import-performance` | [Main.cpp:1583](../src/Main.cpp#L1583) |
+| `--smoke-native-source-pitch` | [Main.cpp:1590](../src/Main.cpp#L1590) |
+| `--smoke-native-waveform-preview` | [Main.cpp:1598](../src/Main.cpp#L1598) |
+| `--smoke-timeline-notes` | [Main.cpp:1606](../src/Main.cpp#L1606) |
+| `--smoke-clip-gain-knob` | [Main.cpp:1614](../src/Main.cpp#L1614) |
+| `--smoke-clip-merge` | [Main.cpp:1622](../src/Main.cpp#L1622) |
+| `--smoke-timeline-selection` | [Main.cpp:1630](../src/Main.cpp#L1630) |
+| `--smoke-clip-trim` | [Main.cpp:1638](../src/Main.cpp#L1638) |
+| `--smoke-clip-split` | [Main.cpp:1647](../src/Main.cpp#L1647) |
+| `--smoke-independent-zoom` | [Main.cpp:1656](../src/Main.cpp#L1656) |
+| `--smoke-scroll-zoom` | [Main.cpp:1665](../src/Main.cpp#L1665) |
+| `--preview-note-dance` | [Main.cpp:1674](../src/Main.cpp#L1674) |
+| `--smoke-tempo-change` | [Main.cpp:1682](../src/Main.cpp#L1682) |
+| `--smoke-timeline-pit` | [Main.cpp:1691](../src/Main.cpp#L1691) |
+| `--mcp-live` | [Main.cpp:1697](../src/Main.cpp#L1697) |
+| `--mcp-list-sessions` | [Main.cpp:1697](../src/Main.cpp#L1697) |
+| `--session` | [Main.cpp:1700](../src/Main.cpp#L1700) |
+| `--smoke-hifisampler-envelope` | [Main.cpp:1705](../src/Main.cpp#L1705) |
+| `--smoke-nsf-project-note` | [Main.cpp:1711](../src/Main.cpp#L1711) |
+| `--mcp` | [Main.cpp:1717](../src/Main.cpp#L1717) |
+| `--roots` | [Main.cpp:1719](../src/Main.cpp#L1719) |
+| `--smoke-oto-playback` | [Main.cpp:1731](../src/Main.cpp#L1731) |
+| `--smoke-oto-editor` | [Main.cpp:1931](../src/Main.cpp#L1931) |
+| `--click` | [Main.cpp:2042](../src/Main.cpp#L2042) |
+| `--smoke-splice-envelope` | [Main.cpp:2054](../src/Main.cpp#L2054) |
+| `--smoke-dialog-enter` | [Main.cpp:2164](../src/Main.cpp#L2164) |
+| `--smoke-source-edit-view` | [Main.cpp:2222](../src/Main.cpp#L2222) |
+| `--smoke-consonant-hold` | [Main.cpp:2284](../src/Main.cpp#L2284) |
+| `--smoke-mou-panel-counts` | [Main.cpp:2504](../src/Main.cpp#L2504) |
+| `--smoke-mou-consonant-ticks` | [Main.cpp:2595](../src/Main.cpp#L2595) |
+| `--smoke-mou-boundary-drag` | [Main.cpp:2748](../src/Main.cpp#L2748) |
+| `--smoke-prefix-map` | [Main.cpp:2837](../src/Main.cpp#L2837) |
+| `--repair-mou-oto` | [Main.cpp:2878](../src/Main.cpp#L2878) |
+| `--smoke-mou-oto-file` | [Main.cpp:2899](../src/Main.cpp#L2899) |
+| `--smoke-utau-mode` | [Main.cpp:3098](../src/Main.cpp#L3098) |
+| `--smoke-lane-marquee` | [Main.cpp:3238](../src/Main.cpp#L3238) |
+| `--smoke-flag-lane` | [Main.cpp:3339](../src/Main.cpp#L3339) |
+| `--smoke-keyboard-labels` | [Main.cpp:4200](../src/Main.cpp#L4200) |
+| `--smoke-lane-labels` | [Main.cpp:4254](../src/Main.cpp#L4254) |
+| `--smoke-export-targets` | [Main.cpp:4282](../src/Main.cpp#L4282) |
+| `--smoke-audition-position` | [Main.cpp:4388](../src/Main.cpp#L4388) |
+| `--smoke-lyric-envelope` | [Main.cpp:4430](../src/Main.cpp#L4430) |
+| `--smoke-lyric-timing` | [Main.cpp:4502](../src/Main.cpp#L4502) |
+| `--smoke-vibrato-bake` | [Main.cpp:4601](../src/Main.cpp#L4601) |
+| `--smoke-mou-note-regions` | [Main.cpp:4714](../src/Main.cpp#L4714) |
+| `--smoke-region-guides` | [Main.cpp:5000](../src/Main.cpp#L5000) |
+| `--smoke-rest-playback` | [Main.cpp:5074](../src/Main.cpp#L5074) |
+| `--smoke-rest-lyric` | [Main.cpp:5170](../src/Main.cpp#L5170) |
+| `--smoke-missing-alias-piano` | [Main.cpp:5333](../src/Main.cpp#L5333) |
+| `--smoke-flag-curve-mode` | [Main.cpp:5460](../src/Main.cpp#L5460) |
+| `--smoke-flag-point-value` | [Main.cpp:5645](../src/Main.cpp#L5645) |
+| `--smoke-flag-overlap` | [Main.cpp:5735](../src/Main.cpp#L5735) |
+| `--smoke-load-timing` | [Main.cpp:5850](../src/Main.cpp#L5850) |
+| `--smoke-flatten-pitch-line` | [Main.cpp:5963](../src/Main.cpp#L5963) |
+| `--smoke-note-across-tracks` | [Main.cpp:6123](../src/Main.cpp#L6123) |
+| `--smoke-clip-across-tracks` | [Main.cpp:6279](../src/Main.cpp#L6279) |
+| `--smoke-reference-track` | [Main.cpp:6428](../src/Main.cpp#L6428) |
+| `--smoke-native-pitch-seam` | [Main.cpp:6576](../src/Main.cpp#L6576) |
+| `--smoke-native-pitch-points` | [Main.cpp:6648](../src/Main.cpp#L6648) |
+| `--smoke-paste-at-pointer` | [Main.cpp:6872](../src/Main.cpp#L6872) |
+| `--smoke-note-menu-split` | [Main.cpp:7015](../src/Main.cpp#L7015) |
+| `--smoke-lyric-gate` | [Main.cpp:7197](../src/Main.cpp#L7197) |
+| `--smoke-lyric-tab` | [Main.cpp:7294](../src/Main.cpp#L7294) |
+| `--smoke-syllable-cuts` | [Main.cpp:7494](../src/Main.cpp#L7494) |
+| `--smoke-single-syllable` | [Main.cpp:7676](../src/Main.cpp#L7676) |
+| `--smoke-deleted-notes-silent` | [Main.cpp:7783](../src/Main.cpp#L7783) |
+| `--smoke-delete-clip` | [Main.cpp:7930](../src/Main.cpp#L7930) |
+| `--smoke-draw-unit` | [Main.cpp:8027](../src/Main.cpp#L8027) |
+| `--smoke-new-track-draw` | [Main.cpp:8121](../src/Main.cpp#L8121) |
+| `--smoke-draw-drag` | [Main.cpp:8230](../src/Main.cpp#L8230) |
+| `--smoke-draw-overlap` | [Main.cpp:8402](../src/Main.cpp#L8402) |
+| `--smoke-dropdown-arrow` | [Main.cpp:8588](../src/Main.cpp#L8588) |
+| `--smoke-pitch-line` | [Main.cpp:8679](../src/Main.cpp#L8679) |
+| `--smoke-view-menu` | [Main.cpp:8970](../src/Main.cpp#L8970) |
+| `--inspect-melodyne-tracks` | [Main.cpp:9083](../src/Main.cpp#L9083) |
+| `--smoke-melodyne-provider` | [Main.cpp:9094](../src/Main.cpp#L9094) |
+| `--probe-melodyne-vst3-instance` | [Main.cpp:9119](../src/Main.cpp#L9119) |
+| `--smoke-native-timing` | [Main.cpp:9131](../src/Main.cpp#L9131) |
+| `--smoke-file-only-translation-ui` | [Main.cpp:9188](../src/Main.cpp#L9188) |
+| `--smoke-gui198-layout` | [Main.cpp:9193](../src/Main.cpp#L9193) |
+| `--smoke-integrated-ui` | [Main.cpp:9208](../src/Main.cpp#L9208) |
+| `--smoke-integrated` | [Main.cpp:9217](../src/Main.cpp#L9217) |
+| `--smoke-native-hjm` | [Main.cpp:9223](../src/Main.cpp#L9223) |
+| `--smoke-batch-lyrics` | [Main.cpp:9290](../src/Main.cpp#L9290) |
+| `--smoke-envelope-lanes` | [Main.cpp:9382](../src/Main.cpp#L9382) |
+| `--smoke-wheel` | [Main.cpp:9441](../src/Main.cpp#L9441) |
+| `--smoke-waveform-toggle` | [Main.cpp:9482](../src/Main.cpp#L9482) |
+| `--smoke-envelope-base` | [Main.cpp:9592](../src/Main.cpp#L9592) |
+| `--smoke-amplitude-waveform` | [Main.cpp:9913](../src/Main.cpp#L9913) |
+| `--smoke-vibrato-end` | [Main.cpp:10371](../src/Main.cpp#L10371) |
+| `--smoke-hanzi-pinyin` | [Main.cpp:10631](../src/Main.cpp#L10631) |
+| `--smoke-shared-pitch-line` | [Main.cpp:10770](../src/Main.cpp#L10770) |
+| `--smoke-waveform-alignment` | [Main.cpp:11428](../src/Main.cpp#L11428) |
+| `--smoke-note-waveform` | [Main.cpp:11627](../src/Main.cpp#L11627) |
+| `--smoke-utau-waveform` | [Main.cpp:11933](../src/Main.cpp#L11933) |
+| `--smoke-voicebank-index` | [Main.cpp:12107](../src/Main.cpp#L12107) |
+| `--smoke-ust-pitch` | [Main.cpp:12573](../src/Main.cpp#L12573) |
+| `--low` | [Main.cpp:12878](../src/Main.cpp#L12878) |
+| `--smoke-hf-daemon-owner` | [Main.cpp:12997](../src/Main.cpp#L12997) |
+| `--quit` | [Main.cpp:13005](../src/Main.cpp#L13005) |
+| `--smoke-hf-prewarm` | [Main.cpp:13010](../src/Main.cpp#L13010) |
+| `--smoke-ust-vibrato` | [Main.cpp:13143](../src/Main.cpp#L13143) |
+| `--smoke-mcp-roots` | [Main.cpp:13388](../src/Main.cpp#L13388) |
+| `--smoke-mcp-schema` | [Main.cpp:13495](../src/Main.cpp#L13495) |
+| `--smoke-dragged-transition` | [Main.cpp:13660](../src/Main.cpp#L13660) |
+| `--smoke-forward-bend` | [Main.cpp:13883](../src/Main.cpp#L13883) |
+| `--smoke-midi-track-import` | [Main.cpp:14055](../src/Main.cpp#L14055) |
+| `--smoke-midi-export` | [Main.cpp:14384](../src/Main.cpp#L14384) |
+| `--sounding` | [Main.cpp:14509](../src/Main.cpp#L14509) |
+| `--still` | [Main.cpp:14641](../src/Main.cpp#L14641) |
+| `--smoke-ust-import` | [Main.cpp:14677](../src/Main.cpp#L14677) |
+| `--smoke-ust-encoding` | [Main.cpp:14818](../src/Main.cpp#L14818) |
+| `--smoke-ust` | [Main.cpp:14970](../src/Main.cpp#L14970) |
+| `--smoke-active-resampler` | [Main.cpp:15175](../src/Main.cpp#L15175) |
+| `--smoke-bundled-resampler` | [Main.cpp:15220](../src/Main.cpp#L15220) |
+| `--smoke-anchor-frequency` | [Main.cpp:15278](../src/Main.cpp#L15278) |
+| `--smoke-note-oto` | [Main.cpp:15464](../src/Main.cpp#L15464) |
+| `--smoke-prefix-jie` | [Main.cpp:15894](../src/Main.cpp#L15894) |
+| `--smoke-prefix-note` | [Main.cpp:16048](../src/Main.cpp#L16048) |
+| `--smoke-utau-overlap` | [Main.cpp:16405](../src/Main.cpp#L16405) |
+| `--smoke-note-stp` | [Main.cpp:16720](../src/Main.cpp#L16720) |
+| `--smoke-track-toggle-tips` | [Main.cpp:16959](../src/Main.cpp#L16959) |
+| `--smoke-track-area-menu` | [Main.cpp:17206](../src/Main.cpp#L17206) |
+| `--smoke-stretch-items` | [Main.cpp:17307](../src/Main.cpp#L17307) |
+| `--smoke-render-order` | [Main.cpp:17359](../src/Main.cpp#L17359) |
+| `--smoke-llsm2-length` | [Main.cpp:17491](../src/Main.cpp#L17491) |
+| `--smoke-glide-seam` | [Main.cpp:17543](../src/Main.cpp#L17543) |
+| `--smoke-native-envelope-base` | [Main.cpp:17607](../src/Main.cpp#L17607) |
+| `--smoke-nsf-utau-phrase` | [Main.cpp:17691](../src/Main.cpp#L17691) |
+| `--smoke-nsf-utau-synth` | [Main.cpp:17723](../src/Main.cpp#L17723) |
+| `--smoke-nsf-utau-f0` | [Main.cpp:17771](../src/Main.cpp#L17771) |
+| `--smoke-nsf-utau-mix` | [Main.cpp:17816](../src/Main.cpp#L17816) |
+| `--smoke-nsf-utau-plan` | [Main.cpp:17881](../src/Main.cpp#L17881) |
+| `--smoke-render-capability` | [Main.cpp:17938](../src/Main.cpp#L17938) |
+| `--smoke-oto-hjm-discipline` | [Main.cpp:17989](../src/Main.cpp#L17989) |
+| `--smoke-asset-register-dir` | [Main.cpp:18059](../src/Main.cpp#L18059) |
+| `--smoke-oto-audio` | [Main.cpp:18103](../src/Main.cpp#L18103) |
+| `--smoke-asset-audio` | [Main.cpp:18116](../src/Main.cpp#L18116) |
+| `--smoke-project-voicebank-assets` | [Main.cpp:18130](../src/Main.cpp#L18130) |
+| `--smoke-asset-search` | [Main.cpp:18136](../src/Main.cpp#L18136) |
+| `--smoke-asset-manager` | [Main.cpp:18145](../src/Main.cpp#L18145) |
+| `--smoke-gap-menu` | [Main.cpp:18270](../src/Main.cpp#L18270) |
+| `--smoke-insert-gap` | [Main.cpp:18389](../src/Main.cpp#L18389) |
+| `--smoke-ripple-delete` | [Main.cpp:18505](../src/Main.cpp#L18505) |
+| `--smoke-paste-notes` | [Main.cpp:18594](../src/Main.cpp#L18594) |
+| `--smoke-consonant-edge` | [Main.cpp:18770](../src/Main.cpp#L18770) |
+| `--smoke-consonant-reset` | [Main.cpp:18926](../src/Main.cpp#L18926) |
+| `--smoke-region-split` | [Main.cpp:19033](../src/Main.cpp#L19033) |
+| `--smoke-vibrato-presets` | [Main.cpp:19125](../src/Main.cpp#L19125) |
+| `--smoke-follow-rule` | [Main.cpp:19195](../src/Main.cpp#L19195) |
+| `--smoke-play-until` | [Main.cpp:19267](../src/Main.cpp#L19267) |
+| `--smoke-flags-field` | [Main.cpp:19326](../src/Main.cpp#L19326) |
+| `--smoke-vertical-drag` | [Main.cpp:19391](../src/Main.cpp#L19391) |
+| `--smoke-scroll-sync` | [Main.cpp:19484](../src/Main.cpp#L19484) |
+| `--smoke-edit-follow` | [Main.cpp:19565](../src/Main.cpp#L19565) |
+| `--smoke-note-drag-threshold` | [Main.cpp:19665](../src/Main.cpp#L19665) |
+| `--smoke-roll-drag` | [Main.cpp:19740](../src/Main.cpp#L19740) |
+| `--smoke-playhead-band` | [Main.cpp:19871](../src/Main.cpp#L19871) |
+| `--smoke-roll-cull` | [Main.cpp:19924](../src/Main.cpp#L19924) |
+| `--smoke-roll-timing` | [Main.cpp:19997](../src/Main.cpp#L19997) |
+| `--smoke-envelope-shapes` | [Main.cpp:20043](../src/Main.cpp#L20043) |
+| `--smoke-envelope-presets` | [Main.cpp:20360](../src/Main.cpp#L20360) |
+| `--smoke-piano-roll` | [Main.cpp:20376](../src/Main.cpp#L20376) |
+| `--render-project` | [Main.cpp:20424](../src/Main.cpp#L20424) |
+| `--inspect-project` | [Main.cpp:20553](../src/Main.cpp#L20553) |
+| `--inspect-settings` | [Main.cpp:20589](../src/Main.cpp#L20589) |
+| `--smoke-oto-spectrum` | [Main.cpp:20616](../src/Main.cpp#L20616) |
+| `--smoke-game-defaults` | [Main.cpp:20623](../src/Main.cpp#L20623) |
+| `--inspect-analysis` | [Main.cpp:20629](../src/Main.cpp#L20629) |
+| `--inspect-fcpe` | [Main.cpp:20651](../src/Main.cpp#L20651) |
+| `--smoke-export` | [Main.cpp:20677](../src/Main.cpp#L20677) |
+| `--smoke-mld5` | [Main.cpp:20707](../src/Main.cpp#L20707) |
+| `--smoke-utau-selection` | [Main.cpp:20800](../src/Main.cpp#L20800) |
+| `--smoke-utau-voicebank` | [Main.cpp:20914](../src/Main.cpp#L20914) |
+| `--smoke-utau` | [Main.cpp:20997](../src/Main.cpp#L20997) |
+| `--inspect-midi` | [Main.cpp:21083](../src/Main.cpp#L21083) |
+| `--inspect-audio` | [Main.cpp:21106](../src/Main.cpp#L21106) |
+| `--import-mpd` | [Main.cpp:21141](../src/Main.cpp#L21141) |
+| `--auto-merge-consonants` | [Main.cpp:21148](../src/Main.cpp#L21148) |
+| `--auto-virtual-connections` | [Main.cpp:21149](../src/Main.cpp#L21149) |
+| `--auto-virtual-pitch` | [Main.cpp:21150](../src/Main.cpp#L21150) |
+| `--no-register-transitions` | [Main.cpp:21151](../src/Main.cpp#L21151) |
+| `--recursive-media` | [Main.cpp:21152](../src/Main.cpp#L21152) |
+| `--inspect-mpd-split-transitions` | [Main.cpp:21176](../src/Main.cpp#L21176) |
+| `--inspect-mpd-joins` | [Main.cpp:21230](../src/Main.cpp#L21230) |
+| `--inspect-mpd` | [Main.cpp:21237](../src/Main.cpp#L21237) |
 
 ## 范围与静态体量
 
-扫描自有 `juce/src` 非测试 `.h/.cpp/.inc`：227 个文件，120,517 行（包括注释和空行）。不含 juce/third_party、tests 和名称带 Smoke 的包含单元。
+扫描自有 `src` 非测试 `.h/.cpp/.inc`：231 个文件，121,283 行（包括注释和空行）。不含 third_party、tests 和名称带 Smoke 的包含单元。
 
 | 文件 | 行数 |
 | --- | --- |
-| [src/Main.cpp](../src/Main.cpp) | 21,375 |
-| [src/PianoRollComponent.cpp](../src/PianoRollComponent.cpp) | 12,265 |
-| [src/ProjectModel.cpp](../src/ProjectModel.cpp) | 11,875 |
-| [src/MainComponent.cpp](../src/MainComponent.cpp) | 7,215 |
-| [src/AudioEngine.cpp](../src/AudioEngine.cpp) | 4,395 |
+| [src/Main.cpp](../src/Main.cpp) | 21,427 |
+| [src/PianoRollComponent.cpp](../src/PianoRollComponent.cpp) | 12,267 |
+| [src/ProjectModel.cpp](../src/ProjectModel.cpp) | 11,884 |
+| [src/MainComponent.cpp](../src/MainComponent.cpp) | 7,231 |
+| [src/AudioEngine.cpp](../src/AudioEngine.cpp) | 4,542 |
 | [src/OtoWaveformEditorComponent.cpp](../src/OtoWaveformEditorComponent.cpp) | 3,081 |
 | [src/backend/UtauRenderer.cpp](../src/backend/UtauRenderer.cpp) | 2,835 |
 | [src/PinyinTable.inc](../src/PinyinTable.inc) | 2,709 |
@@ -971,8 +988,8 @@ Headless 命令来自 `McpServer::diagnosticTools`；Live 复用它并叠加窗�
 | [src/backend/McpServer.cpp](../src/backend/McpServer.cpp) | 2,164 |
 | [src/SampleSettings.cpp](../src/SampleSettings.cpp) | 2,076 |
 | [src/AssetManagerComponent.cpp](../src/AssetManagerComponent.cpp) | 1,865 |
-| [src/ProjectModel.h](../src/ProjectModel.h) | 1,722 |
-| [src/PianoRollComponent.h](../src/PianoRollComponent.h) | 1,683 |
-| [src/TimelineComponent.cpp](../src/TimelineComponent.cpp) | 1,187 |
+| [src/ProjectModel.h](../src/ProjectModel.h) | 1,727 |
+| [src/PianoRollComponent.h](../src/PianoRollComponent.h) | 1,684 |
+| [src/backend/MelodyneImporter.cpp](../src/backend/MelodyneImporter.cpp) | 1,207 |
 
 完整扫描指纹及接口条目：[interface-audit-inventory.json](interface-audit-inventory.json)。行数用于导航和识别职责集中，不是性能或质量评分。

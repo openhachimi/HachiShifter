@@ -1,5 +1,31 @@
 # 编辑器更新记录
 
+## 207 · 真元音假UV回落与同流触接断音（2026-11-01）
+
+- 按用户提供的WSL `/home/ubuntu/hjs/melodyne5-re`新增成果核对源码与IDA边界，纳入source_transition／time_stretch_control两个独立模块（生产16模块）；原period/FFT/rolling/OLA继续是波形权威。新helper尚无完整pop/current、原组件相位及跨源波形oracle，不把它当成完整Melodyne移植或跨源拼接已恢复。
+- 用户指出约4秒、普通te元音内部也会音高漂移。实际追踪证实：Importer把稀疏propertyPoints首末±0.5格当作voicing边界，真实有声区3.99325–4.02148秒的sourceMidi和targetMidi被置0，MLD5转入原音UV旁路。原WAV仍约422Hz，目标约786Hz；这不是仅衔接音类型或一个八度判断错误。新导入按实际source-item sample支持范围插值/首尾hold；显式silent、空pitch、真正无pitch仍保留UV，原P/C/timeMap及作者中心/漂移/调制不改。
+- 旧HJPX不改存储的作者曲线：渲染请求分开传同note已知source hint和target intent，仅对缺失pair由原PCM强周期证据恢复声源F0；RMS、主/局部周期、octave歧义、真实静音/噪声与nativeUnpitched保护。目标来自原意图，不复制实测源音高。非稳态、证据不足的旧尾段仍保守不补，不能把正P或最近F0当通用有声证据。真实4秒输出恢复约786.9Hz，不是把低通/增益当修复。
+- 用户反馈改善后有断音，进一步定位为共享连续流的内部触接仍各套5ms successive-join淡出/淡入，两个互不重叠的半窗造成音量洞。同一已证明session、成对join权重且真正touch时去掉重复join权重；显式作者fade、gain/envelope、独立声部和真正重叠的互补crossfade均保留。实际4.0215秒2ms局部RMS从0.01167恢复0.10414，未调源增益；whole-stream oracle及作者fade保留专项通过。
+- MLD5一般S/R控制改用endpoint-current/count反馈、native UPDATED_R顺序及状态校验，UV载波R/Q预热与可听mask分离；动态Q采用连续处理拓扑。输入不再强制48→32→48，dry/wet在同输出网格混合后再恢复外部rate；明确identity全UV原PCM逐样点直通。File EOF不再冒充scheduler queue-empty／terminal组件事实。第二项移除Signalsmith、RMS、烘焙边窗级联，单一相容组件的两种布局可得到相同native输出，不为制造菜单差别故意二次时频处理。
+- 新增source session/候选拒绝/请求曲线诊断，以及原作者状态HJPX/MPD渲染；不再用29组代表所有连接覆盖，也不把+3半音/-12dB诊断替代原作者验收。原81clips中67进入29session、14独立，有逐项事实。独立解析正弦、实际输出F0、真实MPD覆盖和同流触接等13专项通过；原工程/源音频SHA保持。MLD5 cache修订为`mld5-recovered-period-v5-voicing-join`，不改NSF默认、作者显式顺序、dev/0.0.0/WCSNDM0.0803，不推送。
+
+## 206 · MLD5同源连续合成、重叠接缝与渲染顺序（2026-10-31）
+
+- 修复MLD5仅逐clip渲染导致的同源周期／rolling／重采样状态重置；内部裁口不再假定为最后component烘焙2.5ms退出。具有真实owner／source-use／双向glide证据且源时钟、重叠F0／参数相容的片段，按真实timeline union一次连续渲染后切回；不把overlap串行为sum(duration)，不把不同源、独立同WAV叠层或冲突作者曲线硬并。
+- 组音频回切保留全局采样网格和分数边界；同一共享PCM在重叠区只贡献一次，归一化仅作用于该session重复窗口，不抵消作者clip.gain／增益包络。保留作者fade／sourceEdge，去掉内部隐式declick，保留组真首尾guard；不靠EQ、低通或总线限幅隐藏噪声。
+- MLD5开放和NSF相同三项顺序：逐片先合成后拼接、先拼接后合成、先合成后拼接（同源连续组）。首次选择及新导入MLD5默认第三项；私有初始化标记保证切引擎、冷读后不重置明确选择，旧工程已有顺序字段保留，只有缺字段时应用新默认。NSF既有默认第二项及独立stretch选择不改。第二项具有真实pitch-neutral前置time-stage，不是假菜单。
+- `Mld5ContinuousSource.h`统一严格纯规划；AudioEngine复用phrase缓存／切回，但不调用NSF专有concat工厂。MLD5 revision更新`mld5-recovered-period-v2-continuous`，两个cache包含同源session依赖。MCP仍用render_order＋merge_contiguous_source表达三项，UI只提交当前有效Hachi MLD5／NSF轨。
+- 低电平真实混音专项：20ms overlap切回与整段一次渲染sample相同（最大误差0）；逐片旧路线接缝残差0.0180926；作者半增益／互补淡化保留，0.25／0.5／0.75采样点边界误差0，独立实例不误并。UI三选项／冷读及默认、旧NSF渲染顺序等回归通过。
+- 真实Downloads/teio.hjpx及teio1111.mpd均完成三种全长48000Hz、470971帧对照：逐片0组、先拼接29组、同源连续29组，使用真实v2后端，原工程／源WAV未改；数值报告不是未进行的盲听验收。版本仍dev／数值0.0.0，WCSNDM0.0803；不推送GitHub。
+
+## 205 · 接入独立逆向MLD5 DSP并恢复可选（2026-10-31）
+
+- 按用户授权纳入`G:/mld5/src`独立C++17逆向成果，静态链接14个生产模块；MLD5不再使用旧经验型频谱remap、环境EQ／功率归一化调参。恢复周期同步、rolling buffer、原窗口／FFT／component mask／processed OLA、源时间反馈和末组件退出链。无原DLL／IDA／模型／参考WAV运行依赖。
+- `Mld5Renderer`是Hachi输入适配层：既有F0与目标／共振峰／增益曲线按正确时钟接入，源P表只反投影一次，PCM按32k/48k内部时钟处理后恢复外部采样率／声道／精确长度；UV保留原PCM通道，gain只应用一次。恒等clock＋恒定Q使用最高source-time/gain入口，任意正向clock与动态Q使用同一period core的Hachi控制seam；后者不冒充原版一般control-manager复现。
+- toolbar初始／重建列表、双向ID1映射、Settings导入选项、轨道label和MCP `set_track`均开放MLD5。原`mld5`工程字符串／枚举不变；MLD3继续禁用，默认NSF和已有显式偏好不变。仅MLD5音频／波形缓存追加新实现revision。
+- 虚拟组一次组源、分离导出等未支持路线继续明确拒绝；渲染失败不偷换旧MLD5或其他引擎。原成果有限fixture的精确度证据不扩张为任意Hachi音频／源分析完全等价。适配边界见`third_party/mld5-re/HACHI-ADAPTER.md`。
+- 保留此前逐音符日语／虚拟末端裁切WIP；本次未重新授权GitHub推送，版本仍dev／内部数值0.0.0，WCSNDM仍0.0803。
+
 ## 204 · dev滚动版本与开发分支发布（2026-10-27）
 
 - 用户明确将当前版本改为`dev`滚动开发版；程序、MCP及Windows文件／产品版本文字统一dev，内部合法数值tuple0.0.0，WCSNDM0.0803不变。历史0.25版本不回写。

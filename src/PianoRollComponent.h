@@ -403,6 +403,7 @@ public:
         return index < noteHits.size() ? noteHits[index].nominalBounds
                                        : juce::Rectangle<float>();
     }
+    [[nodiscard]] bool diagnosticNativeTrimDragging() const { return nativeTrimDrag; }
     // Test seam: puts the roll into the state a note drag would, so a harness
     // can ask what a drag would repaint and check that it is enough.
     void diagnosticBeginMoveDrag(const juce::String& noteId, double deltaSeconds);

@@ -427,7 +427,15 @@ if(MSVC)
     target_compile_definitions(HachiShifterNext PRIVATE _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
 endif()
 
+add_subdirectory(third_party/mld5-re)
+if(MSVC)
+    set_property(SOURCE src/backend/Mld5Renderer.cpp APPEND PROPERTY COMPILE_OPTIONS /fp:strict)
+else()
+    set_property(SOURCE src/backend/Mld5Renderer.cpp APPEND PROPERTY COMPILE_OPTIONS -fno-fast-math -ffp-contract=off)
+endif()
+
 target_link_libraries(HachiShifterNext PRIVATE
+    hachi_mld5_re
     yaml-cpp::yaml-cpp
     juce::juce_audio_formats
     juce::juce_audio_utils

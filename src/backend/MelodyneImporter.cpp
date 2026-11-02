@@ -19,6 +19,8 @@ namespace
 {
 constexpr std::size_t maxGraphBytes = 256u * 1024u * 1024u;
 constexpr std::uint32_t nullReference = 0xffffffffu;
+using melodynePitchSupportDiagnostic::SourcePitchPoint;
+using melodynePitchSupportDiagnostic::pitchAt;
 
 bool hasVoicedPitch(const NoteData& note)
 {
@@ -602,11 +604,19 @@ double projectBeatOrigin(const Graph& graph, double bpm)
     return 0.0;
 }
 
-struct SourcePitchPoint { double slice = 0.0; float raw = 0.0f; float smooth = 0.0f; bool silent = false; };
+}
 
-std::optional<std::pair<float, float>> pitchAt(const std::vector<SourcePitchPoint>& points, double slice)
+namespace melodynePitchSupportDiagnostic
 {
-    if (points.empty() || slice < points.front().slice - 0.500001 || slice > points.back().slice + 0.500001)
+std::optional<std::pair<float, float>> pitchAt(const std::vector<SourcePitchPoint>& points, double slice,
+                                            double supportStartSlice, double supportEndSlice)
+{
+    // Sparse property grids are pitch observations, not voicing boundaries.
+    // Hold the closest observed endpoint only inside the real source item;
+    // never borrow a neighbouring item, extrapolate pitch, or infer it from P.
+    if (points.empty() || !std::isfinite(slice) || !std::isfinite(supportStartSlice)
+        || !std::isfinite(supportEndSlice) || supportEndSlice <= supportStartSlice
+        || slice < supportStartSlice || slice > supportEndSlice)
         return std::nullopt;
     const auto right = std::lower_bound(points.begin(), points.end(), slice,
         [](const auto& point, double value) { return point.slice < value; });
@@ -614,7 +624,13 @@ std::optional<std::pair<float, float>> pitchAt(const std::vector<SourcePitchPoin
     const auto leftIndex = rightIndex > 0 && points[rightIndex].slice > slice ? rightIndex - 1 : rightIndex;
     const auto& left = points[leftIndex];
     const auto& next = points[rightIndex];
-    if (left.silent || next.silent) return std::nullopt;
+    const auto hasPitch = [](const auto& point)
+    {
+        return !point.silent && std::isfinite(point.raw) && point.raw > 0.0f
+            && std::isfinite(point.smooth) && point.smooth > 0.0f;
+    };
+    // Explicit UV (including a silent last property) outranks endpoint hold.
+    if (!hasPitch(left) || !hasPitch(next)) return std::nullopt;
     const auto amount = next.slice > left.slice
         ? static_cast<float>(std::clamp((slice - left.slice) / (next.slice - left.slice), 0.0, 1.0)) : 0.0f;
     const auto interpolate = [&](auto value)
@@ -623,7 +639,7 @@ std::optional<std::pair<float, float>> pitchAt(const std::vector<SourcePitchPoin
         if (rightIndex == leftIndex) return linear;
         const auto& before = points[leftIndex > 0 ? leftIndex - 1 : leftIndex];
         const auto& after = points[std::min(rightIndex + 1, points.size() - 1)];
-        if (before.silent || after.silent) return linear;
+        if (!hasPitch(before) || !hasPitch(after)) return linear;
         const auto y0 = value(before);
         const auto y1 = value(left);
         const auto y2 = value(next);
@@ -842,7 +858,11 @@ std::optional<MelodyneImportResult> MelodyneImporter::importProject(
             const auto duration = graph.number(element, "duration").value_or(0.0);
             if (!std::isfinite(start) || !std::isfinite(duration) || duration <= 0.0) continue;
             const auto sampleRate = std::max(1.0, graph.number(source, "sampleRate").value_or(44100.0));
-            const auto itemStart = std::max(0.0, graph.number(item, "startSampleIndex").value_or(0.0)) / sampleRate;
+            const auto itemStartSample = std::max(0.0, graph.number(item, "startSampleIndex").value_or(0.0));
+            const auto itemStart = itemStartSample / sampleRate;
+            const auto itemSamples = graph.number(item, "sampleCount").value_or(0.0);
+            const auto pitchSupportStartSlice = itemStartSample / 1024.0;
+            const auto pitchSupportEndSlice = (itemStartSample + itemSamples) / 1024.0;
             const auto timeFunction = graph.reference(element, "sourceTimeForElementTimeFunction");
             const auto mappedStart = timeFunction ? graph.evaluate(*timeFunction, 0.0) : 0.0;
             const auto mappedEnd = timeFunction ? graph.evaluate(*timeFunction, duration) : duration;
@@ -1022,7 +1042,8 @@ std::optional<MelodyneImportResult> MelodyneImporter::importProject(
                 for (double local = 0.0; local <= duration; local += 0.01)
                 {
                     const auto mapped = timeFunction ? graph.evaluate(*timeFunction, local) : local;
-                    if (const auto pitch = pitchAt(propertyPoints, (itemStart + mapped) * sampleRate / 1024.0))
+                    if (const auto pitch = pitchAt(propertyPoints, (itemStart + mapped) * sampleRate / 1024.0,
+                                              pitchSupportStartSlice, pitchSupportEndSlice))
                         if (pitch->second > 100.0f) centres.push_back(pitch->second);
                 }
                 if (!centres.empty())
@@ -1036,13 +1057,13 @@ std::optional<MelodyneImportResult> MelodyneImporter::importProject(
                 {
                     const auto mapped = timeFunction ? graph.evaluate(*timeFunction, std::min(local, duration))
                                                      : std::min(local, duration);
-                    const auto pitch = pitchAt(propertyPoints, (itemStart + mapped) * sampleRate / 1024.0);
+                    const auto pitch = pitchAt(propertyPoints, (itemStart + mapped) * sampleRate / 1024.0,
+                                              pitchSupportStartSlice, pitchSupportEndSlice);
                     note.contour.push_back({ std::min(local, duration), pitch ? pitch->first - sourceCenter : 0.0f,
                                              pitch ? pitch->second - sourceCenter : 0.0f, pitch.has_value() });
                 }
             }
 
-            const auto itemSamples = graph.number(item, "sampleCount").value_or(0.0);
             const auto addSibilant = [&](const char* field)
             {
                 const auto offset = graph.number(item, field);

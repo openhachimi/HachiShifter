@@ -3,6 +3,12 @@ on:
   push:
     branches: [dev]
   workflow_dispatch:
+    inputs:
+      include_models:
+        description: 'Explicitly build the separate legacy full-resource package'
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -10,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   windows-x64:
-    name: Windows x64 app and model bundle
+    name: Windows x64 lightweight app (optional legacy resources)
     runs-on: windows-2022
     timeout-minutes: 90
     defaults:
@@ -26,7 +32,8 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
-      - name: Python for packaging the existing bridge
+      - name: Python for the explicitly requested legacy full package
+        if: github.event_name == 'workflow_dispatch' && inputs.include_models
         uses: actions/setup-python@v5
         with:
           python-version: '3.11.9'
@@ -51,14 +58,14 @@ jobs:
         run: '& ./tools/build-windows-cloud.ps1 -BuildDirectory build-windows -FetchDirectory $env:FETCH_CACHE -Jobs 2'
       - name: Package app without model weights
         id: app
-        run: '& ./tools/package-windows-cloud.ps1 -ReleaseDirectory "${{ steps.build.outputs.releaseDir }}"'
+        run: '& ./tools/package-windows-light.ps1 -ReleaseDirectory "${{ steps.build.outputs.releaseDir }}" -FetchDirectory $env:FETCH_CACHE'
       - name: Verify packaged executable and menu policy
         run: |
           $env:HACHI_TEST_SETTINGS_DIR = "$env:RUNNER_TEMP\hachi-ci-settings"
           $exe = '${{ steps.app.outputs.stage }}\HachiShifter Next.exe'
           if ((Get-Item -LiteralPath $exe).VersionInfo.ProductVersion -ne 'dev') { throw 'Expected rolling dev executable metadata' }
           if (-not (Test-Path -LiteralPath '${{ steps.app.outputs.stage }}\lang\translations.tsv')) { throw 'Packaged external translations are missing' }
-          foreach ($case in @('smoke-track-types','smoke-engine-view-capabilities','smoke-focused-defaults','smoke-transition-pair-import-options','smoke-translation-file','smoke-translation-no-file')) {
+          foreach ($case in @('smoke-track-types','smoke-engine-view-capabilities','smoke-focused-defaults','smoke-transition-pair-import-options','smoke-translation-file','smoke-translation-no-file','smoke-mld5-false-uv-audio','smoke-mld5-continuous-audio','smoke-mld5-render-order-ui')) {
             $out = Join-Path $env:RUNNER_TEMP $case
             New-Item -ItemType Directory -Force $out | Out-Null
             $process = Start-Process -FilePath $exe -ArgumentList @("--$case", $out) -PassThru -RedirectStandardOutput "$out\stdout.txt" -RedirectStandardError "$out\stderr.txt"
@@ -78,6 +85,7 @@ jobs:
           retention-days: 30
           compression-level: 0
       - name: Fetch checksum-pinned owner-approved models
+        if: github.event_name == 'workflow_dispatch' && inputs.include_models
         run: |
           $resource = Get-Content -LiteralPath .github/model-resources.json -Raw | ConvertFrom-Json
           if ($resource.sha256 -notmatch '^[0-9a-fA-F]{64}$') { throw 'Model archive must have a pinned SHA256' }
@@ -87,8 +95,10 @@ jobs:
           "MODEL_ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "MODEL_ARCHIVE_SHA256=$($resource.sha256)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Package app with verified model resources
+        if: github.event_name == 'workflow_dispatch' && inputs.include_models
         run: '& ./tools/package-windows-cloud.ps1 -ReleaseDirectory "${{ steps.build.outputs.releaseDir }}" -WithModels -ModelArchive $env:MODEL_ARCHIVE -ModelArchiveSha256 $env:MODEL_ARCHIVE_SHA256'
       - name: Upload app and models package
+        if: github.event_name == 'workflow_dispatch' && inputs.include_models
         uses: actions/upload-artifact@v4
         with:
           name: HachiShifterNext-windows-x64-with-models

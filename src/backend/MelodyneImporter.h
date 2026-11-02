@@ -3,6 +3,8 @@
 #include "../ProjectModel.h"
 #include <functional>
 #include <optional>
+#include <utility>
+#include <vector>
 
 namespace hachi::backend
 {
@@ -39,6 +41,24 @@ struct MelodyneConsonantMapping
     juce::String vowelNoteId;
     double preutteranceSeconds = 0.0;
 };
+
+// Small pure diagnostic seam shared by the importer and its support regression
+// tests. Points must be sorted by absolute source slice (1024 source samples).
+// Support is the actual source item's [startSampleIndex, start + sampleCount],
+// expressed in those same slice units, not the sparse property's first/last grid.
+namespace melodynePitchSupportDiagnostic
+{
+struct SourcePitchPoint
+{
+    double slice = 0.0;
+    float raw = 0.0f;
+    float smooth = 0.0f;
+    bool silent = false;
+};
+[[nodiscard]] std::optional<std::pair<float, float>>
+    pitchAt(const std::vector<SourcePitchPoint>& points, double slice,
+            double supportStartSlice, double supportEndSlice);
+}
 
 class MelodyneImporter final
 {

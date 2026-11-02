@@ -17,4 +17,4 @@ GAME 负责音符分割和逐音符音高；FCPE 负责连续 F0，包括滑音�
 
 ## 验证
 
-使用 `--smoke-game-defaults <输出目录>` 核对便携发现、默认值、旧配置兼容、自定义选择与保存重开；使用 `juce/tests/game_fcpe_smoke.py` 验证标准 220 Hz 输入的 FCPE 输出与实际人声的 GAME + FCPE 推理。验证报告保存在 `test-output/update060`。
+使用 `--smoke-game-defaults <输出目录>` 核对便携发现、默认值、旧配置兼容、自定义选择与保存重开；使用 `tests/game_fcpe_smoke.py` 验证标准 220 Hz 输入的 FCPE 输出与实际人声的 GAME + FCPE 推理。验证报告保存在 `test-output/update060`。

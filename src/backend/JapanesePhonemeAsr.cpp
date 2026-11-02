@@ -33,6 +33,11 @@ bool JapanesePhonemeAsr::transcribe(const AnnotationAudio& audio, const juce::Fi
     { error = "Japanese ASR vocabulary has no valid blank token"; return false; }
     std::vector<float> input;
     if (!audio.resample(16000, input, error, cancel)) return false;
+    if(input.empty()){error="No Japanese phonemes were recognized; empty physical slice";return false;}
+    // Very short Melodyne cuts can be shorter than the model's convolution
+    // receptive field. Silence padding is inference-only, never neighbouring
+    // audio, an OTO boundary, or a manufactured pronunciation.
+    if(input.size()<1600){std::vector<float> padded(1600,0.f);std::copy(input.begin(),input.end(),padded.begin()+std::ptrdiff_t((1600-input.size())/2));input=std::move(padded);}
     if (cancel && cancel()) { error = "Annotation cancelled"; return false; }
     const auto modelHash = juce::SHA256(model).toHexString();
     const auto vocabHash = juce::SHA256(vocab).toHexString();

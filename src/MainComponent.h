@@ -436,6 +436,7 @@ public:
     bool diagnosticMaterialSourceReplacementUi(const juce::File& output, const juce::File& nsfModel);
     bool diagnosticMaterialVariantHandoffUi(const juce::File& output);
     bool diagnosticProjectRegistrationUi(const juce::File& output);
+    bool diagnosticRegistrationJapaneseChoiceUi(const juce::File& output);
     bool diagnosticSourcePreviewUi(const juce::File& output);
     bool diagnosticNativeMaterialOverlapUi(const juce::File& output);
     bool diagnosticNativeScoreReplacementUi(const juce::File& output, const juce::File& nsfModel);
@@ -474,6 +475,8 @@ public:
     [[nodiscard]] bool diagnosticNormalDisplay(const juce::File& directory);
     [[nodiscard]] bool diagnosticIndependentZoom();
     [[nodiscard]] bool diagnosticNsfPicker();
+    [[nodiscard]] bool diagnosticMld5Picker(const juce::File& output);
+    [[nodiscard]] bool diagnosticMld5RenderOrderUi(const juce::File& output);
     [[nodiscard]] bool diagnosticVoicebankSelection(const juce::File& output, const juce::File& bank);
     void diagnosticNativeVibrato(const juce::File& folder, std::function<void(bool)> finished);
     [[nodiscard]] bool diagnosticOutputEngine(const juce::File& folder, const juce::File& modelFolder, const juce::File& wavtool);
@@ -686,6 +689,9 @@ private:
     bool communityDatasetImportBlocksProjectEdits() const;
     struct ProjectRegistrationOperation;
     std::shared_ptr<ProjectRegistrationOperation> projectRegistrationOperation;
+    // Optional diagnostic host override; normal runs read only the dedicated
+    // Japanese model-root preference and never borrow algorithm.hifiganPath.
+    std::function<juce::File()> projectRegistrationJapaneseModelRootForTest;
     std::unique_ptr<juce::FileChooser> projectRegistrationChooser;
     std::vector<juce::File> projectRegistrationRetryRoots;
     juce::String projectRegistrationTrace;
@@ -704,6 +710,7 @@ private:
     void checkExternalManifestChanges(bool rebindProject = true);
     std::map<juce::String, juce::Time> manifestStamps;
     bool windowWasActive = true;
+    void confirmProjectMaterialRegistration(const std::shared_ptr<ProjectRegistrationOperation>&);
     void chooseProjectMaterialRegistrationDestination(const std::shared_ptr<ProjectRegistrationOperation>&);
     void stageProjectMaterialRegistration(const std::shared_ptr<ProjectRegistrationOperation>&, const juce::File&);
     void publishProjectMaterialRegistration(const std::shared_ptr<ProjectRegistrationOperation>&);

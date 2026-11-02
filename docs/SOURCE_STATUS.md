@@ -1,31 +1,25 @@
 # Rolling development source status
 
-Date: 2026-10-27. Public label: **dev**. Numeric CMake/Windows tuple: **0.0.0**. WCSNDM: **0.0803**.
+Date: 2026-11-02. Public label **dev**, internal numeric tuple **0.0.0**, WCSNDM **0.0803**. This snapshot contains the approved implementation through update207 and follows commit905c13267adb1eb5ad17a0fdd330914870d54223 on `dev`.
 
-This dev update continues `e2e9c7be829d23881eab15d82bbd94d49ed335a2` in the existing flat source layout. It synchronizes the current development implementation through update 204 rather than restoring the old nested `juce/` snapshot. The repository owner's independent README policy is unchanged.
+## Source and authoring scope
 
-## Included work
+The existing flat root layout is retained: CMakeLists.txt, src, resources, assets, third_party, engines (bridge SOURCE and dictionaries only), tools and docs. No README is supplied; the repository owner maintains it separately. Business source files are copied byte-for-byte from the current compiled working tree; only build/packaging/tool/document paths are adapted to the flattened layout.
 
-- Native material/OTTO editing and registration, source-aware note/clip operations and current UI work.
-- Virtual connections: permanent seam edit authority, one displayed/request target F0 and NSF/WORLD source assembly on supported paths.
-- Legacy HJPX source-use identity restoration using existing explicit physical connection evidence.
-- Melodyne import option controls and source-time alignment from the real element `anchorPoint`, not sibilants or voiced onset.
-- File-only five-language translation catalog (1509 rows), packaged alongside the executable.
-- NSF-HiFiGAN and splice-before-synthesis processing-order defaults; saved explicit choices and the independent stretch-algorithm default are retained.
-- Existing cloud Windows build and separate application-only/model-bundle artifacts, now with dev version checks and mandatory external translations.
+This includes the independent statically linked MLD5 DSP and native source-clock adapter, the real vowel false-UV coverage fix, evidence-gated legacy source-pitch recovery, and the same-stream touching-join dropout fix. The user listened to and approved the two-te repair. Fresh MPD source support, actual output F0, analytic signal oracles, same-stream join invariance, explicit author-fade preservation, UI/defaults and retained Japanese/outer-trim regressions were tested locally. Installed output was whole-file SHA-identical to the approved render. These results do not assert full Melodyne equivalence, every possible source/voicebank, or newly tested ASR accuracy.
 
-## Validation scope
+Original source audio, project edits, source clocks and user settings are not distributed. Independent same-file layers are not merged merely by filename; uncertain/nonstationary legacy voicing is not blindly filled. Cross-source virtual assembly and source separation retain their documented capability limits.
 
-The current working-source dev executable was compiled locally; runtime version and Windows FileVersion/ProductVersion report `dev`. Track-type and engine-view CI gates plus focused defaults, import options, connected editing, single F0, shared pitch and translation-file/no-file regressions passed. Prior update 203 additionally verified real MPD anchor pixel/unit/request equality and bit-exact complete WORLD/NSF audio outputs. Those reports are historical local evidence, not a claim that every source feature or third-party model was retested for this version-only publication.
+## Lightweight release policy
 
-The exact flattened source is configured/built separately before publication. The GitHub Actions run triggered by the push is an independent cloud result; see its actual status rather than treating these source notes as a successful cloud package report.
+This publication includes source and an already-built lightweight Windows update package, not model weights or a DiffSinger/Python runtime. Optional English G2P `checkpoint20.npz` is excluded before copying. Native DLL dependencies, external lang/translations.tsv and notices accompany the executable. Preserve an existing installation's models/engines when applying the program update. Neural features require separately supplied compatible models; DiffSinger requires its separately installed runtime/voicebank. No large runtime or resource archive is copied into this new checkout.
 
-## Known boundaries
+The cloud workflow now produces the same lightweight app by default. Its historical full-resource route remains an explicit manual opt-in (`include_models`); push builds do not download models or portable Python. Existing checksum-pinned resource metadata remains unchanged, not republished as new weights.
 
-Virtual source assembly currently rejects unsupported WCS/HiFiShifter/robust-pitch/separated-component/voicebank combinations rather than silently reverting to per-source pitch transformation. User data, model provenance/licensing and compatible external engines remain independent concerns. See the [update history](updates.md), [architecture](AI_INTERFACE_ARCHITECTURE.md) and [cloud packaging guide](cloud-build.md).
+The application/root MIT license is not a blanket license for all independent dependencies. Existing license and provenance notices are retained. No original Melodyne DLL, private reference audio, IDA dump, or analysis model is required by the independent MLD5 production library.
 
-## Distribution and provenance
+## Publication identity
 
-Only source, required scripts/dictionaries, documentation, notices and necessary artwork are Git content. No user projects/media/settings, build caches, executables, DLLs or model weights are added. The old tracked optional English G2P checkpoint is removed from this source revision; the existing approved resource bundle still supplies it for the with-models package. Git history is not rewritten. Model resource URL/hash and upstream licenses are preserved.
+Author AND committer: `funnymdzz <funnymdzz@gmail.com>`, per the owner's explicit request. Only `dev` is updated, with an ordinary fast-forward push. No force rewriting or modification of main/r or earlier version releases is intended. Binary/source archives are release assets, never model or executable Git blobs.
 
-This commit is authored and committed as `funnymdzz <funnymdzz@gmail.com>` under the owner's explicit request. Only `dev` is updated; no force push or main/r modification is used.
+See [update207](updates.md), [architecture](AI_INTERFACE_ARCHITECTURE.md) and [cloud packaging](cloud-build.md). The cloud run is independent evidence: report its actual status, not an assumed success.

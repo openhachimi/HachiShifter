@@ -3627,6 +3627,14 @@ void ProjectModel::setTrackCvvcCurveCrossfade(const juce::String& trackId, bool 
     if(changed)sendChangeMessage();
 }
 
+void initialiseMld5RenderPolicy(TrackData& track)
+{
+    if(track.pitchAlgorithm!=PitchAlgorithm::mld5||track.mld5RenderPolicyInitialized)return;
+    track.renderOrder=RenderOrder::processThenSplice;
+    track.mergeContiguousSource=true;
+    track.mld5RenderPolicyInitialized=true;
+}
+
 void ProjectModel::setPitchAlgorithm(PitchAlgorithm algorithm)
 {
     auto changed = false;
@@ -3634,11 +3642,13 @@ void ProjectModel::setPitchAlgorithm(PitchAlgorithm algorithm)
         const juce::ScopedLock guard(lock);
         for (auto& track : project.tracks)
             if (!track.accompaniment && (track.pitchAlgorithm != algorithm
-                || (algorithm == PitchAlgorithm::nsfHifigan && !track.nativeNsfAudio)))
+                || (algorithm == PitchAlgorithm::nsfHifigan && !track.nativeNsfAudio)
+                || (algorithm==PitchAlgorithm::mld5&&!track.mld5RenderPolicyInitialized)))
             {
                 if (!changed) pushUndoLocked();
                 const auto previousType=effectiveTrackType(track);
                 track.pitchAlgorithm = algorithm;
+                initialiseMld5RenderPolicy(track);
                 track.trackType=algorithm==PitchAlgorithm::utau?(previousType==TrackType::diffSinger?TrackType::diffSinger:TrackType::utau):TrackType::hachi;
                 if (algorithm == PitchAlgorithm::nsfHifigan) track.nativeNsfAudio = true;
                 changed = true;
@@ -3711,11 +3721,13 @@ void ProjectModel::setTrackPitchAlgorithm(const juce::String& trackId,
         const juce::ScopedLock guard(lock);
         for (auto& track : project.tracks)
             if (track.id == trackId && !track.accompaniment && (track.pitchAlgorithm != algorithm
-                || (algorithm == PitchAlgorithm::nsfHifigan && !track.nativeNsfAudio)))
+                || (algorithm == PitchAlgorithm::nsfHifigan && !track.nativeNsfAudio)
+                || (algorithm==PitchAlgorithm::mld5&&!track.mld5RenderPolicyInitialized)))
             {
                 pushUndoLocked();
                 const auto previousType=effectiveTrackType(track);
                 track.pitchAlgorithm = algorithm;
+                initialiseMld5RenderPolicy(track);
                 track.trackType=algorithm==PitchAlgorithm::utau?(previousType==TrackType::diffSinger?TrackType::diffSinger:TrackType::utau):TrackType::hachi;
                 if (algorithm == PitchAlgorithm::nsfHifigan) track.nativeNsfAudio = true;
                 changed = true;
@@ -3783,10 +3795,12 @@ void ProjectModel::setTrackRenderOrder(const juce::String& trackId, RenderOrder 
         const juce::ScopedLock guard(lock);
         for (auto& track : project.tracks)
             if (track.id == trackId && !track.accompaniment
-                && (track.renderOrder != order || (mergeContiguous && track.mergeContiguousSource != *mergeContiguous)))
+                && (track.renderOrder != order || (mergeContiguous && track.mergeContiguousSource != *mergeContiguous)
+                    || (track.pitchAlgorithm==PitchAlgorithm::mld5&&!track.mld5RenderPolicyInitialized)))
             {
                 pushUndoLocked();
                 track.renderOrder = order;
+                if(track.pitchAlgorithm==PitchAlgorithm::mld5)track.mld5RenderPolicyInitialized=true;
                 if (mergeContiguous) track.mergeContiguousSource = *mergeContiguous;
                 changed = true;
                 break;
@@ -4572,24 +4586,15 @@ bool ProjectModel::trimNativeNoteEdge(const juce::String& id, double delta, bool
     if (!std::isfinite(delta) || std::abs(delta) < 1.e-9) return false;
     {
         const juce::ScopedLock guard(lock);
-        for(const auto& track:project.tracks)if(nativeSelectionHasConnectedSeams(track,project.nativeVirtualGroups,{id}))return false; // source cropping needs an explicit disconnect
         for (auto& track : project.tracks) if (trackShowsAllNativeRegions(track))
             for (auto& clip : track.clips)
-                if (auto plan = planNativeNoteTrim(clip, id, delta, left, track.allowNativeAudioOverlap))
+                if (auto plan = planNativeOuterNoteTrim(track,project.nativeVirtualGroups,
+                    project.nativeConnections,clip,id,delta,left))
                 {
-                    const auto safe=constrainedNativeTrimDelta(track,id,plan->delta,left);
-                    plan=planNativeNoteTrim(clip,id,safe,left,track.allowNativeAudioOverlap);
-                    if(!plan)return false;
                     if (std::abs(plan->delta) < 1.e-9) return false;
                     pushUndoLocked(); clip = std::move(plan->clip);
-                    const auto cut = [&](const auto& link) { return left ? link.rightNoteId == id : link.leftNoteId == id; };
-                    for (auto& t : project.tracks) for (auto& c : t.clips) for (auto& n : c.notes)
-                        for (const auto& link : project.nativeConnections) if (cut(link))
-                        {
-                            if (n.id == link.leftNoteId) n.connectedToNext = false;
-                            if (n.id == link.rightNoteId) n.connectedToPrevious = false;
-                        }
-                    std::erase_if(project.nativeConnections, cut);
+                    // A crop never implicitly disconnects either side. The
+                    // directed-edge guard above refused any incident cut edge.
                     sendChangeMessage(); return true;
                 }
     }
@@ -10760,6 +10765,7 @@ juce::ValueTree ProjectModel::toValueTree(const juce::File& projectFile, bool in
         trackTree.setProperty("stretchAlgorithm", stretchAlgorithmName(track.stretchAlgorithm), nullptr);
         trackTree.setProperty("renderOrder", renderOrderName(track.renderOrder), nullptr);
         trackTree.setProperty("mergeContiguousSource", track.mergeContiguousSource, nullptr);
+        trackTree.setProperty("mld5RenderPolicyInitialized",track.mld5RenderPolicyInitialized,nullptr);
 
         for (const auto& clip : track.clips)
         {
@@ -11299,6 +11305,9 @@ ProjectData ProjectModel::fromValueTree(const juce::ValueTree& root,
             ? parseRenderOrder(trackTree.getProperty("renderOrder").toString())
             : defaultRenderOrder();
         track.mergeContiguousSource = static_cast<bool>(trackTree.getProperty("mergeContiguousSource", false));
+        track.mld5RenderPolicyInitialized=bool(trackTree.getProperty("mld5RenderPolicyInitialized",
+            track.pitchAlgorithm==PitchAlgorithm::mld5&&(trackTree.hasProperty("renderOrder")||trackTree.hasProperty("mergeContiguousSource"))));
+        initialiseMld5RenderPolicy(track);
 
         for (const auto clipTree : trackTree)
         {

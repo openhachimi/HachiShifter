@@ -758,6 +758,7 @@ public:
             applyRobustPitchCurve(request.sourceMidi, request.targetMidi,
                                   request.robustPitchCurve);
         juce::AudioBuffer<float> rendered, noise;
+        int mld5RecoveredSourceFrames=0;
         auto* noiseOutput = separate ? &noise : nullptr;
         auto usedNsfModel = false;
         auto usedLlsm2 = false;
@@ -791,9 +792,8 @@ public:
         }
         else if (request.pitchBackend == PitchRenderBackend::mld5)
         {
-            // Melodyne 5 algorithm path: independent MULSS spectral component
-            // renderer (bandlimited harmonic remap + formant compensation +
-            // granular hop), not the previous Signalsmith + finish-wrapper.
+            // Independent recovered period/rolling/FFT/OLA DSP, with Hachi's
+            // explicit F0/UV/source-clock adapter. No old spectral-remap fallback.
             Mld5RenderRequest mld5Request;
             mld5Request.input = &source;
             mld5Request.sampleRate = sourceRate;
@@ -802,11 +802,26 @@ public:
             mld5Request.targetMidi = request.targetMidi;
             mld5Request.formantSemitones = request.formantSemitones;
             mld5Request.noteGain = request.noteGain;
+            mld5Request.sourceMidiHint=request.mld5SourceMidiHint;mld5Request.targetMidiIntent=request.mld5TargetMidiIntent;
+            mld5Request.sourceRecoveryObserver=[&](int count){mld5RecoveredSourceFrames=count;};
             for (const auto& point : request.timeMap)
                 mld5Request.timeMap.push_back({ point.targetSeconds, point.sourceSeconds });
             mld5Request.targetSamples = targetSamples;
+            // Native ordinary608 time stretch changes S/dS, not an upstream
+            // spectral stretcher. Order2/3 may coincide for one compatible
+            // source component; don't manufacture a second phase history.
+            // File EOF is ONLY a reader boundary. It proves neither the end of
+            // the source-use component nor an empty component queue; leave the
+            // explicit terminal facts unknown unless a scheduler supplies them.
             Mld5Renderer mld5;
-            rendered = mld5.render(mld5Request);
+            juce::String mld5Error;
+            rendered = mld5.render(mld5Request,&mld5Error);
+            if(rendered.getNumSamples()!=targetSamples)
+            {
+                RenderedAudio failure;failure.backend=Mld5Renderer::implementationId;
+                failure.warning="MLD5 recovered DSP failed: "+mld5Error;
+                if(completion)completion(std::move(failure));return jobHasFinished;
+            }
             applyExpressionAndTension(rendered, sourceRate, request.framePeriodMs,
                 request.targetMidi, {}, request.tension, request.breath);
         }
@@ -955,7 +970,7 @@ public:
         if (request.normalizeVolume && !usedNsfModel)
             matchActiveRms(rendered, source, noiseOutput);
         auto backend = request.pitchBackend == PitchRenderBackend::mld5
-            ? juce::String("mld5-single-pass-stable-clock")
+            ? juce::String(Mld5Renderer::implementationId)+(request.mld5SpliceBeforePitch?"-graph-first":"-source-first")+"-source-recovered:"+juce::String(mld5RecoveredSourceFrames)
             : request.pitchBackend == PitchRenderBackend::mld3
                 ? juce::String("mld3-period-transition-clock")
             : request.pitchBackend == PitchRenderBackend::nsfHifigan

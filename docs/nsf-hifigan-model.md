@@ -32,7 +32,7 @@ Verification with a supplied model:
 ```powershell
 $env:HACHISHIFTER_NSF_HIFIGAN_MODEL_DIR = 'APP/models/nsf_hifigan'
 & 'APP/HachiShifter Next.exe' --smoke-nsf-picker
-python juce/tests/nsf_hifigan_model_smoke.py 'APP/HachiShifter Next.exe' 'APP/models/nsf_hifigan'
+python tests/nsf_hifigan_model_smoke.py 'APP/HachiShifter Next.exe' 'APP/models/nsf_hifigan'
 ```
 
 The picker diagnostic checks WORLD → NSF → LLSM2 → NSF on a selected track,
